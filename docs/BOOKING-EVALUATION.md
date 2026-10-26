@@ -1,6 +1,6 @@
 # Booking evaluation handoff
 
-The implemented slice provides a standalone baseline, independent baseline oracles, source preparation, strict evidence contracts, receipt assembly and protected read-only loading. It does **not** run an agent or claim verified sandbox isolation. The user reports another agent is configuring that environment; it was not modified by this work.
+The foundation provides a standalone baseline, independent public baseline oracles, source preparation, strict evidence contracts, receipt assembly and protected read-only loading. The next slice adds a disabled-by-default local controller and isolated grader bridge; see [the operator runbook](BOOKING-RUNNER.md). No real agent or offline booking guest execution has occurred, and verified sandbox isolation is not claimed. The existing operator environment was inspected read-only and preserved.
 
 ## Separate custody
 
@@ -26,4 +26,4 @@ The loader's disjoint-path and synthetic tamper tests are **not OS/microVM conta
 - Record real process exits, artifact digests, missing metrics as null and cancellation. Keep host paths/private diagnostics out of UI/model summaries.
 - A/B needs both initial variants passing the same current oracle, matched downstream conditions and B upfront cost. Meta-attribution needs its separate equally informed comparator. None is established by these developer checks.
 
-Next runnable implementation work is the local controller/guest bridge once isolation is independently reviewed, plus consented Meta transport. Muse remains a conditional adapter under the reviewed planning overlay; the original frozen schema remains unchanged.
+Next operator work is the no-inference booking bridge acceptance detailed in the runbook; real local execution stays disabled until current isolation evidence and finite provider budget authorization are reviewed. Consented Meta transport remains separate work. Muse remains a conditional adapter under the reviewed planning overlay; the original frozen schema remains unchanged.

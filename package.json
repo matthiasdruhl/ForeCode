@@ -22,7 +22,8 @@
     "snapshot:booking": "node --import tsx scripts/evaluator/booking-v1/freeze.ts",
     "prepare:booking": "node --import tsx scripts/experiments/prepare-booking.ts",
     "format": "prettier --write .",
-    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm test && npm run build",
+    "experiment:booking": "node --import tsx scripts/experiments/runner/cli.ts"
   },
   "dependencies": {
     "next": "16.4.3",

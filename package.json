@@ -3,17 +3,24 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "fixtures/booking-v1"
+  ],
   "engines": {
     "node": ">=24 <25"
   },
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",
-    "build": "next build",
+    "build": "next build && npm run build --workspace @forecode/booking-v1",
     "start": "next start --hostname 127.0.0.1",
-    "typecheck": "next typegen && tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit && npm run typecheck --workspace @forecode/booking-v1",
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:fixture-e2e": "playwright test --config playwright.fixture.config.ts",
+    "test:plan": "vitest run --config vitest.plan.config.ts",
+    "snapshot:booking": "node --import tsx scripts/evaluator/booking-v1/freeze.ts",
+    "prepare:booking": "node --import tsx scripts/experiments/prepare-booking.ts",
     "format": "prettier --write .",
     "check": "npm run lint && npm run typecheck && npm test && npm run build"
   },
@@ -29,9 +36,12 @@
     "@types/node": "^24.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
     "eslint": "10.13.0",
     "eslint-config-next": "16.4.3",
     "prettier": "3.9.10",
+    "tsx": "4.23.15",
     "typescript": "^5.9.0",
     "vitest": "5.0.5"
   }

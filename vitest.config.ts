@@ -10,5 +10,11 @@ export default defineConfig({
       ),
     },
   },
-  test: { environment: "node", include: ["tests/unit/**/*.test.ts"] },
+  test: {
+    environment: "node",
+    include: [
+      "tests/unit/**/*.test.ts",
+      "fixtures/booking-v1/tests/visible/**/*.test.ts",
+    ],
+  },
 });

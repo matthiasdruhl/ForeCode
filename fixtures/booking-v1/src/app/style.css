@@ -1,0 +1,260 @@
+:root {
+  --paper: #f8f7f3;
+  --ink: #262823;
+  --muted: #65695f;
+  --line: #d9dcd0;
+  --accent: #c84120;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font:
+    14px/1.6 "Avenir Next",
+    Avenir,
+    "Segoe UI",
+    sans-serif;
+}
+main {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 30px 35px;
+}
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 25px;
+  margin-bottom: 42px;
+  border-bottom: 1px solid var(--line);
+}
+.wordmark {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -1.2px;
+}
+.wordmark span {
+  color: var(--accent);
+}
+.tag,
+.eyebrow {
+  font: 10px/1.7 monospace;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.tag {
+  color: var(--muted);
+}
+.eyebrow {
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+h1 {
+  font-size: 43px;
+  font-weight: 500;
+  letter-spacing: -1.6px;
+  line-height: 1.2;
+  margin: 0;
+}
+h2 {
+  font-size: 16px;
+  font-weight: 550;
+  margin: 0 0 20px;
+}
+h3 {
+  font-size: 14px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.lede {
+  color: var(--muted);
+  margin: 15px 0 25px;
+}
+.notice {
+  border-left: 3px solid var(--accent);
+  background: #f0eee6;
+  padding: 13px 16px;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 22px;
+}
+.notice strong {
+  color: var(--ink);
+}
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 40px;
+  margin-top: 28px;
+}
+section {
+  min-width: 0;
+  background: #fffefa;
+  border: 1px solid var(--line);
+  padding: 24px;
+}
+fieldset {
+  padding: 0;
+  border: 0;
+  margin: 0;
+  min-width: 0;
+}
+fieldset:disabled {
+  opacity: 0.55;
+}
+label {
+  display: block;
+  margin: 16px 0 7px;
+  font-size: 12px;
+}
+label:first-child {
+  margin-top: 0;
+}
+input,
+select,
+button {
+  font: inherit;
+}
+input,
+select {
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid #cdd1c3;
+  padding: 10px;
+  border-radius: 2px;
+  color: var(--ink);
+}
+button {
+  cursor: pointer;
+  border-radius: 2px;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.primary {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: white;
+  padding: 12px 18px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 24px;
+}
+.primary:hover {
+  background: #aa3418;
+}
+.session {
+  margin-top: 0;
+}
+.list-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+}
+.list-heading > span {
+  font: 11px monospace;
+  color: var(--muted);
+}
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+li {
+  border-top: 1px solid var(--line);
+  padding: 20px 0;
+}
+li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.booking-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 15px;
+}
+li p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 10px 0;
+}
+.status {
+  font: 9px monospace;
+  padding: 5px 6px;
+  flex-shrink: 0;
+}
+.active {
+  background: #e9f0e5;
+  color: #3e634b;
+}
+.cancelled {
+  background: #eeebe2;
+  color: #776d5c;
+}
+.cancel {
+  border: 0;
+  border-bottom: 1px solid #a6ab99;
+  background: transparent;
+  padding: 4px 0;
+  font-size: 11px;
+  color: var(--ink);
+  margin-top: 5px;
+}
+.empty {
+  font-size: 12px;
+  color: var(--muted);
+}
+.error {
+  color: #a42d19;
+  font-size: 13px;
+}
+.result {
+  color: #3e634b;
+  font-size: 13px;
+  min-height: 21px;
+  margin-top: 24px;
+}
+footer {
+  border-top: 1px solid var(--line);
+  margin-top: 30px;
+  padding-top: 20px;
+  font-size: 11px;
+  color: var(--muted);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+@media (max-width: 680px) {
+  main {
+    padding: 20px;
+  }
+  header {
+    margin-bottom: 30px;
+    gap: 15px;
+  }
+  .tag {
+    font-size: 8px;
+    max-width: 110px;
+    text-align: right;
+  }
+  .columns {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  section {
+    padding: 20px;
+  }
+  h1 {
+    font-size: 37px;
+  }
+  .booking-head {
+    gap: 10px;
+  }
+}

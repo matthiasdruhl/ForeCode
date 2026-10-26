@@ -6,7 +6,7 @@ export default defineConfig([
   ...nextVitals,
   ...nextTypescript,
   globalIgnores([
-    ".next/**",
+    "**/.next/**",
     "node_modules/**",
     "next-env.d.ts",
     "coverage/**",
@@ -19,6 +19,7 @@ export default defineConfig([
       "src/components/**/*.{ts,tsx}",
       "src/server/**/*.{ts,tsx}",
       "src/lib/**/*.{ts,tsx}",
+      "fixtures/booking-v1/src/**/*.{ts,tsx}",
     ],
     rules: {
       "no-restricted-imports": [
@@ -26,7 +27,14 @@ export default defineConfig([
         {
           patterns: [
             {
-              group: ["**/scripts/**", "**/evaluator/**", "**/experiments/**"],
+              group: [
+                "**/scripts/**",
+                "**/evaluator/**",
+                "**/experiments/**",
+                "**/tests/**",
+                "**/fixtures/**",
+                "@forecode/booking-v1",
+              ],
               message:
                 "Execution belongs to a separate developer-local process.",
             },

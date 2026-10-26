@@ -1,0 +1,206 @@
+{
+  "schemaVersion": "booking-source-freeze.v1",
+  "frozenAt": "2026-10-26T21:04:18.110Z",
+  "fixtureSha256": "e49687620469faad10637bac404b2f9a1c4973a12a55b2740eb7d904da5988d1",
+  "evaluatorSha256": "5bb91b1354bff13a87239328d1614a010226d7343e7b923307253bf5108ff934",
+  "testSuiteSha256": "4c2fa16a1b1f4dfe4ec645822385c0b71dfb0dddb19c6a3a885208e2eded0d5d",
+  "requiredPolicySha256": "6ef70a7ed4b2dee74170e5087031d2e791e09c7b3d30de2273b64edec51de41a",
+  "policy": {
+    "schemaVersion": "booking-required-policy.v1",
+    "requiredCheckIds": [
+      "typecheck",
+      "build",
+      "baseline-domain",
+      "http-integration",
+      "boundary"
+    ],
+    "oracleVisibility": "public_baseline",
+    "hiddenHoldout": false
+  },
+  "fixtureManifest": [
+    {
+      "path": "README.md",
+      "sha256": "50e5c2e4bf3607291d4c77e5548673ee393cf3176d6cee145505c4eee2eff927"
+    },
+    {
+      "path": "next-env.d.ts",
+      "sha256": "1862ac4bbbc5192d4bf562161df66ea547ed3e67173100656ab606ae9797db2b"
+    },
+    {
+      "path": "next.config.ts",
+      "sha256": "2f9c4e49ac56249bffa36806751844de4f1fef9e4437e8d9aab56b61a2954c06"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "75a79e1b0609a788ecbeef6afe7051e529c50c6c938ce49091019b7dfe23256f"
+    },
+    {
+      "path": "package.json",
+      "sha256": "cb19aca0bf3fc0d6cbfc7428b69cbc778c9c08c45ab071e25406ec90682fd669"
+    },
+    {
+      "path": "src/app/api/bookings/[id]/route.ts",
+      "sha256": "68931645c7479ae46ad173ce44ac2e4e3dcca97ecd7ac0f8656d49049af103b9"
+    },
+    {
+      "path": "src/app/api/bookings/route.ts",
+      "sha256": "ca6108d3b88df9b09ee1e202c0270574ad4b8170699d82c24235c6d51718131f"
+    },
+    {
+      "path": "src/app/api/resources/route.ts",
+      "sha256": "5c18faceb98f70996933099adb19ce83726c491629800aa8276d6b504d8bd575"
+    },
+    {
+      "path": "src/app/api/session/route.ts",
+      "sha256": "ec0a80de3646a69e630e66d3a1526c821901b9d8b8d69cb7a39d6cfb2966afa7"
+    },
+    {
+      "path": "src/app/booking-demo.tsx",
+      "sha256": "8ec9756eb246a96572b8b76f266327ade9973542ead9a0ee57362be6289f61be"
+    },
+    {
+      "path": "src/app/icon.svg",
+      "sha256": "9ea6b8a867e794ae478c1e1ae718f1e4325f240440c92f9b04c8770d9c801e58"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "sha256": "2fc0b07f78f2e3d4a5dcaaf1106e1c5402c9431bc18f0f0037d6aa48b2825091"
+    },
+    {
+      "path": "src/app/page.tsx",
+      "sha256": "eda2856417da10a2657ed5cf46784970e83e9778b058f81ec90147c29c21395b"
+    },
+    {
+      "path": "src/app/style.css",
+      "sha256": "b10e298bc589e6b85e1a4a1861a25db78221db01e78fc3bdfdff5ba84da4a837"
+    },
+    {
+      "path": "src/domain/booking.ts",
+      "sha256": "95449989293763727177c70c5323e8fb105d39239cdecebda4e7f05a2e19b4ad"
+    },
+    {
+      "path": "src/domain/errors.ts",
+      "sha256": "9d7db11bbb989f333c6cd8afdc5c0cbbf8148e78428b523237b059fd4bf89ac7"
+    },
+    {
+      "path": "src/server/booking-service.ts",
+      "sha256": "41475b2a98784e87ecbc263b5ea78b883d8db34b115dc8515f46ffe82297200e"
+    },
+    {
+      "path": "src/server/booking-store.ts",
+      "sha256": "f73e1a09d2895c5e503d4b6a15a5fc2abcdd9373c212d54d06628193f492616b"
+    },
+    {
+      "path": "src/server/http.ts",
+      "sha256": "3b0e5ca5755187fc47ed80bc0e63d7cc3ddec30fcd956f7b72207f658e8f0528"
+    },
+    {
+      "path": "src/server/runtime.ts",
+      "sha256": "22d31c46e4cada7ad69b0cdeec51a39dd8c7f545038f99a6f1fd441c41c420f0"
+    },
+    {
+      "path": "tests/visible/smoke.test.ts",
+      "sha256": "d25e69f2be7b056debf26b1624ff2682261b35be953844146b510bebede65fcb"
+    },
+    {
+      "path": "tsconfig.json",
+      "sha256": "b8bd22fe94487a7c8123b845ec9d5bc65ae413302d1efafe965728825798150f"
+    }
+  ],
+  "evaluatorManifest": [
+    {
+      "path": "package-lock.json",
+      "sha256": "78ffc7fcbcc860f8e040b35c7da0d0960fbcadbde4af5ed0bf80503a4489e4dc"
+    },
+    {
+      "path": "package.json",
+      "sha256": "6c803ebd5e6e6d06cdceff02a1aed6dc007deba402dcbcd60569fee119171010"
+    },
+    {
+      "path": "scripts/evaluator/booking-v1/README.md",
+      "sha256": "95d32611b23f0d5ec43ef84a6ba23bcb3744511c7dbb7a5ca1bd57a15591ab7c"
+    },
+    {
+      "path": "scripts/evaluator/booking-v1/freeze.ts",
+      "sha256": "1087c3bc9608316a20b4147bf2bd19ba0febb819b1cd35fb395682ce4bad3b35"
+    },
+    {
+      "path": "scripts/evaluator/booking-v1/http-oracle.ts",
+      "sha256": "4ef2ccbf73ad2017c6f453a6e2363e868ca9ed7175785d7bb24e6e4765dadafb"
+    },
+    {
+      "path": "scripts/evaluator/booking-v1/oracle.ts",
+      "sha256": "703f29366a29c36a1fa27cba161763957ada6f99e6309db2e30ede5c75b42182"
+    },
+    {
+      "path": "scripts/evaluator/booking-v1/receipt.ts",
+      "sha256": "de1a2277bc06cf500f26709da20467f66157fab8ad6c88ef4457f66f98c2b942"
+    },
+    {
+      "path": "scripts/evaluator/booking-v1/snapshot.ts",
+      "sha256": "cc1a377ae5593cc94b939fcb61a805b0c3da4e2dc3c1451af19399111efa2da9"
+    },
+    {
+      "path": "src/lib/contracts/api.ts",
+      "sha256": "5b540bf1e631ccbe1fb2df5a93c8875ce7e30ee5050273d1c06dd8de00f5a715"
+    },
+    {
+      "path": "src/lib/contracts/architecture.ts",
+      "sha256": "8621171e28cfcf8a8bed51e5c5c1147b1ee93edc7b5d2b603f5bf4b3def59d3c"
+    },
+    {
+      "path": "src/lib/contracts/catalog.ts",
+      "sha256": "56f8edd237a1ea4fbb808041be65e7e7e7296709da49f4f830de20b987c5b476"
+    },
+    {
+      "path": "src/lib/contracts/common.ts",
+      "sha256": "eb74b6cea843ff04f63b79b6b27763780449fac9ceaf54b4b684c7aa3e225470"
+    },
+    {
+      "path": "src/lib/contracts/errors.ts",
+      "sha256": "f74ef0af436af9f3d7db40375bf0b680d9c641e45ec3cd40950c218b0216db74"
+    },
+    {
+      "path": "src/lib/contracts/evidence.ts",
+      "sha256": "3dfdc4dff95da1e503f19d706c367cb13ce128623172517d93e8857c2bbdae81"
+    },
+    {
+      "path": "src/lib/contracts/intents.ts",
+      "sha256": "c1e59ce2da9ce48429145f01a554a723c221d5c014c6d071a5d2c9151309376d"
+    },
+    {
+      "path": "src/lib/contracts/provider.ts",
+      "sha256": "0e61ffc4ac39f0977317d5ac99a331b03a4e7ec49e4834934c703db18f876257"
+    },
+    {
+      "path": "src/lib/contracts/scientist.ts",
+      "sha256": "3534de9134667751d0e5dc0536abea46f2913c59ee2f4016d9e595f90432760c"
+    },
+    {
+      "path": "src/lib/contracts/validation.ts",
+      "sha256": "7efcdc0921f1feb9ac53aee6cf4566ba3f5581370cc4846d940263a860b5aa37"
+    },
+    {
+      "path": "src/lib/report/canonical.ts",
+      "sha256": "73d5c95f3c54c4de2c5498192f91ca418bfcf9033dd1a9635ffb94010a9e5bfa"
+    },
+    {
+      "path": "src/lib/report/digests.ts",
+      "sha256": "ca23c8ed6c66de49596a1444afabe71bcbb4d5890d2a605318bf4507676b5144"
+    },
+    {
+      "path": "src/lib/verify/results.ts",
+      "sha256": "e9665c875a8f9d774221d46300f0b0dd67c055bc30e0dd6ffab47bd6080e53b2"
+    },
+    {
+      "path": "src/server/artifacts/evaluation-store.ts",
+      "sha256": "efa71788e5ad8817cfcb884d1104e89564528bb0cb1b22eb4e1ecf71e58eddcf"
+    }
+  ],
+  "evidenceOrigin": "none",
+  "executionStatus": "NOT_RUN",
+  "limitations": [
+    "Source commitment only; no candidate code or test was executed by this command.",
+    "No sandbox attestation, protected run receipt, future heldout or architecture comparison is implied."
+  ]
+}

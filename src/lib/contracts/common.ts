@@ -15,3 +15,24 @@ export const SourceSchema = z.strictObject({
   ]),
   reference: z.string().min(1).max(128),
 });
+
+export const GitCommitSchema = z.string().regex(/^[a-f0-9]{40}$/);
+export const Sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
+export const RelativePathSchema = z
+  .string()
+  .min(1)
+  .max(512)
+  .regex(/^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9_./*-]+$/);
+export const EffortUnitSchema = z.literal("modeled_effort_points_v1");
+export const CheckStatusSchema = z.enum(["pass", "fail", "not_run", "invalid"]);
+export const VerdictSchema = z.enum([
+  "VERIFIED",
+  "REJECTED",
+  "INSUFFICIENT_EVIDENCE",
+]);
+export const text = (max: number) => z.string().min(1).max(max);
+export const texts = (maxLength: number, maxItems: number, minItems = 0) =>
+  z.array(text(maxLength)).min(minItems).max(maxItems);
+export const ids = (maxItems: number, minItems = 0) =>
+  z.array(IdSchema).min(minItems).max(maxItems);
+export const count = (max = 2_147_483_647) => z.number().int().min(0).max(max);

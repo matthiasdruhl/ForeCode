@@ -1,7 +1,14 @@
 // TRUSTED grader microVM controller. Provisioned by the sandbox owner under
 // /opt/forecode-booking/controller, never copied to the agent VM or worker.
 // No candidate import occurs in this process. Only data crosses the RPC bridge.
-import { spawnSync } from "node:child_process";
+import { command, successful } from "./runtime.mjs";
+import {
+  cleanupOwned,
+  runLabel,
+  validRun,
+  registerController,
+  unregisterController,
+} from "./lifecycle.mjs";
 import {
   mkdtempSync,
   mkdirSync,
@@ -13,13 +20,26 @@ import { createHash, randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { GradeInput } from "../../experiments/runner/sbx";
+import type { GradeInput } from "../../experiments/runner/protocol";
 import type { GradeReport } from "../../experiments/runner/protocol";
 
 const MAX = 1_048_576;
-const input = JSON.parse(readFileSync(0, "utf8")) as GradeInput;
-if (!/^forecode-booking-toolchain@sha256:[a-f0-9]{64}$/.test(input.workerImage))
+const raw = readFileSync(0);
+if (raw.length > 12_000_000) throw new Error("Input bound");
+const input = JSON.parse(raw.toString()) as GradeInput;
+validRun(input.runId);
+const cancellation = new AbortController();
+const cancel = () => cancellation.abort();
+process.on("SIGINT", cancel);
+process.on("SIGTERM", cancel);
+const deadline = setTimeout(cancel, 580_000);
+if (
+  !/^(?:forecode-booking-toolchain@)?sha256:[a-f0-9]{64}$/.test(
+    input.workerImage,
+  )
+)
   throw new Error("Pinned worker image required.");
+await registerController(input.runId);
 const directory = mkdtempSync(path.join(tmpdir(), "booking-grade-"));
 const source = path.join(directory, "source"),
   bridge = path.join(directory, "bridge");
@@ -32,26 +52,35 @@ const digest = (data: string | Buffer) =>
   createHash("sha256").update(data).digest("hex");
 const manifest: { path: string; sha256: string }[] = [];
 const containers = new Set<string>();
-const docker = (args: string[], data?: unknown, timeout = 5000) =>
-  spawnSync("docker", args, {
-    encoding: "utf8",
+const docker = (
+  args: string[],
+  data?: unknown,
+  timeout = 5000,
+  cleanup = false,
+) =>
+  command("docker", args, {
     input: data === undefined ? undefined : JSON.stringify(data),
-    timeout,
-    maxBuffer: MAX,
-    env: { NODE_ENV: "production", PATH: "/usr/local/bin:/usr/bin:/bin" },
+    milliseconds: timeout,
+    maxBytes: MAX,
+    signal: cleanup ? undefined : cancellation.signal,
   });
-const stop = (name: string) => {
-  const result = docker(["rm", "-f", name]);
-  if (result.status === 0) containers.delete(name);
+const stop = async (name: string) => {
+  const result = await docker(["rm", "-f", name], undefined, 5000, true);
+  if (successful(result)) containers.delete(name);
   else throw new Error("Worker cleanup failed.");
 };
-function launch(mode: "rpc" | "build" | "typecheck") {
-  const name = `forecode-booking-${randomUUID()}`;
+async function launch(mode: "rpc" | "build" | "typecheck" | "isolation") {
+  const name = `forecode-booking-${input.runId}-${randomUUID()}`;
   containers.add(name);
   const args = [
     "run",
     "--name",
     name,
+    "--label",
+    `${runLabel}=${input.runId}`,
+    "--restart",
+    "no",
+    "--init",
     "--pull",
     "never",
     "--network",
@@ -69,6 +98,8 @@ function launch(mode: "rpc" | "build" | "typecheck") {
     "768m",
     "--memory-swap",
     "768m",
+    "--shm-size",
+    "16m",
     "--pids-limit",
     "64",
     "--ulimit",
@@ -86,24 +117,24 @@ function launch(mode: "rpc" | "build" | "typecheck") {
     "--env",
     "NEXT_TELEMETRY_DISABLED=1",
     ...(mode === "rpc" ? ["--detach"] : []),
-    input.workerImage,
+    "--entrypoint",
     "/usr/local/bin/node",
+    input.workerImage,
     "--conditions=react-server",
     "--import",
     "/toolchain/node_modules/tsx/dist/loader.mjs",
     "/bridge/worker.mjs",
     mode,
   ];
-  const result = docker(args, undefined, mode === "rpc" ? 10000 : 200000);
+  const result = await docker(args, undefined, mode === "rpc" ? 10000 : 200000);
   return { name, result };
 }
-function rpc(name: string, data: unknown): unknown {
-  const result = docker(
+async function rpc(name: string, data: unknown): Promise<unknown> {
+  const result = await docker(
     ["exec", "-i", name, "/usr/local/bin/node", "/bridge/client.mjs"],
     data,
   );
-  if (result.error || result.signal || result.status !== 0)
-    throw new Error("Worker RPC failed.");
+  if (!successful(result)) throw new Error("Worker RPC failed.");
   const body = JSON.parse(result.stdout);
   if (body.error)
     throw Object.assign(new Error("Candidate error"), {
@@ -112,7 +143,7 @@ function rpc(name: string, data: unknown): unknown {
   return body.result;
 }
 function oracleProcess(kind: string, name?: string, data?: unknown) {
-  return spawnSync(
+  return command(
     process.execPath,
     [
       "--conditions=react-server",
@@ -123,17 +154,21 @@ function oracleProcess(kind: string, name?: string, data?: unknown) {
       ...(name ? [name] : []),
     ],
     {
-      encoding: "utf8",
       input: data === undefined ? undefined : JSON.stringify(data),
-      timeout: 60000,
-      maxBuffer: 65536,
-      env: { NODE_ENV: "production", PATH: "/usr/local/bin:/usr/bin:/bin" },
+      milliseconds: 60000,
+      maxBytes: 65536,
+      signal: cancellation.signal,
     },
   );
 }
 const checks: GradeReport["checks"] = [];
 try {
   let total = 0;
+  if (
+    !Array.isArray(input.candidate.files) ||
+    input.candidate.files.length > 100
+  )
+    throw new Error("Candidate count bound");
   for (const file of input.candidate.files) {
     if (
       !/^[A-Za-z0-9_.()[\]/-]+$/.test(file.path) ||
@@ -143,7 +178,11 @@ try {
     )
       throw new Error("Invalid candidate path.");
     const bytes = Buffer.from(file.base64, "base64");
-    if ((total += bytes.length) > 8_000_000)
+    if (
+      bytes.toString("base64") !== file.base64 ||
+      bytes.length > 2_097_152 ||
+      (total += bytes.length) > 8_000_000
+    )
       throw new Error("Candidate bound.");
     const target = path.join(source, file.path);
     mkdirSync(path.dirname(target), { recursive: true, mode: 0o755 });
@@ -156,15 +195,16 @@ try {
     input.candidate.runId !== input.runId
   )
     throw new Error("Candidate identity mismatch.");
-  for (const name of ["worker.mjs", "client.mjs"])
+  for (const name of ["worker.mjs", "client.mjs", "probe.mjs"])
     writeFileSync(
       path.join(bridge, name),
       readFileSync(fileURLToPath(new URL(name, import.meta.url))),
       { flag: "wx", mode: 0o444 },
     );
   for (const mode of ["typecheck", "build"] as const) {
-    const { name, result } = launch(mode);
-    const exitCode = result.signal || result.error ? null : result.status;
+    const { name, result } = await launch(mode);
+    const exitCode =
+      result.reason !== "completed" || result.signal ? null : result.status;
     checks.push({
       id: mode,
       status: exitCode === null ? "error" : exitCode === 0 ? "pass" : "fail",
@@ -172,26 +212,26 @@ try {
       detail:
         exitCode === null
           ? "Worker interrupted or resource limit reached."
-          : "Observed isolated tool process exit; candidate scripts were not invoked.",
+          : `Isolated tool exit; reason=${result.reason}; elapsedMs=${result.elapsedMs}; stdoutSha256=${digest(result.stdout)}; stderrSha256=${digest(result.stderr)}.`,
     });
-    stop(name);
+    await stop(name);
   }
   for (const kind of ["baseline-domain", "http-integration"] as const) {
-    const { name, result: startup } = launch("rpc");
+    const { name, result: startup } = await launch("rpc");
     try {
-      if (startup.status !== 0 || startup.error)
-        throw new Error("Worker startup failed.");
+      if (!successful(startup)) throw new Error("Worker startup failed.");
       let ready = false;
       for (let retry = 0; retry < 10 && !ready; retry++) {
         try {
-          ready = rpc(name, { op: "ping" }) === true;
+          ready = (await rpc(name, { op: "ping" })) === true;
         } catch {
           /* bounded startup retry, no inference */
         }
       }
       if (!ready) throw new Error("Worker not ready.");
-      const result = oracleProcess(kind, name);
-      const exitCode = result.error || result.signal ? null : result.status;
+      const result = await oracleProcess(kind, name);
+      const exitCode =
+        result.reason !== "completed" || result.signal ? null : result.status;
       checks.push({
         id: kind,
         status: exitCode === null ? "error" : exitCode === 0 ? "pass" : "fail",
@@ -209,16 +249,28 @@ try {
         detail: "Independent oracle bridge failed.",
       });
     } finally {
-      stop(name);
+      await stop(name);
     }
   }
-  const scanned = oracleProcess("boundary", undefined, input.candidate.files);
-  const scanExit = scanned.error || scanned.signal ? null : scanned.status;
+  const scanned = await oracleProcess(
+    "boundary",
+    undefined,
+    input.candidate.files,
+  );
+  const probe = await launch("isolation");
+  await stop(probe.name);
+  const scanExit =
+    scanned.reason !== "completed" || scanned.signal ? null : scanned.status;
   checks.push({
     id: "boundary",
-    status: scanExit === null ? "error" : scanExit === 0 ? "pass" : "fail",
+    status:
+      scanExit === null || !successful(probe.result)
+        ? "error"
+        : scanExit === 0
+          ? "pass"
+          : "fail",
     exitCode: scanExit,
-    detail: "Trusted static command/import scan; not containment proof.",
+    detail: `Trusted static scan and fixed worker file/socket/network denial probe: ${probe.result.reason}/${probe.result.status}. Finite checks only.`,
   });
   const report: GradeReport = {
     schemaVersion: "booking-grade-observation.v1",
@@ -229,8 +281,14 @@ try {
     requiredPolicySha256: input.requiredPolicySha256,
     checks,
   };
+  await cleanupOwned(input.runId);
+  if (cancellation.signal.aborted) throw new Error("Grading cancelled");
   process.stdout.write(JSON.stringify(report));
 } finally {
-  for (const name of containers) stop(name);
+  clearTimeout(deadline);
+  process.off("SIGINT", cancel);
+  process.off("SIGTERM", cancel);
+  await cleanupOwned(input.runId);
   rmSync(directory, { recursive: true, force: true });
+  await unregisterController(input.runId);
 }

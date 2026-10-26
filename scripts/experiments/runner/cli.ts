@@ -1,10 +1,12 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { jsonDigest } from "../../../src/lib/report/digests";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { protectedRead, privateDirectory, disjoint } from "../artifacts/files";
 import { OperatorConfigSchema } from "../isolation/config";
+import { randomUUID } from "node:crypto";
+import { acquireBookingLease } from "./lease";
 import { createSbxAdapter } from "./sbx";
 import { runBookingExperiment } from "./controller";
 import { boundedProcess } from "./process";
@@ -20,7 +22,7 @@ const { values } = parseArgs({
 });
 if (values.help) {
   process.stdout.write(
-    "Developer-local booking runner. --config /absolute/private/config.json [--execute]\nDefault: validate configuration only; no sandbox command or paid call. --inspect-runtime: explicit operator probes (may start dedicated VMs), then stop them; no inference. See docs/BOOKING-RUNNER.md.\n",
+    "Developer-local booking runner. --config /absolute/private/config.json [--execute]\nReal agent execution is hard-disabled. Default: validate configuration only; no sandbox command or paid call. --inspect-runtime: explicit operator probes (may start dedicated VMs), then stop them; no inference. See docs/BOOKING-RUNNER.md.\n",
   );
 } else {
   try {
@@ -33,8 +35,14 @@ if (values.help) {
         throw new Error("Inspection and execution are separate actions.");
       const root = await privateDirectory(config.protectedRoot);
       disjoint(root, fileURLToPath(new URL("../../../", import.meta.url)));
-      const lock = path.join(root, ".booking-run.lock");
-      await mkdir(lock, { mode: 0o700 });
+      disjoint(
+        config.coordinationRoot,
+        fileURLToPath(new URL("../../../", import.meta.url)),
+      );
+      const lease = await acquireBookingLease(
+        config.coordinationRoot,
+        randomUUID(),
+      );
       const adapter = createSbxAdapter(config);
       const cancellation = new AbortController();
       const cancel = () => cancellation.abort();
@@ -57,8 +65,8 @@ if (values.help) {
       } finally {
         try {
           await adapter.cleanup();
+          await lease.release();
         } finally {
-          await rm(lock, { recursive: true });
           process.off("SIGINT", cancel);
           process.off("SIGTERM", cancel);
         }
@@ -69,7 +77,7 @@ if (values.help) {
           configurationValid: true,
           execution: "NOT_RUN",
           enabled: config.enabled,
-          note: "Execution requires --execute, enabled operator configuration and current reviewed isolation/budget evidence.",
+          note: "Real agent execution is hard-disabled pending supervised termination/export acceptance. Use acceptance:booking for separately gated no-inference grading.",
         }) + "\n",
       );
     } else {

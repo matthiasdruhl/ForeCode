@@ -1,3 +1,4 @@
+import type { CandidateEnvelope } from "../artifacts/files";
 import { z } from "zod";
 import { Sha256Schema } from "../../../src/lib/contracts/common";
 import { bookingPolicy } from "../../evaluator/booking-v1/freeze";
@@ -57,3 +58,13 @@ export function validateGradeReport(
   }
   return report;
 }
+
+export type GradeInput = {
+  runId: string;
+  evaluatedTreeSha256: string;
+  evaluatorSha256: string;
+  testSuiteSha256: string;
+  requiredPolicySha256: string;
+  candidate: CandidateEnvelope;
+  workerImage: string;
+};

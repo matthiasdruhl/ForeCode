@@ -1,13 +1,27 @@
 // UNTRUSTED side of the bridge. Mounted read-only into a resource-limited,
 // network-none worker. Contains no oracle, result authority, socket or secrets.
-import { cp, symlink, mkdir } from "node:fs/promises";
+import { cp, symlink, mkdir, chmod, readdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 await cp("/source", "/work", { recursive: true });
 await mkdir("/work", { recursive: true });
+// The source mount remains immutable; build tools may update their private copy.
+async function writable(root) {
+  await chmod(root, 0o700);
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    const name = `${root}/${entry.name}`;
+    if (entry.isDirectory()) await writable(name);
+    else await chmod(name, 0o600);
+  }
+}
+await writable("/work");
 await symlink("/toolchain/node_modules", "/work/node_modules");
 process.chdir("/work");
 const mode = process.argv[2];
+if (mode === "isolation") {
+  await import("/bridge/probe.mjs");
+  process.exit(0);
+}
 if (mode === "build" || mode === "typecheck") {
   const commands =
     mode === "build"

@@ -1,98 +1,37 @@
-# Local booking runner operator handoff
+# Local booking runner
 
-Status: implemented integration, **real execution disabled by default**. No real coding-agent trial or real offline booking grade was run in this slice. The controller/publication/loader regressions use explicitly labeled synthetic development adapters; they are not containment evidence, measured experiments or certificates. The application remains command-free.
+Real coding-agent execution is **hard-disabled**, including with `enabled=true`. The previous adapter's stop → exec/export sequence could restart a stopped VM without establishing termination of detached processes. The concrete agent invocation and export path have been removed from the sbx adapter until a supervised agent boundary is reviewed and tested. No paid run is authorized by configuration examples or infrastructure PASS records.
 
-The fixed task is `booking-ownership-refactor-v1`: extract viewer/ownership authorization helpers while preserving current booking service/HTTP behavior. Only `src/` changes are permitted. The independent oracles are the existing **public baseline** domain and HTTP checks. Passing them does not establish refactor quality, unseen-feature correctness, architecture advantage, fairness or Meta benefit. No hidden future holdout exists.
-
-## Existing environment and pending admission
-
-The actual operator report was located at `../.forecode-sandbox-ops/README.md` with `readiness.json`, `verify.py`, `run.py` and `grader.py`. Those private operator files were inspected as infrastructure context; their code, key, receipts and raw diagnostics are not incorporated or published. No sandbox/configuration/global SSH/network setting was changed. `codex-1` was preserved.
-
-Read-only host inspection observed sbx **0.50.0**, dedicated `forecode-experiments` and `forecode-grader`, both stopped, mountless, 2 CPUs/4 GB, image digest `sha256:8b4cd0a46c8b600bc6b6a64af23c03d4c2807fbfc61f47568092a93fb9dc88b0`. This corroborates inventory, not denial proof. Installed help was inspected for sbx exec/cp/inspect/stop/policy/settings/MCP, local Codex exec, and Docker run/exec. Guest Codex help/version/configuration must still be reviewed against the actual pinned guest binary.
-
-The report's PASS observations are not sufficient for this adapter. It explicitly says `ready_for_real_booking_experiments=false` and `provider_billing_hard_cap_verified=false`. Its grader only accepts `solution.mjs`, not this booking app. Required missing evidence is:
-
-1. Installation and negative testing of **this** booking worker, controller and RPC bridge in the offline grader, with exact image/toolchain/controller hashes. Show correct source passing, an ownership mutant failing, wrong/final source selection, and an attempted forged output/oracle/report write unable to grant success. The recipe below has not been built, installed or run.
-2. Actual stop/restart/export semantics for this sbx adapter: prove detached agent processes and nested candidate containers cannot resume, alter either final export or survive timeout/cancellation into the next trial. Two equal exports alone do not prove quiescence. Include output limits and cleanup failure controls. Confirm finite guest disk/process limits as well as the observed VM CPU/memory limits.
-3. A reviewed, fresh binding of negative host read/write, credential/SSH/socket, host-integration, restricted inference egress, grader network, resource and evaluator-custody observations to the **current VM IDs, images, effective policies, configuration, tool binaries and this implementation**. The existing readiness file has no such complete binding. Review patched image/trust-store provenance. Docker's MCP alias remains reachable in the operator report: an empty host catalog plus disabled guest integrations must be continuously preserved operationally.
-4. Explicit authorization for this exact task and `gpt-5.6-sol`, finite token/time/spend limits, and independently observed provider/account hard spending enforcement. Experimental Codex token tracking and a local timer are not billing hard caps. The example's $0.25 is a placeholder, not authorization.
-
-Until all four are complete, leave `enabled=false`, make no paid calls, and use the development tests below. Nothing here authorizes changing the sandbox owner's configuration.
-
-## Reproduce the no-paid-call path
-
-From ForeCode:
+The next supported capability is the separate [no-inference acceptance command and owner handoff](BOOKING-OFFLINE-ACCEPTANCE.md). It uses only `forecode-grader`, four fixed candidate data transformations and resource-limited nested workers. It cannot import the paid runner or provider transport. Its review excludes inference/billing authority and keeps `enabled=false`; it requires independent isolation and owner/lease evidence. It does not weaken the full paid-experiment review, which still requires provider hard-budget evidence.
 
 ```sh
-npm run experiment:booking -- --help
-npm run experiment:booking -- --config scripts/experiments/isolation/operator.example.json
-npx vitest run tests/unit/booking-runner.test.ts
-npm run snapshot:booking --silent
-npm run check
-PLAN_REFERENCE_ROOT=/Users/matthiasdruhl/Projects/Meta-Hackathon/AgentHarness-Planning npm run test:plan
-npm run test:e2e
-npm run test:fixture-e2e
+npm run acceptance:booking -- --help
+npm run acceptance:booking -- --config scripts/experiments/isolation/offline.example.json
+npm run bundle:booking -- --output /new/absolute/private/runtime-bundle
 ```
 
-The example validates and prints `NOT_RUN`; it performs no sandbox command. All-zero hashes and example absolute paths are deliberate non-operational placeholders. No synthetic adapter is exposed by the CLI. Tests exercise reviewed baseline modules and harmless fixed host child programs only; candidate files remain inert data on the host.
+The first two commands only print help or validate configuration; neither invokes sbx. Bundle preparation reads a fixed trusted tooling/controller allowlist, refuses existing output and records hashes without building, installing or executing source. Keep the output outside the application and planning trees. Run `--execute` only after the handoff's owner actions and review are complete.
 
-## Operator configuration and review
+## Preserved experiment contracts
 
-The freshly authored local schemas are `scripts/experiments/isolation/config.ts`, separate from the unchanged frozen v1 application contracts. Unknown fields/commands/providers are rejected. Copy the disabled example into an operator-owned private location outside the fixture/application, fill real pins, and keep it mode 0600. Create separate **new**, operator-owned, mode 0700 protected and scratch roots outside ForeCode and outside each other. Resolve canonical paths first (macOS `/var`/`/tmp` aliases need their `/private/...` paths). Do not reuse or mount a broader project tree.
+The fixed future task remains `booking-ownership-refactor-v1`: extract viewer/ownership helpers, preserve booking behavior, change only `src/`. All 49 frozen application contracts, the normative planning pin and required check IDs remain unchanged. Existing synthetic controller tests exercise candidate freezing, publication and loading. They are not real coding-agent, containment or offline runtime evidence.
 
-Configuration pins exactly two existing dedicated sandbox names, the sbx executable, image digests, Codex configuration/binary, grader Node/lockfile/dependency-tree hashes, immutable worker image, one model, time/output/token/spend bounds and the reviewed evidence file digest. It accepts no shell text, caller prompt, arbitrary repository or extra agent flags. Neither the model nor a web client can set it.
+The operator/review records under `scripts/experiments/isolation/config.ts` are private local integration types, separate from the frozen application contracts. `coordinationRoot` is now required for both local capabilities and explicit runtime inspection. All cooperating controllers and the sandbox owner must use that same canonical mode-0700 root and respect `.booking-run.lock`. A lock includes run identity, PID and start time. Controllers never break a lock automatically; failed cleanup retains it. Do not run the legacy private operator launcher concurrently: it does not automatically participate in this protocol. Owner coordination is a prerequisite, not a capability inferred from a lock file.
 
-`booking-isolation-review.v1` requires `reviewedAt`, `expiresAt` (maximum 24-hour window), `configurationSha256`, `inventorySha256`, `implementationSha256`, exact `authorizedTask`, `authorizedModel`, `maxSpendUsd`, and exactly one evidence item per `obligations` entry in the schema. Each item names a private bounded regular evidence file, its SHA-256 and a reviewer description of actual observed commands/exits/denials. A `{passed:true}` record is rejected. Evidence files and the review must be operator-controlled, outside all guest-readable locations; never populate the review just to bypass a gate.
+`experiment:booking` still validates the disabled example. Its explicit `--inspect-runtime` is an owner operation that can start the two stopped dedicated VMs for trusted inventory and stop them afterward. This inspection requires owner coordination and the shared lease; it makes no containment or inference claim. `--execute` fails closed before any agent/sandbox execution, regardless of the enable switch. Do not use it as a way to obtain an acceptance review.
 
-Compute `configurationSha256` with exported `configurationDigest(config)` (it excludes the review path/hash and enable switch to avoid self-reference); `implementationSha256` is the current `snapshot:booking` evaluator hash. That hash now includes the controller, isolation policy, bridge, toolchain recipe/lock and existing receipt/loader/verdict code. Required check IDs and frozen application schemas remain unchanged. The suite hash commits the two public oracles. Actual run/receipt `evaluatorSha256` is the canonical digest of `runtimePins` in `run.json`: implementation hash, worker image, grader Node/lockfile/dependency-tree hashes. This makes a tooling change invalidate evaluation identity as well as runtime admission. Those pins and the configuration/review digests are also committed in each observed check artifact. Any implementation change requires a new review.
+## Custody and limits
 
-After the sandbox owner has provisioned and reviewed the trusted runtime, **explicit inspection only** is available:
+Only the standalone fixture may enter a future agent workspace. Never transfer ForeCode, private operator configuration, evaluator/controller code, protected reports, receipts, keys or secrets there. Offline acceptance transfers candidate bytes directly to the protected grader, whose nested workers see source plus a non-authoritative bridge and fixed denial probe. Candidate variants remain inert host data: no host candidate dependency installation, import, build or execution occurs.
 
-```sh
-npm run experiment:booking -- --config /absolute/private/operator.json --inspect-runtime
-```
+Source capture rejects traversal, symlinks, hardlinks, duplicate/noncanonical encodings, changed configuration/visible tests and excess bytes. Captures and frozen candidates are rehashed. Runtime identity binds implementation, image, Node, dependency lock/tree, limits, suite and policy. The installed controller, ESM package scope, tooling, image identity and native Node loader closure are checked against the reviewed inventory. Hashes and JSON PASS fields alone do not authenticate custody.
 
-This is an operator action, not a task run: it may start the two initially stopped, idle dedicated VMs to hash installed files; it stops them afterward, handles SIGINT/SIGTERM, and creates an exclusive `inventory.json` in the protected root (refuses overwriting). It checks IDs, mounts, CPU/memory, auth separation, policies, disabled SSH/browser, empty MCP catalog, agent config/binary and protected grader runtime bytes. It does not run a candidate or infer containment from inventory. Its canonical digest is the review's `inventorySha256`. Repeated inspections need a newly archived/removed inventory chosen by the operator; the runner never overwrites existing evidence.
+Cleanup now terminates a registered trusted guest controller by PID **and Linux process birth identity**, then removes only workers labelled with the current run UUID, rechecks absence, stops/restarts the grader, checks absence again and confirms stopped state. Interruption retains the lease even if cleanup returns successfully. Cleanup failure prevents publication and retains observations for owner recovery. No VM is deleted/reset/reconfigured, no global forwarding/network policy changes, and no unrelated container cleanup occurs.
 
-## Trusted runtime layout — sandbox owner ticket
+These mechanisms need actual owner-reviewed runtime testing. They do not establish that an agent with guest sudo can be supervised safely: that separate paid path stays hard-disabled. The present acceptance suite checks public baseline behavior, distinct source selection and forged candidate stdout; it is not an agent trial, Meta contribution, architecture comparison, hidden holdout or completed certificate. Unknown metrics remain null.
 
-New source under `scripts/evaluator/booking-v1/toolchain/` supplies a pinned Node base Dockerfile and separately resolved lockfile. It contains trusted Next/TypeScript/tsx and baseline fixture dependencies; no candidate package script or dependency resolution is used during grading. The dependency-resolution command used here was:
+## Current runtime gate
 
-```sh
-npm install --package-lock-only --ignore-scripts --workspaces=false --prefix scripts/evaluator/booking-v1/toolchain
-```
+The private report at `../.forecode-sandbox-ops/README.md` and `readiness.json` was reinspected. Its last update is October 26 at 20:17:38 UTC; it still says real booking experiments and provider hard caps are unready. Read-only inventory again found sbx 0.50.0 and the two stopped mountless dedicated VMs with 2 CPUs/4 GB. The original `codex-1` was preserved. Installed help explicitly states that stop retains state and exec starts stopped VMs. Neither inventory nor the generic single-function infrastructure grader proves this booking bridge.
 
-It does not install a sandbox. The owner must review/build the image from **only that tooling directory**, pin its resulting repository digest as `forecode-booking-toolchain@sha256:...`, and load it into the grader without opening grading egress. No candidate enters the image build context. Derive the protected grader's Node and node_modules from that reviewed image/lock; validate actual installed bytes, not just the lockfile. No automatic provisioning command is supplied that changes the existing VMs.
-
-Required grader paths:
-
-- `/opt/forecode-booking/bin/node`: reviewed pinned Node executable.
-- `/opt/forecode-booking/node_modules/`: trusted pinned runtime dependencies, including tsx and TypeScript; never writable/reachable by a worker.
-- `/opt/forecode-booking/package-lock.json`: trusted toolchain lock.
-- `/opt/forecode-booking/controller/`: only `guest.ts`, `oracle-driver.ts`, `oracle.ts`, `http-oracle.ts`, `remote-oracles.ts`, `worker.mjs`, `client.mjs` from this newly authored implementation. Runtime-only imports are local; type imports are erased.
-
-The agent binary is expected at `/usr/local/bin/codex`, with reviewed configuration `/home/agent/.codex/config.toml`. The owner must inspect actual paths/versions and the complete CLI dependency closure; a wrapper hash alone does not prove its transitive binary. If the actual installation differs, stop and review a narrow adapter change rather than inventing flags or falling back to host execution. The review must cover disabled hooks/plugins/apps/browser/MCP/shared skills/host tools and the approved guest tool permissions.
-
-Inside the grader, the controller decodes only the accepted frozen candidate into a fresh source directory and recomputes its tree hash. Separate worker containers receive **only** that source plus the small non-authoritative worker/client bridge; they receive no oracle, controller, receipt key, result files or Docker socket. Each has network none, read-only root/source/bridge, UID 65534, no capabilities/escalation, one CPU, 768 MB/no extra swap, 64 PIDs, bounded descriptors and tmpfs. Build/typecheck use fixed pinned executable paths. Each oracle runs as a separate protected process, talks to candidate behavior via bounded JSON RPC, and supplies an actual observed exit to the protected controller. Required boundary scanning is a trusted static check, not a sandbox proof. The current fixed memory/time caps may reject a valid large build; preserve that outcome and review a new policy rather than silently increasing limits.
-
-## Execution, evidence and recovery
-
-Only after the missing evidence and explicit authorization are reviewed, update the private review/configuration with real digests and `enabled=true`, then the operator may use:
-
-```sh
-npm run experiment:booking -- --config /absolute/private/operator.json --execute
-```
-
-Do **not** run that command with the current readiness report. A root-scoped exclusive lock prevents simultaneous use by cooperating controllers; coordinate with the sandbox owner and do not run a separate operator tool concurrently. Admission is checked before task transfer and runtime/configuration/evidence drift is checked before later stages. External policy changes must be prohibited while a trial is active; this is not a continuous host governance monitor.
-
-The execution deadline spans admission through publication; every sbx command is also bounded, and cleanup has an independent 30-second cap. SIGINT/SIGTERM abort work; host child process groups receive TERM then KILL. Cleanup stops both dedicated VMs and must succeed before publication. The controller never removes/reinstalls/reconfigures a VM or touches `codex-1`. If a stop fails, manually establish stopped/terminated state and review private observations before retrying. After an uncatchable host crash/power loss, inspect both VMs and the lock; do not delete a lock until ownership and termination are established.
-
-Only the sanitized standalone fixture is transferred. The candidate export is bounded (100 files, 8 MB decoded, 2 MB/file), rejects traversal/duplicates/noncanonical encoding, binds the run UUID, and keeps configuration/dependencies/visible tests byte-pinned. Two final exports must agree. Candidate bytes are frozen into a new private read-only snapshot and rehashed after grading; evaluator source is also rehashed. Never import, install, build or test those files on the host. Read-only file modes supplement protected custody and hash checks; they are not WORM storage against the operator.
-
-Each attempt preserves a validated run record with stage, observed exits/signals/reasons, output digests, exact identities and elapsed/files-changed metrics. Token/cost/iteration metrics remain null. `repoCommit` records the controller checkout's base commit; the evaluator digest covers current implementation bytes and the final candidate is identified independently by its tree hash. A lifecycle `completed` result does **not** mean checks passed. Nonzero agent exits are retained and do not prevent collecting valid independent evidence. Interrupted runs with no stable candidate receive no receipt. Grader output is bounded and kept privately as `grader-observed.txt`, including malformed/failed reports; it is never evidence authority by itself. Raw agent text is not published.
-
-After successful cleanup/freshness/report validation, the trusted controller writes `checks/`, `evaluation.json` and `allowlist-entry.json` exclusively under the run UUID. It assembles the existing receipt contract. Authentication comes from protected custody, a trusted controller-selected byte digest/identity and the server's fixed allowlist. Hashing or an issuer string alone grants nothing. The operator may provision a reviewed allowlist entry into existing trusted server configuration; there is **no public execution, upload or registration endpoint**. The existing loader rechecks exact bundle/evidence bytes, source/evaluator/suite/policy pins and run bindings before normalizing the verdict. Do not register synthetic test artifacts or serve candidate snapshots.
-
-## Next ready ticket
-
-Sandbox owner: review and provision the protected booking toolchain/bridge layout, then perform a **no-inference offline booking bridge acceptance** in the existing grader: baseline, deliberate ownership mutant, wrong/stale final source, forged report attempt, oracle-write denial, network/credential/socket denial, forced timeout/cancellation and stop/restart non-resumption. Return private command/exit evidence bound to both VM IDs/images/policies and the implementation digest. Keep `enabled=false`. Provider hard-cap verification and exact task/model/budget authorization are separate prerequisites before the first paid trial.
+No sandbox provisioning, image build/load, `sbx exec`, guest acceptance or inference occurred in this slice. The exact next owner actions and command recipe are in the offline handoff. Credential-free CI runs deterministic development tests only; live acceptance is never a CI requirement.

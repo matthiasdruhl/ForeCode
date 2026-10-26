@@ -88,6 +88,7 @@ async function setup() {
     graderNodeSha256: hash,
     graderLockSha256: hash,
     graderModulesSha256: hash,
+    coordinationRoot: protectedRoot,
     protectedRoot,
     scratchRoot,
     reviewFile: path.join(root, "review.json"),
@@ -454,6 +455,18 @@ describe("runtime admission", () => {
     expect(() =>
       OperatorConfigSchema.parse({ ...config, arbitraryCommand: "echo pass" }),
     ).toThrow();
+  });
+  it("keeps real agent entrypoints disabled even if operator config enables them", async () => {
+    const { config } = await setup();
+    config.enabled = true;
+    const adapter = createSbxAdapter(config);
+    await expect(adapter.admit(hash)).rejects.toThrow(
+      "Real agent execution disabled",
+    );
+    await expect(
+      adapter.agent(randomUUID(), new AbortController().signal),
+    ).rejects.toThrow("disabled");
+    await expect(adapter.collect(randomUUID())).rejects.toThrow("Supervised");
   });
   it("requires current reviewed bytes bound to implementation/config/inventory and all observations", async () => {
     const { config, root } = await setup();

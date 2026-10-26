@@ -1,13 +1,13 @@
 # Booking evaluation handoff
 
-The foundation provides a standalone baseline, independent public baseline oracles, source preparation, strict evidence contracts, receipt assembly and protected read-only loading. The next slice adds a disabled-by-default local controller and isolated grader bridge; see [the operator runbook](BOOKING-RUNNER.md). No real agent or offline booking guest execution has occurred, and verified sandbox isolation is not claimed. The existing operator environment was inspected read-only and preserved.
+The foundation provides a standalone baseline, independent public baseline oracles, source preparation, strict evidence contracts, receipt assembly and protected read-only loading. The local controller now has a separate [no-inference acceptance path](BOOKING-OFFLINE-ACCEPTANCE.md); real agent execution is hard-disabled pending supervised termination/export acceptance. See [the operator runbook](BOOKING-RUNNER.md). No real agent or offline booking guest execution has occurred, and verified sandbox isolation is not claimed. The existing operator environment was inspected read-only and preserved.
 
 ## Separate custody
 
 1. Export only `fixtures/booking-v1` with `npm run prepare:booking -- --output /new/absolute/directory`. The command refuses existing outputs, evaluator/holdout/controller files, secrets and symlinks. It does not execute the subject.
 2. Keep `scripts/evaluator`, all private future holdouts, controller configuration and protected outputs outside that exported tree and outside every guest-visible/agent-readable mount. The public baseline oracle may be reviewed; it is never described as an unseen holdout.
 3. Freeze the source, evaluator and policy with `npm run snapshot:booking --silent`. That commitment is preparation evidence only. It is not an evaluator receipt, a sandbox attestation or a model response.
-4. After the separate sandbox report passes review, the local controller can start a bounded approved task. Grade its exact immutable final snapshot in a separate network-off evaluator guest. Run all pinned required checks; retain failures and absent results.
+4. After owner authority and the separate offline isolation/runtime review, the local controller can grade only its reviewed fixed acceptance scenarios in the network-off evaluator guest. Future agent execution additionally requires supervised termination/export and the unchanged full paid-experiment review. Grade the exact immutable final snapshot. Run all pinned required checks; retain failures and absent results.
 5. Only the trusted controller writes original evaluation bundles and check artifacts to the protected root and configures the allowlist. Public users, agents and model output cannot choose roots, pins or receipt IDs to register.
 
 ## Protected loader
@@ -26,4 +26,4 @@ The loader's disjoint-path and synthetic tamper tests are **not OS/microVM conta
 - Record real process exits, artifact digests, missing metrics as null and cancellation. Keep host paths/private diagnostics out of UI/model summaries.
 - A/B needs both initial variants passing the same current oracle, matched downstream conditions and B upfront cost. Meta-attribution needs its separate equally informed comparator. None is established by these developer checks.
 
-Next operator work is the no-inference booking bridge acceptance detailed in the runbook; real local execution stays disabled until current isolation evidence and finite provider budget authorization are reviewed. Consented Meta transport remains separate work. Muse remains a conditional adapter under the reviewed planning overlay; the original frozen schema remains unchanged.
+Next operator work is the trusted installation and no-inference booking bridge acceptance detailed in the handoff. Offline review requires no fabricated provider-budget evidence. Paid execution remains hard-disabled; current isolation, provider hard caps/authorization and supervised agent lifecycle are separate future gates. Consented Meta transport remains separate work. Muse remains a conditional adapter under the reviewed planning overlay; the original frozen schema remains unchanged.

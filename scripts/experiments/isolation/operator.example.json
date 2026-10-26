@@ -20,5 +20,6 @@
   "maxOutputBytes": 1048576,
   "tokenLimit": 20000,
   "spendUsd": 0.25,
-  "authorizedModel": "gpt-5.6-sol"
+  "authorizedModel": "gpt-5.6-sol",
+  "coordinationRoot": "/absolute/private/shared-booking-coordination"
 }

@@ -36,7 +36,8 @@ export const OperatorConfigSchema = z.strictObject({
   graderModulesSha256: Sha256Schema,
   workerImage: z
     .string()
-    .regex(/^forecode-booking-toolchain@sha256:[a-f0-9]{64}$/),
+    .regex(/^(?:forecode-booking-toolchain@)?sha256:[a-f0-9]{64}$/),
+  coordinationRoot: absolute,
   protectedRoot: absolute,
   scratchRoot: absolute,
   reviewFile: absolute,

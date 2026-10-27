@@ -16,6 +16,7 @@ import {
 import { publishEvaluation } from "../artifacts/publish";
 import { configurationDigest } from "../isolation/gate";
 import type { OperatorConfig } from "../isolation/config";
+import { acquireBookingLease } from "./lease";
 import { fixedTask, validateGradeReport } from "./protocol";
 import type { BookingAdapter } from "./sbx";
 import type { ProcessResult } from "./process";
@@ -48,6 +49,8 @@ export async function runBookingExperiment(
   const root = await privateDirectory(config.protectedRoot),
     scratch = await privateDirectory(config.scratchRoot);
   disjoint(root, scratch);
+  disjoint(config.coordinationRoot, scratch);
+  disjoint(config.coordinationRoot, projectRoot);
   disjoint(root, await realpath(projectRoot));
   disjoint(scratch, await realpath(projectRoot));
   // Exclusive controller lock: never stop another operator's in-flight trial.
@@ -60,8 +63,7 @@ export async function runBookingExperiment(
     graderModulesSha256: config.graderModulesSha256,
   };
   const evaluatorSha256 = jsonDigest(runtimePins);
-  const lock = path.join(root, ".booking-run.lock");
-  await mkdir(lock, { mode: 0o700 });
+  const lease = await acquireBookingLease(config.coordinationRoot, runId);
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), config.maxSeconds * 1000);
   const signal = AbortSignal.any([userSignal, deadline.signal]);
@@ -76,6 +78,7 @@ export async function runBookingExperiment(
   let stage = "admission";
   let entry: Awaited<ReturnType<typeof publishEvaluation>> | null = null;
   try {
+    await lease.assertOwned();
     await adapter.admit(pins.evaluatorSha256, signal);
     admitted = true;
     if (signal.aborted) throw new Error("cancelled");
@@ -96,6 +99,7 @@ export async function runBookingExperiment(
     agent = await adapter.agent(runId, signal);
     // Terminate detached guest processes before observing final source. The
     // operator must prove stop/restart/export semantics for this exact runtime.
+    await lease.assertOwned();
     await adapter.cleanup();
     if (agent.reason !== "completed" || signal.aborted) {
       status =
@@ -159,6 +163,7 @@ export async function runBookingExperiment(
     stage = "report-validation";
     const report = validateGradeReport(JSON.parse(grading.stdout), expected);
     stage = "cleanup-and-freshness";
+    await lease.assertOwned();
     await adapter.cleanup();
     cleaned = true;
     if (
@@ -193,7 +198,11 @@ export async function runBookingExperiment(
     else if (status === "blocked" && agent) status = "failed";
   } finally {
     try {
-      if (!cleaned) await adapter.cleanup();
+      if (!cleaned) {
+        await lease.assertOwned();
+        await adapter.cleanup();
+        cleaned = true;
+      }
     } catch {
       status = "blocked";
       failure = "Sandbox termination unconfirmed; publication forbidden.";
@@ -201,7 +210,7 @@ export async function runBookingExperiment(
     }
     clearTimeout(timer);
     if (temporary) await rm(temporary, { recursive: true, force: true });
-    await rm(lock, { recursive: true });
+    if (cleaned) await lease.release();
   }
   const run = ExperimentRunV1Schema.parse({
     schemaVersion: "experiment-run.v1",

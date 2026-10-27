@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setTimeout as delay } from "node:timers/promises";
+import { awaitProcessTermination } from "../helpers/process-termination";
 import {
   chmod,
   mkdir,
@@ -88,6 +90,7 @@ async function setup() {
     graderNodeSha256: hash,
     graderLockSha256: hash,
     graderModulesSha256: hash,
+    coordinationRoot: protectedRoot,
     protectedRoot,
     scratchRoot,
     reviewFile: path.join(root, "review.json"),
@@ -455,6 +458,18 @@ describe("runtime admission", () => {
       OperatorConfigSchema.parse({ ...config, arbitraryCommand: "echo pass" }),
     ).toThrow();
   });
+  it("keeps real agent entrypoints disabled even if operator config enables them", async () => {
+    const { config } = await setup();
+    config.enabled = true;
+    const adapter = createSbxAdapter(config);
+    await expect(adapter.admit(hash)).rejects.toThrow(
+      "Real agent execution disabled",
+    );
+    await expect(
+      adapter.agent(randomUUID(), new AbortController().signal),
+    ).rejects.toThrow("disabled");
+    await expect(adapter.collect(randomUUID())).rejects.toThrow("Supervised");
+  });
   it("requires current reviewed bytes bound to implementation/config/inventory and all observations", async () => {
     const { config, root } = await setup();
     config.enabled = true;
@@ -577,16 +592,21 @@ describe("bounded process lifecycle (reviewed harmless host children only)", () 
         })
       ).reason,
     ).toBe("cancelled");
-    const child = await boundedProcess(
-      process.execPath,
-      [
-        "-e",
-        "const {spawn}=require('node:child_process');const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'inherit'});console.log(c.pid);setInterval(()=>{},1000)",
-      ],
-      { milliseconds: 150, maxBytes: 1024 },
-    );
+    const { root } = await setup();
+    const heartbeat = path.join(root, "descendant-heartbeat");
+    const writer =
+      "const {writeFileSync,renameSync}=require('node:fs');let n=0;const p=process.argv[1];const tick=()=>{writeFileSync(p+'.pending',String(++n));renameSync(p+'.pending',p)};tick();process.send('ready');setInterval(tick,10)";
+    const parent = `const {spawn}=require('node:child_process');const c=spawn(process.execPath,['-e',${JSON.stringify(writer)},${JSON.stringify(heartbeat)}],{stdio:['ignore','inherit','inherit','ipc']});c.once('message',()=>console.log(c.pid));setInterval(()=>{},1000)`;
+    const child = await boundedProcess(process.execPath, ["-e", parent], {
+      milliseconds: 1000,
+      maxBytes: 1024,
+    });
     expect(child.reason).toBe("timed_out");
-    expect(() => process.kill(Number(child.stdout.trim()), 0)).toThrow();
+    await awaitProcessTermination(Number(child.stdout.trim()));
+    const stopped = await readFile(heartbeat, "utf8");
+    expect(Number(stopped)).toBeGreaterThan(0);
+    await delay(200);
+    expect(await readFile(heartbeat, "utf8")).toBe(stopped);
   });
 });
 

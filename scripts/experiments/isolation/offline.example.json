@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "booking-offline-operator.v1",
+  "scope": "fixed-booking-grader-acceptance-no-inference",
+  "enabled": false,
+  "acceptanceEnabled": false,
+  "sbx": "/opt/homebrew/bin/sbx",
+  "sbxSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "graderSandbox": "forecode-grader",
+  "graderImage": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "workerImage": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "graderNodeSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "graderLockSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "graderModulesSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "coordinationRoot": "/absolute/private/shared-booking-coordination",
+  "protectedRoot": "/absolute/private/offline-evidence",
+  "scratchRoot": "/absolute/private/offline-scratch",
+  "reviewFile": "/absolute/private/offline-review.json",
+  "reviewSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "maxSeconds": 1800,
+  "maxOutputBytes": 1048576,
+  "vmDiskBytes": 8589934592,
+  "vmPids": 256
+}

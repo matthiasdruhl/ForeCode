@@ -72,7 +72,7 @@ if (kind === "boundary") {
 } else {
   if (
     !["baseline-domain", "http-integration"].includes(kind ?? "") ||
-    !/^forecode-booking-[a-f0-9-]{36}$/.test(name ?? "")
+    !/^forecode-booking-[a-f0-9-]{36}-[a-f0-9-]{36}$/.test(name ?? "")
   )
     throw new Error("Invalid oracle operation.");
   const rpc = (data: unknown) => {

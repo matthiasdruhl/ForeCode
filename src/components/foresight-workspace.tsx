@@ -17,6 +17,9 @@ import {
 import { buildMetaPayload, META_LIMITS } from "@/lib/foresight/prompts";
 import type { PublicForesightConfiguration } from "@/server/meta/configuration";
 
+import { ReviewedComparison } from "./reviewed-comparison";
+import { comparisonContext } from "@/lib/foresight/comparison";
+
 type Configuration = PublicForesightConfiguration;
 const labels: Record<Step, string> = {
   propose: "Propose A / B",
@@ -375,6 +378,12 @@ function ForesightRun({
             </div>
           ))}
         </section>
+      )}
+      {proposal && (
+        <ReviewedComparison
+          key={canonicalJson({ intents, goal, graph: bookingGraph, proposal })}
+          context={comparisonContext(intents, proposal)}
+        />
       )}
       {hypothesis && (
         <section

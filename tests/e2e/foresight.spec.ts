@@ -359,3 +359,251 @@ test("disabled provider keeps the exact payload review accessible without dispat
   ).toBeDisabled();
   expect(requests).toEqual([]);
 });
+
+const comparison = (page: Page) =>
+  page.getByRole("region", { name: "Review cost assumptions, then compare." });
+async function reviewComparison(page: Page) {
+  const section = comparison(page);
+  await section
+    .getByLabel("Bounded comparison scope")
+    .fill(
+      "Synthetic developer estimate of policy changes inside the reviewed service only for both candidates. UI, persistence, runtime route integration and omitted detail-route work are excluded from every scenario.",
+    );
+  await section
+    .getByLabel("Can every alternative and scenario use this scope?")
+    .selectOption("shared_scope");
+  for (let i = 1; i <= 5; i++) {
+    await section
+      .getByLabel(`Coverage review ${i}`, { exact: true })
+      .selectOption("out_of_scope");
+    await section
+      .getByLabel(`Scope rationale ${i}`, { exact: true })
+      .fill(
+        "Synthetic bounded policy-only review: runtime routes, UI, external packages, tests, configuration and protected evidence are excluded equally; no runtime integration claim.",
+      );
+  }
+  const pairs = section.locator(".pair-review");
+  for (const pair of await pairs.all()) {
+    await pair.getByLabel("Route changes", { exact: true }).fill("0");
+    await pair
+      .getByLabel("Unresolved relevant dependencies", { exact: true })
+      .fill("0");
+    await pair
+      .getByLabel("Reviewer rationale", { exact: true })
+      .fill(
+        "Synthetic human review: no path changes inside the declared scope; zero counts are explicit assumptions, not observations.",
+      );
+    await pair
+      .getByRole("checkbox", { name: "I reviewed these paths", exact: false })
+      .check();
+  }
+  return section;
+}
+
+test("synthetic local comparison abstains on missing basis, accepts genuine zeros and invalidates edited results without inference", async ({
+  page,
+}, info) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const h = await syntheticBrowser(page);
+  await propose(page);
+  const section = comparison(page);
+  const compare = section.getByRole("button", {
+    name: "Compare locally",
+    exact: true,
+  });
+  await expect(
+    section.getByLabel("Route changes", { exact: true }).first(),
+  ).toHaveValue("");
+  await compare.click();
+  await expect(
+    section.getByRole("heading", { name: "ForeCode abstains", exact: true }),
+  ).toBeVisible();
+  await expect(section.getByLabel("Comparison result")).toContainText(
+    "Incomplete reviewed basis: candidate-a / scenario-team",
+  );
+  await expect(section.getByRole("table")).toHaveCount(0);
+  await reviewComparison(page);
+  await compare.click();
+  await expect(
+    section.getByRole("heading", {
+      name: "Modeled recommendation: candidate-a",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(section.getByRole("table").locator("tbody tr")).toHaveCount(2);
+  await expect(section.getByRole("table")).toContainText(
+    "2 × 0 + 0 + 2 × 0 = 0",
+  );
+  await expect(
+    section.getByText("candidate-a: worst regret 0; upfront 0 points", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const a = section.locator(".pair-review").first();
+  await a.getByText("Affected existing paths", { exact: false }).click();
+  await a
+    .getByRole("checkbox", { name: "src/domain/booking.ts", exact: true })
+    .check();
+  await a
+    .getByRole("checkbox", { name: "src/domain/errors.ts", exact: true })
+    .check();
+  await a
+    .getByRole("checkbox", {
+      name: "src/server/booking-service.ts",
+      exact: true,
+    })
+    .check();
+  await expect(section.getByLabel("Comparison result")).toHaveCount(0);
+  await expect(
+    a.getByRole("checkbox", { name: "I reviewed these paths", exact: false }),
+  ).not.toBeChecked();
+  await a
+    .getByRole("checkbox", { name: "I reviewed these paths", exact: false })
+    .check();
+  await compare.click();
+  await expect(
+    section.getByRole("heading", {
+      name: "Modeled recommendation: candidate-b",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(section.getByRole("table")).toContainText(
+    "2 × 3 + 0 + 2 × 0 = 6",
+  );
+  await expect(section.getByRole("table")).toContainText("6 − 3 = 3");
+  await expect(sharing(page).getByRole("checkbox")).not.toBeChecked();
+  expect(h.requests.map((x) => x.step)).toEqual(["propose"]);
+  // Local worksheet must never enter an existing provider payload.
+  await sharing(page)
+    .getByText("Review exact outgoing payload", { exact: true })
+    .click();
+  expect(
+    await sharing(page).getByLabel("Exact application payload").textContent(),
+  ).not.toMatch(/contextKey|projectedRouteChanges|comparability/);
+  for (const width of [1440, 768, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await section.scrollIntoViewIfNeeded();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await section.screenshot({
+      path: info.outputPath(`comparison-${width}.png`),
+    });
+  }
+  await a.getByLabel("Route changes", { exact: true }).fill("");
+  await expect(section.getByLabel("Comparison result")).toHaveCount(0);
+  await compare.click();
+  await expect(section.getByLabel("Comparison result")).toContainText(
+    "Incomplete reviewed basis",
+  );
+  await expect(section.getByRole("table")).toHaveCount(0);
+  await section
+    .getByLabel("Bounded comparison scope", { exact: true })
+    .fill("Changed comparison boundary; assumptions need fresh review.");
+  await expect(section.getByLabel("Comparison result")).toHaveCount(0);
+  await expect(a.getByLabel("Reviewer rationale", { exact: true })).toHaveValue(
+    "",
+  );
+  await expect(a.getByLabel("Route changes", { exact: true })).toHaveValue("");
+  await expect(
+    a.getByRole("checkbox", { name: "src/domain/booking.ts", exact: true }),
+  ).not.toBeChecked();
+  expect(errors).toEqual([]);
+});
+
+test("synthetic relevant dynamic-route omission forces abstention despite otherwise complete reviewed basis", async ({
+  page,
+}) => {
+  const h = await syntheticBrowser(page);
+  await propose(page);
+  const section = await reviewComparison(page);
+  await section
+    .getByLabel("Coverage review 3", { exact: true })
+    .selectOption("relevant_unknown");
+  await section
+    .getByRole("button", { name: "Compare locally", exact: true })
+    .click();
+  await expect(section.getByLabel("Comparison result")).toContainText(
+    "dynamic booking detail route exists",
+  );
+  await expect(
+    section.getByRole("heading", { name: "ForeCode abstains", exact: true }),
+  ).toBeVisible();
+  await expect(section.getByRole("table")).toHaveCount(0);
+  expect(h.requests).toHaveLength(1);
+});
+
+for (const change of [
+  "goal",
+  "edit",
+  "revision",
+  "revoke",
+  "clear",
+  "selection",
+] as const) {
+  test(`synthetic ${change} invalidates local basis and decision`, async ({
+    page,
+  }) => {
+    await syntheticBrowser(page);
+    await propose(page);
+    const section = await reviewComparison(page);
+    await section
+      .getByRole("button", { name: "Compare locally", exact: true })
+      .click();
+    await expect(section.getByLabel("Comparison result")).toBeVisible();
+    if (change === "goal")
+      await page
+        .getByLabel("Research goal", { exact: true })
+        .fill("Changed goal with same intents.");
+    if (change === "edit" || change === "revision") {
+      await page
+        .getByRole("button", { name: "Edit Team permissions", exact: true })
+        .click();
+      if (change === "revision") {
+        await page
+          .getByLabel("What needs to change?", { exact: true })
+          .fill("Let a delegate cancel only after an explicit audit review.");
+        await page
+          .getByRole("button", { name: "Confirm revision", exact: true })
+          .click();
+      }
+    }
+    if (change === "revoke")
+      await page
+        .getByRole("button", { name: "Revoke Team permissions", exact: true })
+        .click();
+    if (change === "clear")
+      await page
+        .getByRole("button", {
+          name: "Clear research / start again",
+          exact: true,
+        })
+        .click();
+    if (change === "selection")
+      await page.locator(".intent-selection").getByRole("checkbox").uncheck();
+    await expect(comparison(page)).toHaveCount(0);
+    await expect(page.getByLabel("Comparison result")).toHaveCount(0);
+    if (change === "goal" || change === "revision" || change === "clear") {
+      await propose(page);
+      await expect(
+        comparison(page).getByLabel("Bounded comparison scope", {
+          exact: true,
+        }),
+      ).toHaveValue("");
+      await expect(
+        comparison(page).getByLabel("Route changes", { exact: true }).first(),
+      ).toHaveValue("");
+      await expect(
+        comparison(page)
+          .getByRole("checkbox", {
+            name: "I reviewed these paths",
+            exact: false,
+          })
+          .first(),
+      ).not.toBeChecked();
+    }
+  });
+}

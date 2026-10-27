@@ -39,7 +39,10 @@ export async function awaitProcessTermination(pid: number) {
         )
           return;
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+        // The task can disappear after kill(pid, 0), including while an open
+        // proc stat file is being read. Both errors mean that task is gone.
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "ESRCH") return;
         throw error;
       }
     }

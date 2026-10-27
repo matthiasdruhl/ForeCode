@@ -10,7 +10,17 @@ const actual = (name) => {
     throw Error("Unexpected synthetic filesystem access");
   return path.join(root, name);
 };
-const result = { imports: [], exits: [], chdirs: [], mountRootChmod: false };
+const mode = process.argv[3] ?? "isolation";
+const childExit = Number(process.argv[4] ?? "0");
+if (!["isolation", "build"].includes(mode) || ![0, 7].includes(childExit))
+  throw Error("Only fixed synthetic worker modes/exits are allowed");
+const result = {
+  imports: [],
+  exits: [],
+  chdirs: [],
+  commands: [],
+  mountRootChmod: false,
+};
 try {
   await fs.mkdir(actual("/source/nested"), { recursive: true });
   await fs.writeFile(
@@ -39,7 +49,7 @@ try {
   };
   const context = vm.createContext({
     process: {
-      argv: ["node", "worker.mjs", "isolation"],
+      argv: ["node", "worker.mjs", mode],
       chdir(name) {
         actual(name);
         result.chdirs.push(name);
@@ -78,7 +88,13 @@ try {
   await worker.link((name) => {
     if (name === "node:fs/promises") return moduleFor(filesystem);
     if (name === "node:child_process")
-      return moduleFor({ spawnSync: forbidden });
+      return moduleFor({
+        spawnSync(executable, args, options) {
+          if (mode !== "build") forbidden();
+          result.commands.push({ executable, args, options });
+          return { status: childExit, signal: null };
+        },
+      });
     if (name === "node:http") return moduleFor({ createServer: forbidden });
     throw Error("Unexpected trusted worker import");
   });

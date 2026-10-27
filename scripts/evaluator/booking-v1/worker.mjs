@@ -26,7 +26,7 @@ if (mode === "isolation") {
 if (mode === "build" || mode === "typecheck") {
   const commands =
     mode === "build"
-      ? [["/toolchain/node_modules/next/dist/bin/next", "build"]]
+      ? [["/toolchain/node_modules/next/dist/bin/next", "build", "--webpack"]]
       : [
           ["/toolchain/node_modules/next/dist/bin/next", "typegen"],
           [

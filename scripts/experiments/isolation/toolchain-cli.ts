@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { observeInstalledGrader } from "./installed-observation";
 import { installationPreflight } from "./installation-preflight";
 import {
   prepareToolchain,
@@ -13,6 +14,7 @@ const { values } = parseArgs({
     build: { type: "boolean", default: false },
     verify: { type: "string" },
     preflight: { type: "string" },
+    "observe-installed": { type: "string" },
     config: { type: "string" },
     inventory: { type: "string" },
     help: { type: "boolean", default: false },
@@ -20,7 +22,7 @@ const { values } = parseArgs({
 });
 if (values.help)
   process.stdout.write(
-    "Trusted booking tooling only. --output /new/private/directory [--build], --verify /private/artifact, or --preflight /private/artifact [--config /private/offline.json] [--inventory /private/inventory.json].\nDefault prepares a byte-bound bundle without Docker. --build builds only its restricted tooling context, runs fixed offline dependency smokes and exports an image. Preflight is read-only, grants no authority and never starts a VM. No candidate, sbx, agent or inference entrypoint.\n",
+    "Trusted booking tooling only. --output /new/private/directory [--build], --verify /private/artifact, or --preflight /private/artifact [--config /private/offline.json] [--inventory /private/inventory.json].\nDefault prepares a byte-bound bundle without Docker. --build builds only its restricted tooling context, runs fixed offline dependency smokes and exports an image. Preflight is read-only, grants no authority and never starts a VM. Owner-only --observe-installed /private/artifact --config /private/offline.json --output /new/private/observations starts/stops the dedicated grader under a shared lease, after separate maintenance authorization. No provisioning, candidate, agent or inference entrypoint.\n",
   );
 else {
   const cancellation = new AbortController(),
@@ -28,9 +30,31 @@ else {
   process.on("SIGINT", cancel);
   process.on("SIGTERM", cancel);
   try {
-    if (!values.preflight && (values.config || values.inventory))
+    if (
+      !values.preflight &&
+      !values["observe-installed"] &&
+      (values.config || values.inventory)
+    )
       throw new Error("Proposal inputs require preflight");
-    if (values.preflight) {
+    if (values["observe-installed"]) {
+      if (
+        !values.config ||
+        !values.output ||
+        values.preflight ||
+        values.verify ||
+        values.build ||
+        values.inventory
+      )
+        throw new Error("Separate fixed owner maintenance operation");
+      const result = await observeInstalledGrader(
+        values["observe-installed"],
+        values.config,
+        values.output,
+        cancellation.signal,
+      );
+      process.stdout.write(JSON.stringify(result, null, 2) + "\n");
+      if (result.status !== "OBSERVED") process.exitCode = 1;
+    } else if (values.preflight) {
       if (
         values.output ||
         values.build ||

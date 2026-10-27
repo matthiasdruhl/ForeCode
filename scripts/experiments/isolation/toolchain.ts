@@ -674,12 +674,9 @@ export async function verifyToolchainArtifact(directory: string) {
   const expected = current.evaluatorManifest;
   const runtimeBytes = new Map<string, Buffer>();
   for (const file of manifest.files) {
-    const source =
-      file.path === "runtime-files.py" || file.path === "toolchain-audit.mjs"
-        ? `scripts/experiments/isolation/${file.path}`
-        : file.path.startsWith("controller/")
-          ? `scripts/evaluator/booking-v1/${file.path.slice(11)}`
-          : `scripts/evaluator/booking-v1/${file.path}`;
+    const source = runtimeBundleInputs.find(
+      (input) => input.target === file.path,
+    )?.source;
     if (!expected.some((e) => e.path === source && e.sha256 === file.sha256))
       throw new Error("Unexpected trusted runtime input");
     const target = path.resolve(root, "runtime", file.path);

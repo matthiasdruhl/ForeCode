@@ -1,8 +1,6 @@
 // Offline capability has no agent/provider methods or imports. Grader VM only.
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { sha256, jsonDigest } from "../../../src/lib/report/digests";
-import { verifyInstalledGrader } from "../isolation/installed-grader";
+import { collectOfflineInventory } from "../isolation/offline-inventory";
 export { verifyInstalledGrader } from "../isolation/installed-grader";
 import { admitOffline, reviewOffline } from "../isolation/offline-gate";
 import type { OfflineConfig } from "../isolation/offline-config";
@@ -53,110 +51,17 @@ export function createOfflineSbxAdapter(config: OfflineConfig): OfflineAdapter {
     `/opt/forecode-booking/controller/${script}`,
     ...args,
   ];
-  async function inventory(signal: AbortSignal, initiallyStopped: boolean) {
-    if (sha256(await readFile(config.sbx)) !== config.sbxSha256)
-      throw new Error("Sandbox CLI bytes changed");
-    const version = (await exec(["version"], signal)).trim();
-    if (!version.startsWith("sbx version v0.50.0 "))
-      throw new Error("Unreviewed sbx version");
-    const info = JSON.parse(
-      await exec(["inspect", config.graderSandbox, "--json"], signal),
-    );
-    if (
-      info.runtime_mounts?.length !== 0 ||
-      info.sessions !== 0 ||
-      info.auth_mode ||
-      info.cpus !== 2 ||
-      info.memory !== "4g" ||
-      info.image_digest !== config.graderImage ||
-      (initiallyStopped && info.state !== "stopped")
-    )
-      throw new Error("Offline grader inventory mismatch");
-    const list = JSON.parse(await exec(["ls", "--format", "json"], signal));
-    const id = list.find(
-      (v: { name: string }) => v.name === config.graderSandbox,
-    )?.id;
-    if (typeof id !== "string") throw new Error("Missing VM identity");
-    const policy = JSON.parse(
-      await exec(["policy", "ls", config.graderSandbox, "--json"], signal),
-    );
-    const ssh = (
-      await exec(["settings", "get", "ssh.agentForwardingEnabled"], signal)
-    ).trim();
-    const browser = (
-      await exec(["settings", "get", "browser.enabled"], signal)
-    ).trim();
-    const mcp = JSON.parse(await exec(["mcp", "ls", "--json"], signal));
-    if (
-      ssh !== "false" ||
-      browser !== "false" ||
-      !Array.isArray(mcp) ||
-      mcp.length
-    )
-      throw new Error("Host integrations enabled");
-    const script = await readFile(
-      fileURLToPath(new URL("../isolation/runtime-files.py", import.meta.url)),
-      "utf8",
-    );
-    touched = true;
-    const files = JSON.parse(
-      await exec(
-        [
-          "exec",
-          config.graderSandbox,
-          "python3",
-          "-I",
-          "-c",
-          script,
-          "grader",
-          config.graderNodeSha256,
-        ],
-        signal,
-      ),
-    );
-    const images = JSON.parse(
-      await exec(
-        [
-          "exec",
-          config.graderSandbox,
-          "docker",
-          "image",
-          "inspect",
-          config.workerImage,
-        ],
-        signal,
-      ),
-    );
-    const image = await verifyInstalledGrader(files, images, config);
-    return {
-      version,
-      sbxSha256: config.sbxSha256,
-      id,
-      image: info.image_digest,
-      cpus: info.cpus,
-      memory: info.memory,
-      mounts: info.runtime_mounts,
-      auth: info.auth_mode ?? null,
-      policy,
-      ssh,
-      browser,
-      mcp,
-      files,
-      worker: {
-        id: image.Id,
-        repoDigests: image.RepoDigests ?? [],
-        os: image.Os,
-        architecture: image.Architecture,
-      },
-      reviewedLimits: {
-        vmDiskBytes: config.vmDiskBytes,
-        vmPids: config.vmPids,
-      },
-    };
-  }
   async function current(signal: AbortSignal) {
     if (!fingerprint) throw new Error("Offline admission missing");
-    const result = await inventory(signal, false);
+    const result = await collectOfflineInventory(
+      config,
+      exec,
+      signal,
+      false,
+      () => {
+        touched = true;
+      },
+    );
     await admitOffline(config, result, implementation);
     if (jsonDigest(result) !== fingerprint)
       throw new Error("Offline runtime drift");
@@ -167,7 +72,15 @@ export function createOfflineSbxAdapter(config: OfflineConfig): OfflineAdapter {
     async admit(pin, signal) {
       await reviewOffline(config, pin); // Before any sandbox command/start.
       implementation = pin;
-      const result = await inventory(signal, true);
+      const result = await collectOfflineInventory(
+        config,
+        exec,
+        signal,
+        true,
+        () => {
+          touched = true;
+        },
+      );
       await admitOffline(config, result, pin);
       fingerprint = jsonDigest(result);
       return result;

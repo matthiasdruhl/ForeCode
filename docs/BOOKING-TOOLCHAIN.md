@@ -1,5 +1,7 @@
 # Trusted booking tooling preparation
 
+The installed-verification follow-up now provides a fixed owner maintenance command and exact shared admission inventory: see [installed verification and current owner actions](BOOKING-INSTALLED-VERIFICATION.md). Previous-slice artifact pins below are historical after this implementation change; verify the new artifact before use. Guest maintenance/acceptance remain NOT_RUN.
+
 A real host-side tooling build, offline dependency smoke, installed-byte inventory and image export have now succeeded. This is preparation for the protected grader. Booking grading, guest lifecycle acceptance, guest-to-host containment, coding-agent execution and inference remain **NOT_RUN**. No `sbx` environment was started, installed, changed or stopped by this command.
 
 This slice follows M2.3.1/M2.5.1 in the external [pinned planning reference](https://github.com/matthiasdruhl/AgentHarness-Planning/tree/695e68a40b5f5009c9b06b83a1181e18cd6d0223), especially the booking-first runbook, security boundary and canonical contract. Those documents are read-only design references; their code, schemas, fixtures, tests, workflows and history were not copied. The 49 frozen application contracts and required booking checks remain unchanged.
@@ -43,7 +45,7 @@ The adapter verifies and removes only its exact run-labelled audit container, co
 The private output contains:
 
 - `request.json`: immutable input scope, source/context/bundle pins, run UUID and configured bounds.
-- `runtime/`: 21 allowlisted trusted tooling/controller/helper inputs plus their manifest. Only its four-file `toolchain/` subdirectory is a build context.
+- `runtime/`: 24 allowlisted trusted tooling/controller/helper inputs plus their manifest. Only its four-file `toolchain/` subdirectory is a build context.
 - `image.id`, `build-metadata.json`, `toolchain-image.tar`: actual build/export outputs.
 - `command-N.json`: bounded observed command exits, signals, elapsed times and captured output; retain failures privately.
 - `toolchain.json`: final build/audit/archive/cleanup observations, installed tooling identities, timestamps, unknown provider metrics as null and explicit limitations.
@@ -98,12 +100,12 @@ docker create --name forecode-booking-install-be5571dc --network none --entrypoi
 
 Refuse an existing destination before these copies. Create `/opt/forecode-booking/bin` with traversable trusted ownership, then copy only:
 
-| Reviewed input                                                   | Protected guest destination          | Required handling                                                                                |
-| ---------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| Staging container `/usr/local/bin/node`                          | `/opt/forecode-booking/bin/node`     | Preserve 0755/executable modes; verify Node hash above before executing or `ldd`.                |
-| Same container `/toolchain/node_modules`                         | `/opt/forecode-booking/node_modules` | Preserve internal symlinks/executable bits, notably esbuild; no recursive chmod or host install. |
-| Same container `/toolchain/package.json` and `package-lock.json` | `/opt/forecode-booking/`             | Keep ESM package scope and exact reviewed bytes, 0644.                                           |
-| Artifact `runtime/controller/` (the exact 15-file manifest)      | `/opt/forecode-booking/controller/`  | Directories 0755, text 0644; verify every installed hash. Never send it to the agent VM.         |
+| Reviewed input                                                         | Protected guest destination          | Required handling                                                                                |
+| ---------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Staging container `/usr/local/bin/node`                                | `/opt/forecode-booking/bin/node`     | Preserve 0755/executable modes; verify Node hash above before executing or `ldd`.                |
+| Same container `/toolchain/node_modules`                               | `/opt/forecode-booking/node_modules` | Preserve internal symlinks/executable bits, notably esbuild; no recursive chmod or host install. |
+| Same container `/toolchain/package.json` and `package-lock.json`       | `/opt/forecode-booking/`             | Keep ESM package scope and exact reviewed bytes, 0644.                                           |
+| Artifact `runtime/controller/` (the exact current controller manifest) | `/opt/forecode-booking/controller/`  | Directories 0755, text 0644; verify every installed hash. Never send it to the agent VM.         |
 
 For example, `docker cp forecode-booking-install-be5571dc:/usr/local/bin/node /opt/forecode-booking/bin/node` and corresponding `/toolchain/…` copies extract from the same reviewed image. Copy only `runtime/controller`, not the artifact root/raw diagnostics/private material. After extraction/verification, remove **only** `forecode-booking-install-be5571dc` and the exact run-owned staged archive. Preserve the loaded reviewed image and every unrelated container/environment. Failed cleanup retains the installation lease and diagnostics for owner recovery.
 

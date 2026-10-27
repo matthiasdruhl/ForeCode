@@ -1,5 +1,5 @@
 // Developer-local reporting only. No adapter, lease acquisition or guest command.
-import { z } from "zod";
+import { InventorySchema } from "./offline-inventory";
 import { protectedRead } from "../artifacts/files";
 import { verifyToolchainArtifact } from "./toolchain";
 import { OfflineConfigSchema, offlineObligations } from "./offline-config";
@@ -9,34 +9,7 @@ import {
   admitOffline,
 } from "./offline-gate";
 import { verifyInstalledGrader } from "./installed-grader";
-import { sha256 } from "../../../src/lib/report/digests";
-
-const hash = z.string().regex(/^[a-f0-9]{64}$/);
-const InventorySchema = z.strictObject({
-  version: z.string().startsWith("sbx version v0.50.0 "),
-  sbxSha256: hash,
-  id: z.string().min(1),
-  image: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  cpus: z.literal(2),
-  memory: z.literal("4g"),
-  mounts: z.array(z.unknown()).length(0),
-  auth: z.null(),
-  policy: z.unknown(),
-  ssh: z.literal("false"),
-  browser: z.literal("false"),
-  mcp: z.array(z.unknown()).length(0),
-  files: z.record(z.string(), hash),
-  worker: z.strictObject({
-    id: z.string(),
-    repoDigests: z.array(z.string()),
-    os: z.literal("linux"),
-    architecture: z.enum(["arm64", "amd64"]),
-  }),
-  reviewedLimits: z.strictObject({
-    vmDiskBytes: z.number().int().positive(),
-    vmPids: z.number().int().positive(),
-  }),
-});
+import { jsonDigest } from "../../../src/lib/report/digests";
 
 export async function installationPreflight(
   artifactRoot: string,
@@ -140,7 +113,7 @@ export async function installationPreflight(
         if (parsed.worker.architecture !== artifact.image.architecture)
           throw new Error("Guest architecture differs");
         await admitOffline(config, raw, artifact.request.implementationSha256);
-        inventorySha256 = sha256(inventoryBytes);
+        inventorySha256 = jsonDigest(raw);
         inventory = "RECORD_BOUND_INTEGRITY_ONLY";
       } catch {
         inventory = "INVALID";

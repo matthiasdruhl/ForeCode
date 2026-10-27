@@ -1,5 +1,7 @@
 # No-inference booking acceptance and sandbox-owner handoff
 
+The installed-verification follow-up now provides a fixed owner maintenance command and exact shared admission inventory: see [installed verification and current owner actions](BOOKING-INSTALLED-VERIFICATION.md). Previous-slice artifact pins below are historical after this implementation change; verify the new artifact before use. Guest maintenance/acceptance remain NOT_RUN.
+
 Status: local implementation/tests plus an observed host-side trusted tooling build, offline dependency audit and export. See [tooling preparation](BOOKING-TOOLCHAIN.md). **Observed booking runtime acceptance: NOT_RUN.** The existing private report does not authorize installing this bridge or establish its current implementation-bound containment/lifecycle behavior. Nothing here takes over sandbox configuration. Preserve `codex-1`, existing environments, network policy, forwarding and private tools/keys/receipts.
 
 ## Separate capability and review
@@ -22,7 +24,7 @@ Preparation is safe without guest admission:
 npm run bundle:booking -- --output /new/absolute/private/booking-runtime-bundle
 ```
 
-`manifest.json` pins every included byte and the implementation/fixture/public-suite/policy hashes. It contains only fifteen trusted runtime/controller/bridge/probe files, the tooling Dockerfile/package/lock/deny-by-default `.dockerignore`, the read-only inventory helper and fixed tooling audit program (21 trusted inputs total). It contains no application/fixture/candidate source, private config, artifacts or keys. The source-only `bundle:booking` manifest keeps its build/image and installed-runtime fields **null / NOT_INSTALLED**. The separate `toolchain:booking --build` record captures the actually built image/audit/archive identities without claiming guest installation. Regenerate into a new directory after any implementation change; do not edit the bundle to make a pin pass.
+`manifest.json` pins every included byte and the implementation/fixture/public-suite/policy hashes. It contains only seventeen trusted runtime/controller/bridge/probe/smoke files, the tooling Dockerfile/package/lock/deny-by-default `.dockerignore`, the read-only inventory helper, fixed installed-smoke launcher and tooling audit program (24 trusted inputs total). It contains no application/fixture/candidate source, private config, artifacts or keys. The source-only `bundle:booking` manifest keeps its build/image and installed-runtime fields **null / NOT_INSTALLED**. The separate `toolchain:booking --build` record captures the actually built image/audit/archive identities without claiming guest installation. Regenerate into a new directory after any implementation change; do not edit the bundle to make a pin pass.
 
 The typed host-tooling command has been exercised. The equivalent manual recipe below is reference only; provisioning/loading into the owned VMs remains an owner-only operation that was not executed. Installed CLI help was inspected for sbx exec/cp/stop and Docker build/create/cp/image inspect/save/load; review guest Docker help as well. Choose an exclusive maintenance window and review the exact bundle before any guest mutation.
 

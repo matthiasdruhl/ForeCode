@@ -1,5 +1,7 @@
 # Local booking runner
 
+The installed-verification follow-up now provides a fixed owner maintenance command and exact shared admission inventory: see [installed verification and current owner actions](BOOKING-INSTALLED-VERIFICATION.md). Previous-slice artifact pins below are historical after this implementation change; verify the new artifact before use. Guest maintenance/acceptance remain NOT_RUN.
+
 Real coding-agent execution is **hard-disabled**, including with `enabled=true`. The previous adapter's stop → exec/export sequence could restart a stopped VM without establishing termination of detached processes. The concrete agent invocation and export path have been removed from the sbx adapter until a supervised agent boundary is reviewed and tested. No paid run is authorized by configuration examples or infrastructure PASS records.
 
 The next supported capability is the separate [no-inference acceptance command and owner handoff](BOOKING-OFFLINE-ACCEPTANCE.md). It uses only `forecode-grader`, eight fixed harmless lifecycle probes, four fixed candidate data transformations and resource-limited nested workers. The lifecycle suite runs before booking grades. It cannot import the paid runner or provider transport. Its review excludes inference/billing authority and keeps `enabled=false`; it requires independent isolation and owner/lease evidence. It does not weaken the full paid-experiment review, which still requires provider hard-budget evidence.

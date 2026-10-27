@@ -25,7 +25,8 @@
     "check": "npm run lint && npm run typecheck && npm test && npm run build",
     "experiment:booking": "node --import tsx scripts/experiments/runner/cli.ts",
     "acceptance:booking": "node --conditions=react-server --import tsx scripts/experiments/runner/offline-cli.ts",
-    "bundle:booking": "node --import tsx scripts/experiments/isolation/bundle.ts"
+    "bundle:booking": "node --import tsx scripts/experiments/isolation/bundle.ts",
+    "toolchain:booking": "node --import tsx scripts/experiments/isolation/toolchain-cli.ts"
   },
   "dependencies": {
     "next": "16.4.3",

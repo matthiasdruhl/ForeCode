@@ -1,4 +1,4 @@
-# Operator-only recipe; this slice does not build/load or reconfigure any VM.
+# Trusted tooling only. Never add application or candidate source to this context.
 # Base digest observed in the existing operator's infrastructure grader.
 FROM node@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d
 WORKDIR /toolchain

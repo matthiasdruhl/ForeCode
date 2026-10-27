@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setTimeout as delay } from "node:timers/promises";
+import { awaitProcessTermination } from "../helpers/process-termination";
 import {
   chmod,
   mkdir,
@@ -590,16 +592,21 @@ describe("bounded process lifecycle (reviewed harmless host children only)", () 
         })
       ).reason,
     ).toBe("cancelled");
-    const child = await boundedProcess(
-      process.execPath,
-      [
-        "-e",
-        "const {spawn}=require('node:child_process');const c=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'inherit'});console.log(c.pid);setInterval(()=>{},1000)",
-      ],
-      { milliseconds: 150, maxBytes: 1024 },
-    );
+    const { root } = await setup();
+    const heartbeat = path.join(root, "descendant-heartbeat");
+    const writer =
+      "const {writeFileSync,renameSync}=require('node:fs');let n=0;const p=process.argv[1];const tick=()=>{writeFileSync(p+'.pending',String(++n));renameSync(p+'.pending',p)};tick();process.send('ready');setInterval(tick,10)";
+    const parent = `const {spawn}=require('node:child_process');const c=spawn(process.execPath,['-e',${JSON.stringify(writer)},${JSON.stringify(heartbeat)}],{stdio:['ignore','inherit','inherit','ipc']});c.once('message',()=>console.log(c.pid));setInterval(()=>{},1000)`;
+    const child = await boundedProcess(process.execPath, ["-e", parent], {
+      milliseconds: 1000,
+      maxBytes: 1024,
+    });
     expect(child.reason).toBe("timed_out");
-    expect(() => process.kill(Number(child.stdout.trim()), 0)).toThrow();
+    await awaitProcessTermination(Number(child.stdout.trim()));
+    const stopped = await readFile(heartbeat, "utf8");
+    expect(Number(stopped)).toBeGreaterThan(0);
+    await delay(200);
+    expect(await readFile(heartbeat, "utf8")).toBe(stopped);
   });
 });
 

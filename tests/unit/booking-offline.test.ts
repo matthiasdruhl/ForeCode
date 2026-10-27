@@ -1,4 +1,5 @@
 import { syntheticLifecycleReport } from "../helpers/synthetic-lifecycle";
+import { awaitProcessTermination } from "../helpers/process-termination";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   chmod,
@@ -736,7 +737,7 @@ describe("trusted lifecycle — synthetic Docker observations, no sandbox", () =
           { signal: abort.signal, milliseconds: 2000 },
         );
         expect(p.reason).toBe("cancelled");
-        expect(() => process.kill(Number(p.stdout.trim()), 0)).toThrow();
+        await awaitProcessTermination(Number(p.stdout.trim()));
       } finally {
         clearTimeout(timer);
         process.off(sig, listener);

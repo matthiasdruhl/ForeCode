@@ -8,6 +8,27 @@ import { controllerFiles } from "../../evaluator/booking-v1/installed";
 import { protectedRead, disjoint } from "../artifacts/files";
 import { sha256, jsonDigest } from "../../../src/lib/report/digests";
 const project = fileURLToPath(new URL("../../../", import.meta.url));
+export const runtimeBundleInputs = [
+  ...controllerFiles.map((name) => ({
+    source: `scripts/evaluator/booking-v1/${name}`,
+    target: `controller/${name}`,
+  })),
+  ...["Dockerfile", "package.json", "package-lock.json", ".dockerignore"].map(
+    (name) => ({
+      source: `scripts/evaluator/booking-v1/toolchain/${name}`,
+      target: `toolchain/${name}`,
+    }),
+  ),
+  {
+    source: "scripts/experiments/isolation/runtime-files.py",
+    target: "runtime-files.py",
+  },
+  {
+    source: "scripts/experiments/isolation/toolchain-audit.mjs",
+    target: "toolchain-audit.mjs",
+  },
+];
+
 export async function prepareRuntimeBundle(destination: string) {
   if (!path.isAbsolute(destination))
     throw new Error("Absolute new bundle destination required");
@@ -18,23 +39,7 @@ export async function prepareRuntimeBundle(destination: string) {
   const before = await freezeBooking();
   await mkdir(destination, { mode: 0o700 });
   const files: { path: string; sha256: string; bytes: number }[] = [];
-  const selected = [
-    ...controllerFiles.map((name) => ({
-      source: `scripts/evaluator/booking-v1/${name}`,
-      target: `controller/${name}`,
-    })),
-    ...["Dockerfile", "package.json", "package-lock.json", ".dockerignore"].map(
-      (name) => ({
-        source: `scripts/evaluator/booking-v1/toolchain/${name}`,
-        target: `toolchain/${name}`,
-      }),
-    ),
-    {
-      source: "scripts/experiments/isolation/runtime-files.py",
-      target: "runtime-files.py",
-    },
-  ];
-  for (const file of selected) {
+  for (const file of runtimeBundleInputs) {
     const bytes = await protectedRead(
       path.join(project, file.source),
       2_097_152,

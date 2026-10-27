@@ -9,6 +9,7 @@ npm run acceptance:booking -- --help
 npm run acceptance:booking -- --config scripts/experiments/isolation/offline.example.json
 npm run acceptance:booking -- --config scripts/experiments/isolation/offline.example.json --lifecycle-only
 npm run bundle:booking -- --output /new/absolute/private/runtime-bundle
+npm run toolchain:booking -- --help
 ```
 
 The help and configuration commands only print help or validate configuration; neither invokes sbx. Bundle preparation reads a fixed trusted tooling/controller allowlist, refuses existing output and records hashes without building, installing or executing source. Keep the output outside the application and planning trees. Run `--execute` only after the handoff's owner actions and review are complete.
@@ -37,4 +38,4 @@ These mechanisms need actual owner-reviewed runtime testing. They do not establi
 
 The private report at `../.forecode-sandbox-ops/README.md` and `readiness.json` was reinspected. Its last update is October 26 at 20:17:38 UTC; it still says real booking experiments and provider hard caps are unready. Read-only inventory again found sbx 0.50.0 and the two stopped mountless dedicated VMs with 2 CPUs/4 GB. The original `codex-1` was preserved. Installed help explicitly states that stop retains state and exec starts stopped VMs. Neither inventory nor the generic single-function infrastructure grader proves this booking bridge.
 
-No sandbox provisioning, image build/load, `sbx exec`, guest acceptance or inference occurred in this slice. The exact next owner actions and command recipe are in the offline handoff. Credential-free CI runs deterministic development tests only; live acceptance is never a CI requirement.
+A host-side trusted tooling image build, fixed offline dependency audit and archive export have now been observed; see [tooling preparation](BOOKING-TOOLCHAIN.md). No sandbox provisioning/image load, `sbx exec`, booking guest acceptance or inference occurred. The exact next owner actions and command recipe are in the offline handoff. Credential-free CI runs deterministic development tests only; live acceptance is never a CI requirement.

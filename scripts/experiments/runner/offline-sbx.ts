@@ -2,7 +2,8 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { sha256, jsonDigest } from "../../../src/lib/report/digests";
-import { controllerFiles } from "../../evaluator/booking-v1/installed";
+import { verifyInstalledGrader } from "../isolation/installed-grader";
+export { verifyInstalledGrader } from "../isolation/installed-grader";
 import { admitOffline, reviewOffline } from "../isolation/offline-gate";
 import type { OfflineConfig } from "../isolation/offline-config";
 import {
@@ -19,51 +20,6 @@ export type OfflineAdapter = {
   cleanup(runIds: readonly string[]): Promise<unknown>;
   observations(): unknown;
 };
-export async function verifyInstalledGrader(
-  files: Record<string, string>,
-  images: {
-    Id?: string;
-    RepoDigests?: string[];
-    Os?: string;
-    Architecture?: string;
-  }[],
-  config: OfflineConfig,
-) {
-  for (const [name, expected] of [
-    ["/opt/forecode-booking/bin/node", config.graderNodeSha256],
-    ["/opt/forecode-booking/package-lock.json", config.graderLockSha256],
-    ["node_modules", config.graderModulesSha256],
-  ])
-    if (files[name!] !== expected)
-      throw new Error("Installed toolchain tampering");
-  const localPackage = await readFile(
-    fileURLToPath(
-      new URL(
-        "../../evaluator/booking-v1/toolchain/package.json",
-        import.meta.url,
-      ),
-    ),
-  );
-  if (files["/opt/forecode-booking/package.json"] !== sha256(localPackage))
-    throw new Error("Installed module resolution changed");
-  for (const name of controllerFiles) {
-    const local = await readFile(
-      fileURLToPath(
-        new URL(`../../evaluator/booking-v1/${name}`, import.meta.url),
-      ),
-    );
-    if (files[`/opt/forecode-booking/controller/${name}`] !== sha256(local))
-      throw new Error("Installed controller tampering");
-  }
-  const image = images[0];
-  if (
-    !image ||
-    (image.Id !== config.workerImage &&
-      !image.RepoDigests?.includes(config.workerImage))
-  )
-    throw new Error("Installed worker image mismatch");
-  return image;
-}
 export function createOfflineSbxAdapter(config: OfflineConfig): OfflineAdapter {
   let touched = false,
     implementation = "",

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   chmod,
   mkdtemp,
@@ -8,10 +8,11 @@ import {
   writeFile,
   readFile,
   symlink,
+  link,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { sha256 } from "@/lib/report/digests";
+import { sha256, jsonDigest } from "@/lib/report/digests";
 import {
   prepareToolchain,
   buildToolchain,
@@ -23,11 +24,21 @@ import {
   largeFileIdentity,
   verifyToolingContext,
 } from "../../scripts/experiments/isolation/toolchain-files";
+import * as toolingFiles from "../../scripts/experiments/isolation/toolchain-files";
+import * as processes from "../../scripts/experiments/runner/process";
+import { installationPreflight } from "../../scripts/experiments/isolation/installation-preflight";
+import { controllerFiles } from "../../scripts/evaluator/booking-v1/installed";
+import { offlineConfigurationDigest } from "../../scripts/experiments/isolation/offline-gate";
+import {
+  OfflineConfigSchema,
+  offlineObligations,
+} from "../../scripts/experiments/isolation/offline-config";
 import { dependencyRowsJson } from "../../scripts/experiments/isolation/toolchain-audit.mjs";
 const roots: string[] = [],
   h = "a".repeat(64),
   id = `sha256:${h}`;
 afterEach(async () => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0))
     await rm(root, { recursive: true, force: true });
 });
@@ -108,9 +119,14 @@ function synthetic(destination: string, mode = "normal") {
         await writeFile(path.join(destination, "image.id"), id, {
           mode: 0o600,
         });
-        await writeFile(path.join(destination, "build-metadata.json"), "{}", {
-          mode: 0o600,
-        });
+        await writeFile(
+          path.join(destination, "build-metadata.json"),
+          JSON.stringify({
+            "containerimage.digest":
+              mode === "metadata" ? `sha256:${"b".repeat(64)}` : id,
+          }),
+          { mode: 0o600 },
+        );
       } else if (args[0] === "image" && args[1] === "inspect")
         result.stdout = JSON.stringify([
           {
@@ -176,6 +192,27 @@ function synthetic(destination: string, mode = "normal") {
   };
   return { driver, calls };
 }
+// Relabel only a local byte fixture to test the read-only verifier's shape.
+// This intentionally demonstrates that JSON labels are NOT authentication.
+async function verifierFixture() {
+  const destination = path.join(await root(), "verifier-fixture");
+  const record = await buildToolchain(
+    destination,
+    synthetic(destination).driver,
+    new AbortController().signal,
+  );
+  expect(record.status).toBe("built");
+  const bytes = { ...record, driver: "docker" };
+  await overwrite(path.join(destination, "toolchain.json"), bytes);
+  return { destination, record: bytes };
+}
+async function overwrite(file: string, value: unknown) {
+  await chmod(file, 0o600);
+  await writeFile(
+    file,
+    typeof value === "string" ? value : JSON.stringify(value),
+  );
+}
 describe("trusted tooling preparation — SYNTHETIC Docker adapter; no image/guest execution", () => {
   it("prepares only reviewed tooling/controller files without a command adapter", async () => {
     const destination = path.join(await root(), "prepared"),
@@ -216,6 +253,7 @@ describe("trusted tooling preparation — SYNTHETIC Docker adapter; no image/gue
     "timeout",
     "context",
     "image",
+    "metadata",
     "lock",
     "audit",
     "owner",
@@ -235,7 +273,7 @@ describe("trusted tooling preparation — SYNTHETIC Docker adapter; no image/gue
     expect(fake.calls.some((a) => a[0] === "image" && a[1] === "save")).toBe(
       false,
     );
-    if (["timeout", "context", "image", "remote"].includes(mode))
+    if (["timeout", "context", "image", "metadata", "remote"].includes(mode))
       expect(fake.calls.some((a) => a[0] === "container")).toBe(false);
     if (mode === "owner")
       expect(fake.calls.some((a) => a[1] === "rm")).toBe(false);
@@ -289,6 +327,295 @@ describe("trusted tooling preparation — SYNTHETIC Docker adapter; no image/gue
       assertAuditContainer({ ...good, Mounts: [{ Type: "bind" }] }, id, runId),
     ).toThrow();
     expect(() => assertAuditContainer(good, id, "another-owner")).toThrow();
+  });
+  it.each([
+    "request",
+    "request-limits",
+    "metadata",
+    "image",
+    "archive",
+    "manifest",
+    "architecture",
+    "dependencies",
+    "controller",
+    "stale",
+  ])(
+    "read-only verifier rejects %s substitution (SYNTHETIC byte fixture)",
+    async (mode) => {
+      const { destination, record } = await verifierFixture();
+      await expect(verifyToolchainArtifact(destination)).resolves.toBeDefined();
+      if (mode === "request")
+        await overwrite(path.join(destination, "request.json"), {
+          ...record.request,
+          runId: "00000000-0000-4000-8000-000000000000",
+        });
+      if (mode === "request-limits") {
+        record.request.limits.outputBytes++;
+        await overwrite(path.join(destination, "request.json"), record.request);
+        await overwrite(path.join(destination, "toolchain.json"), record);
+      }
+      if (mode === "metadata")
+        await overwrite(path.join(destination, "build-metadata.json"), {
+          "containerimage.digest": `sha256:${"b".repeat(64)}`,
+        });
+      if (mode === "image")
+        await overwrite(
+          path.join(destination, "image.id"),
+          `sha256:${"b".repeat(64)}`,
+        );
+      if (mode === "archive")
+        await overwrite(
+          path.join(destination, "toolchain-image.tar"),
+          "inert changed archive",
+        );
+      if (mode === "controller")
+        await overwrite(
+          path.join(destination, "runtime/controller/worker.mjs"),
+          "inert changed controller",
+        );
+      if (mode === "architecture") record.audit!.architecture = "x64";
+      if (mode === "dependencies") record.audit!.dependencies = { bogus: "1" };
+      if (mode === "stale") {
+        record.request.implementationSha256 = "b".repeat(64);
+        await overwrite(path.join(destination, "request.json"), record.request);
+      }
+      if (mode === "manifest") {
+        const file = path.join(destination, "runtime/manifest.json");
+        const manifest = JSON.parse(await readFile(file, "utf8"));
+        manifest.fixtureSha256 = "b".repeat(64);
+        await overwrite(file, manifest);
+        record.request.runtimeManifestSha256 = sha256(await readFile(file));
+        await overwrite(path.join(destination, "request.json"), record.request);
+      }
+      if (["stale", "manifest"].includes(mode))
+        record.requestSha256 = sha256(
+          await readFile(path.join(destination, "request.json")),
+        );
+      if (["architecture", "dependencies", "stale", "manifest"].includes(mode))
+        await overwrite(path.join(destination, "toolchain.json"), record);
+      await expect(verifyToolchainArtifact(destination)).rejects.toThrow();
+    },
+  );
+  it.each([
+    "request.json",
+    "build-metadata.json",
+    "runtime/controller/guest.ts",
+  ])(
+    "rejects %s mutation while archive hashing is in progress",
+    async (name) => {
+      const { destination } = await verifierFixture();
+      const actual = toolingFiles.largeFileIdentity;
+      vi.spyOn(toolingFiles, "largeFileIdentity").mockImplementation(
+        async (file, max) => {
+          const result = await actual(file, max);
+          if (file.endsWith("toolchain-image.tar"))
+            await overwrite(
+              path.join(destination, name),
+              "inert concurrent mutation",
+            );
+          return result;
+        },
+      );
+      await expect(verifyToolchainArtifact(destination)).rejects.toThrow(
+        /changed|context/,
+      );
+    },
+  );
+  it("refuses hardlinked archives", async () => {
+    const directory = await root(),
+      file = path.join(directory, "archive");
+    await writeFile(file, "inert archive", { mode: 0o600 });
+    await link(file, path.join(directory, "other"));
+    await expect(largeFileIdentity(file)).rejects.toThrow("bounded");
+  });
+  it("preflight reports missing owner and guest evidence without invoking any process", async () => {
+    const { destination } = await verifierFixture();
+    const spawn = vi
+      .spyOn(processes, "boundedProcess")
+      .mockRejectedValue(new Error("NO PROCESS ALLOWED"));
+    const report = await installationPreflight(destination);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(report.authority).toBe("NONE_INTEGRITY_ONLY");
+    expect(report.installedRuntime).toBeNull();
+    expect(report.observedVmEnforcement).toBeNull();
+    expect(report.bookingAcceptance).toBe("NOT_RUN");
+    expect(report.gaps.map((g) => g.gate)).toContain("installed-inventory");
+    expect(report.ownerSequence.join()).toContain(
+      "never-started staging container",
+    );
+  });
+  it("preflight binds exact proposal inputs and keeps configured caps separate from observations", async () => {
+    const { destination } = await verifierFixture();
+    const configFile = path.join(path.dirname(destination), "offline.json");
+    const config = JSON.parse(
+      await readFile(
+        "scripts/experiments/isolation/offline.example.json",
+        "utf8",
+      ),
+    );
+    config.workerImage = id;
+    config.graderNodeSha256 = h;
+    config.graderModulesSha256 = h;
+    config.graderLockSha256 = sha256(
+      await readFile(
+        path.join(destination, "runtime/toolchain/package-lock.json"),
+      ),
+    );
+    await writeFile(configFile, JSON.stringify(config), { mode: 0o600 });
+    const report = await installationPreflight(destination, configFile);
+    expect(report.proposal.proposedInputs).toBe("BOUND");
+    expect(report.proposal.configuredVmLimits).toEqual({
+      diskBytes: config.vmDiskBytes,
+      pids: config.vmPids,
+    });
+    expect(report.proposal.review).toBe("MISSING");
+    expect(report.observedVmEnforcement).toBeNull();
+    config.workerImage = `sha256:${"b".repeat(64)}`;
+    await overwrite(configFile, config);
+    expect((await installationPreflight(destination, configFile)).status).toBe(
+      "INPUTS_INVALID",
+    );
+    const inventoryFile = path.join(
+      path.dirname(destination),
+      "inventory.json",
+    );
+    await writeFile(inventoryFile, JSON.stringify({ status: "PASS" }), {
+      mode: 0o600,
+    });
+    expect(
+      (await installationPreflight(destination, configFile, inventoryFile))
+        .proposal.inventory,
+    ).toBe("INVALID");
+  });
+  it("preflight accepts bound record integrity without granting runtime authority, and rejects stale/substituted records", async () => {
+    const { destination, record } = await verifierFixture();
+    const directory = path.dirname(destination),
+      configFile = path.join(directory, "offline.json"),
+      inventoryFile = path.join(directory, "inventory.json"),
+      reviewFile = path.join(directory, "review.json"),
+      evidenceFile = path.join(directory, "evidence.txt");
+    const config = OfflineConfigSchema.parse({
+      ...JSON.parse(
+        await readFile(
+          "scripts/experiments/isolation/offline.example.json",
+          "utf8",
+        ),
+      ),
+      acceptanceEnabled: true,
+      workerImage: id,
+      graderNodeSha256: h,
+      graderModulesSha256: h,
+      graderLockSha256: record.audit!.lockSha256,
+      reviewFile,
+      protectedRoot: path.join(directory, "protected"),
+      scratchRoot: path.join(directory, "scratch"),
+      coordinationRoot: path.join(directory, "coordination"),
+    });
+    const files: Record<string, string> = {
+      "/opt/forecode-booking/bin/node": h,
+      "/opt/forecode-booking/package-lock.json": config.graderLockSha256,
+      "/opt/forecode-booking/package.json": record.audit!.packageSha256,
+      node_modules: h,
+      runtime_metadata: h,
+      "executable:docker": h,
+      "executable:python3": h,
+      "executable:ldd": h,
+      "native:/lib/synthetic.so": h,
+    };
+    for (const name of controllerFiles)
+      files[`/opt/forecode-booking/controller/${name}`] = sha256(
+        await readFile(`scripts/evaluator/booking-v1/${name}`),
+      );
+    const observed = {
+      version: "sbx version v0.50.0 SYNTHETIC",
+      sbxSha256: config.sbxSha256,
+      id: "SYNTHETIC-VM",
+      image: config.graderImage,
+      cpus: 2,
+      memory: "4g",
+      mounts: [],
+      auth: null,
+      policy: { synthetic: true },
+      ssh: "false",
+      browser: "false",
+      mcp: [],
+      files,
+      worker: { id, repoDigests: [], os: "linux", architecture: "arm64" },
+      reviewedLimits: {
+        vmDiskBytes: config.vmDiskBytes,
+        vmPids: config.vmPids,
+      },
+    };
+    await writeFile(
+      evidenceFile,
+      "SYNTHETIC DEVELOPMENT observations only; no actual owner authority or guest execution.",
+      { mode: 0o600 },
+    );
+    const review = {
+      schemaVersion: "booking-offline-isolation-review.v1",
+      scope: config.scope,
+      reviewedAt: new Date(Date.now() - 1000).toISOString(),
+      expiresAt: new Date(Date.now() + 60000).toISOString(),
+      configurationSha256: offlineConfigurationDigest(config),
+      implementationSha256: record.request.implementationSha256,
+      inventorySha256: jsonDigest(observed),
+      evidence: offlineObligations.map((obligation) => ({
+        obligation,
+        path: evidenceFile,
+        sha256: sha256(
+          "SYNTHETIC DEVELOPMENT observations only; no actual owner authority or guest execution.",
+        ),
+        reviewedObservation:
+          "SYNTHETIC unit fixture; never use for live runtime admission.",
+      })),
+    };
+    await writeFile(reviewFile, JSON.stringify(review), { mode: 0o600 });
+    config.reviewSha256 = sha256(await readFile(reviewFile));
+    await writeFile(configFile, JSON.stringify(config), { mode: 0o600 });
+    await writeFile(inventoryFile, JSON.stringify(observed), { mode: 0o600 });
+    const process = vi
+      .spyOn(processes, "boundedProcess")
+      .mockRejectedValue(new Error("NO PROCESS"));
+    const report = await installationPreflight(
+      destination,
+      configFile,
+      inventoryFile,
+    );
+    expect(report.proposal.inventory).toBe("RECORD_BOUND_INTEGRITY_ONLY");
+    expect(report.proposal.review).toBe("RECORD_VALID_INTEGRITY_ONLY");
+    expect(report.status).toBe("OWNER_ACTION_REQUIRED");
+    expect(report.installedRuntime).toBeNull();
+    expect(report.bookingAcceptance).toBe("NOT_RUN");
+    for (const key of [
+      "/opt/forecode-booking/controller/guest.ts",
+      "runtime_metadata",
+      "executable:docker",
+      "node_modules",
+    ]) {
+      await overwrite(inventoryFile, {
+        ...observed,
+        files: { ...files, [key]: "b".repeat(64) },
+      });
+      expect(
+        (await installationPreflight(destination, configFile, inventoryFile))
+          .proposal.inventory,
+      ).toBe("INVALID");
+    }
+    await overwrite(inventoryFile, observed);
+    await overwrite(reviewFile, {
+      ...review,
+      expiresAt: new Date(0).toISOString(),
+    });
+    config.reviewSha256 = sha256(await readFile(reviewFile));
+    await overwrite(configFile, config);
+    const stale = await installationPreflight(
+      destination,
+      configFile,
+      inventoryFile,
+    );
+    expect(stale.proposal.reviewIssue).toBe("REVIEW_STALE_OR_INVALID_INTERVAL");
+    expect(stale.proposal.inventory).toBe("INVALID");
+    expect(process).not.toHaveBeenCalled();
   });
   it("matches Python compact ASCII JSON rows including Unicode code-point ordering", () => {
     const rows = [

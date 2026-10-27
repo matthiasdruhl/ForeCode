@@ -10,6 +10,7 @@ npm run acceptance:booking -- --config scripts/experiments/isolation/offline.exa
 npm run acceptance:booking -- --config scripts/experiments/isolation/offline.example.json --lifecycle-only
 npm run bundle:booking -- --output /new/absolute/private/runtime-bundle
 npm run toolchain:booking -- --help
+npm run toolchain:booking -- --preflight /absolute/private/completed-artifact
 ```
 
 The help and configuration commands only print help or validate configuration; neither invokes sbx. Bundle preparation reads a fixed trusted tooling/controller allowlist, refuses existing output and records hashes without building, installing or executing source. Keep the output outside the application and planning trees. Run `--execute` only after the handoff's owner actions and review are complete.
@@ -39,3 +40,9 @@ These mechanisms need actual owner-reviewed runtime testing. They do not establi
 The private report at `../.forecode-sandbox-ops/README.md` and `readiness.json` was reinspected. Its last update is October 26 at 20:17:38 UTC; it still says real booking experiments and provider hard caps are unready. Read-only inventory again found sbx 0.50.0 and the two stopped mountless dedicated VMs with 2 CPUs/4 GB. The original `codex-1` was preserved. Installed help explicitly states that stop retains state and exec starts stopped VMs. Neither inventory nor the generic single-function infrastructure grader proves this booking bridge.
 
 A host-side trusted tooling image build, fixed offline dependency audit and archive export have now been observed; see [tooling preparation](BOOKING-TOOLCHAIN.md). No sandbox provisioning/image load, `sbx exec`, booking guest acceptance or inference occurred. The exact next owner actions and command recipe are in the offline handoff. Credential-free CI runs deterministic development tests only; live acceptance is never a CI requirement.
+
+## Installation preflight follow-up
+
+The existing tooling command now reports exact proposed installation bindings and missing owner actions without executing a process or acquiring a lease. See [current reviewed inputs and owner-only installation sequence](BOOKING-TOOLCHAIN.md#installation-preflight-and-current-owner-inputs--october-27). Supplied records grant integrity checking only; installed runtime/enforcement remain unknown and acceptance NOT_RUN until observed. Installed custody now includes ownership/modes and native/executable closure, so older inventories/reviews cannot admit this source.
+
+Read-only `sbx ls --format json` succeeded outside the host execution sandbox on October 27: all three existing VMs remained stopped, with unchanged last-used timestamps. The earlier restricted invocation failed at Docker's login service and established no new inventory. No VM was started, stopped, provisioned or reconfigured. Host Docker tooling preparation succeeded separately; no guest lifecycle/booking acceptance or application inference occurred. Fresh owner authority, installed inventory, independent containment/custody evidence and enforced VM disk/PID limits remain absent.

@@ -311,6 +311,11 @@ describe("offline acceptance — SYNTHETIC DEVELOPMENT, no sandbox or inference"
       "/opt/forecode-booking/bin/node": hash,
       "/opt/forecode-booking/package-lock.json": hash,
       node_modules: hash,
+      runtime_metadata: hash,
+      "executable:docker": hash,
+      "executable:python3": hash,
+      "executable:ldd": hash,
+      "native:/lib/reviewed.so": hash,
       "/opt/forecode-booking/package.json": sha256(
         await readFile("scripts/evaluator/booking-v1/toolchain/package.json"),
       ),
@@ -319,11 +324,18 @@ describe("offline acceptance — SYNTHETIC DEVELOPMENT, no sandbox or inference"
       files[`/opt/forecode-booking/controller/${name}`] = sha256(
         await readFile(`scripts/evaluator/booking-v1/${name}`),
       );
-    const images = [{ Id: config.workerImage }];
+    const images = [
+      { Id: config.workerImage, Os: "linux", Architecture: "arm64" },
+    ];
     await expect(
       verifyInstalledGrader(files, images, config),
     ).resolves.toBeDefined();
-    for (const name of Object.keys(files))
+    for (const name of Object.keys(files).filter(
+      (key) =>
+        !key.startsWith("executable:") &&
+        !key.startsWith("native:") &&
+        key !== "runtime_metadata",
+    ))
       await expect(
         verifyInstalledGrader(
           { ...files, [name]: "b".repeat(64) },
@@ -334,10 +346,48 @@ describe("offline acceptance — SYNTHETIC DEVELOPMENT, no sandbox or inference"
     await expect(
       verifyInstalledGrader(
         files,
-        [{ Id: `sha256:${"b".repeat(64)}` }],
+        [
+          {
+            Id: `sha256:${"b".repeat(64)}`,
+            Os: "linux",
+            Architecture: "arm64",
+          },
+        ],
         config,
       ),
     ).rejects.toThrow("image mismatch");
+    for (const badImages of [
+      [{ ...images[0], Os: "darwin" }],
+      [{ ...images[0], Architecture: "unknown" }],
+      [...images, ...images],
+    ])
+      await expect(
+        verifyInstalledGrader(files, badImages, config),
+      ).rejects.toThrow("image mismatch");
+    for (const key of [
+      "runtime_metadata",
+      "executable:docker",
+      "executable:python3",
+      "executable:ldd",
+    ])
+      await expect(
+        verifyInstalledGrader({ ...files, [key]: "" }, images, config),
+      ).rejects.toThrow("inventory missing");
+    await expect(
+      verifyInstalledGrader(
+        Object.fromEntries(
+          Object.entries(files).filter(([key]) => !key.startsWith("native:")),
+        ),
+        images,
+        config,
+      ),
+    ).rejects.toThrow("native loader inventory missing");
+  });
+  it("rejects incomplete installed custody inventory", async () => {
+    const { config } = await setup();
+    await expect(verifyInstalledGrader({}, [], config)).rejects.toThrow(
+      "custody/executable inventory missing",
+    );
   });
   it("withholds probes and cleanup if the lease changes during admission", async () => {
     const { config } = await setup(),
@@ -518,6 +568,37 @@ describe("offline acceptance — SYNTHETIC DEVELOPMENT, no sandbox or inference"
       }
     },
   );
+  it.each(["spawn_error", "module-resolution", "native-abi"])(
+    "withholds publication after observed %s worker startup failure (SYNTHETIC)",
+    async (kind) => {
+      const { config } = await setup(),
+        adapter = synthetic();
+      adapter.grade = async () => ({
+        reason: kind === "spawn_error" ? "spawn_error" : "completed",
+        exitCode: kind === "spawn_error" ? null : 1,
+        signal: null,
+        stdout: "",
+        stderr:
+          kind === "module-resolution"
+            ? "SYNTHETIC ERR_MODULE_NOT_FOUND"
+            : "SYNTHETIC incompatible native loader",
+        elapsedMs: 1,
+      });
+      const result = await runOfflineAcceptance(
+        config,
+        adapter,
+        new AbortController().signal,
+      );
+      expect(result.status).toBe("failed");
+      expect(result.entries).toEqual([]);
+      expect(result.observations.at(-1)).toMatchObject({
+        exitCode: kind === "spawn_error" ? null : 1,
+      });
+      expect(await readdir(config.coordinationRoot)).toContain(
+        ".booking-run.lock",
+      );
+    },
+  );
   it("refuses publication if inert candidate bytes change during grading", async () => {
     const { config } = await setup(),
       adapter = synthetic(),
@@ -661,6 +742,11 @@ describe("offline acceptance — SYNTHETIC DEVELOPMENT, no sandbox or inference"
       await readFile(path.join(destination, "toolchain/.dockerignore"), "utf8"),
     ).toContain("**");
     await expect(prepareRuntimeBundle(destination)).rejects.toThrow();
+    await expect(
+      prepareRuntimeBundle(
+        path.resolve("../AgentHarness-Planning/forbidden-runtime-bundle"),
+      ),
+    ).rejects.toThrow("disjoint");
   });
 });
 

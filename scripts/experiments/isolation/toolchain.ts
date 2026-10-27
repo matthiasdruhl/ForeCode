@@ -163,6 +163,41 @@ export async function localDockerDriver(): Promise<ToolchainDriver> {
     },
   };
 }
+export const toolingLimits = Object.freeze({
+  buildSeconds: 600,
+  buildMemoryBytes: 2 * 1024 ** 3,
+  buildCpuQuota: 100000,
+  auditSeconds: 120,
+  auditMemoryBytes: 768 * 1024 ** 2,
+  auditPids: 64,
+  auditTmpBytes: 32 * 1024 ** 2,
+  outputBytes: 1_048_576,
+  archiveBytes: 2 * 1024 ** 3,
+});
+const RequestSchema = z.strictObject({
+  schemaVersion: z.literal("booking-toolchain-request.v1"),
+  createdAt: z.iso.datetime(),
+  runId: z.string().uuid(),
+  scope: z.literal("trusted-tooling-only-no-inference"),
+  implementationSha256: hash,
+  contextSha256: hash,
+  runtimeManifestSha256: hash,
+  limits: z.custom<typeof toolingLimits>(
+    (value) => jsonDigest(value) === jsonDigest(toolingLimits),
+  ),
+  status: z.literal("PREPARED"),
+  installationStatus: z.literal("NOT_INSTALLED"),
+  bookingAcceptance: z.literal("NOT_RUN"),
+  inference: z.literal("NOT_RUN"),
+});
+function verifyBuildMetadata(bytes: Buffer, id: string) {
+  // Buildx metadata formats vary; require its actual exported image digest.
+  const metadata = z
+    .object({ "containerimage.digest": imageId })
+    .parse(JSON.parse(bytes.toString()));
+  if (metadata["containerimage.digest"] !== id)
+    throw new Error("Build metadata image mismatch");
+}
 export async function prepareToolchain(destination: string) {
   if (!path.isAbsolute(destination))
     throw new Error("Canonical new output required");
@@ -184,17 +219,7 @@ export async function prepareToolchain(destination: string) {
     runtimeManifestSha256: sha256(
       await protectedRead(path.join(destination, "runtime/manifest.json")),
     ),
-    limits: {
-      buildSeconds: 600,
-      buildMemoryBytes: 2 * 1024 ** 3,
-      buildCpuQuota: 100000,
-      auditSeconds: 120,
-      auditMemoryBytes: 768 * 1024 ** 2,
-      auditPids: 64,
-      auditTmpBytes: 32 * 1024 ** 2,
-      outputBytes: 1_048_576,
-      archiveBytes: 2 * 1024 ** 3,
-    },
+    limits: { ...toolingLimits },
     status: "PREPARED",
     installationStatus: "NOT_INSTALLED",
     bookingAcceptance: "NOT_RUN",
@@ -214,6 +239,10 @@ export async function buildToolchain(
 ) {
   const started = Date.now();
   const { request, runtime } = await prepareToolchain(destination);
+  const requestSha256 = sha256(
+    await protectedRead(path.join(destination, "request.json")),
+  );
+  let buildMetadataSha256: string | null = null;
   const context = path.join(destination, "runtime/toolchain"),
     name = `forecode-toolchain-${request.runId}`;
   const tag = `forecode-booking-toolchain:tooling-${request.runId}`;
@@ -347,6 +376,11 @@ export async function buildToolchain(
         .toString()
         .trim(),
     );
+    const metadata = await protectedRead(
+      path.join(destination, "build-metadata.json"),
+    );
+    verifyBuildMetadata(metadata, id);
+    buildMetadataSha256 = sha256(metadata);
     const installed = JSON.parse(await run(["image", "inspect", id]))[0];
     z.number()
       .int()
@@ -467,6 +501,17 @@ export async function buildToolchain(
       (await freezeBooking()).evaluatorSha256 !== runtime.implementationSha256
     )
       throw new Error("Implementation changed during tooling preparation");
+    if (
+      sha256(await protectedRead(path.join(destination, "request.json"))) !==
+        requestSha256 ||
+      sha256(
+        await protectedRead(path.join(destination, "runtime/manifest.json")),
+      ) !== request.runtimeManifestSha256 ||
+      sha256(
+        await protectedRead(path.join(destination, "build-metadata.json")),
+      ) !== buildMetadataSha256
+    )
+      throw new Error("Tooling inputs changed during build");
     signal.throwIfAborted();
     stage = "completed";
   } catch {
@@ -492,6 +537,8 @@ export async function buildToolchain(
       iterations: null,
     },
     request,
+    requestSha256,
+    buildMetadataSha256,
     stage,
     status: failure ? "failed" : "built",
     driver: driver.kind,
@@ -536,14 +583,9 @@ export async function verifyToolchainArtifact(directory: string) {
       failure: z.null(),
       cleanupConfirmed: z.literal(true),
       buildFinished: z.literal(true),
-      request: z.object({
-        schemaVersion: z.literal("booking-toolchain-request.v1"),
-        scope: z.literal("trusted-tooling-only-no-inference"),
-        runId: z.string().uuid(),
-        implementationSha256: hash,
-        runtimeManifestSha256: hash,
-        contextSha256: hash,
-      }),
+      request: RequestSchema,
+      requestSha256: hash,
+      buildMetadataSha256: hash,
       image: z.object({
         id: imageId,
         os: z.literal("linux"),
@@ -562,6 +604,19 @@ export async function verifyToolchainArtifact(directory: string) {
       }),
     })
     .parse(JSON.parse(recordBytes.toString()));
+  const requestBytes = await protectedRead(path.join(root, "request.json"));
+  const request = RequestSchema.parse(JSON.parse(requestBytes.toString()));
+  if (
+    sha256(requestBytes) !== record.requestSha256 ||
+    jsonDigest(request) !== jsonDigest(record.request)
+  )
+    throw new Error("Immutable tooling request mismatch");
+  const metadataBytes = await protectedRead(
+    path.join(root, "build-metadata.json"),
+  );
+  verifyBuildMetadata(metadataBytes, record.image.id);
+  if (sha256(metadataBytes) !== record.buildMetadataSha256)
+    throw new Error("Build metadata bytes changed");
   if (
     record.request.implementationSha256 !==
     (await freezeBooking()).evaluatorSha256
@@ -576,6 +631,14 @@ export async function verifyToolchainArtifact(directory: string) {
     .object({
       implementationSha256: hash,
       filesSha256: hash,
+      schemaVersion: z.literal("booking-trusted-runtime-bundle.v1"),
+      fixtureSha256: hash,
+      testSuiteSha256: hash,
+      requiredPolicySha256: hash,
+      installedRuntime: z.null(),
+      imageDigest: z.null(),
+      executionStatus: z.literal("NOT_RUN"),
+      installationStatus: z.literal("NOT_INSTALLED"),
       files: z
         .array(
           z.strictObject({
@@ -600,7 +663,16 @@ export async function verifyToolchainArtifact(directory: string) {
     JSON.stringify(runtimeBundleInputs.map((f) => f.target).sort())
   )
     throw new Error("Missing or duplicated runtime bundle inputs");
-  const expected = (await freezeBooking()).evaluatorManifest;
+  const current = await freezeBooking();
+  for (const key of [
+    "fixtureSha256",
+    "testSuiteSha256",
+    "requiredPolicySha256",
+  ] as const)
+    if (manifest[key] !== current[key])
+      throw new Error("Runtime source/policy binding mismatch");
+  const expected = current.evaluatorManifest;
+  const runtimeBytes = new Map<string, Buffer>();
   for (const file of manifest.files) {
     const source =
       file.path === "runtime-files.py" || file.path === "toolchain-audit.mjs"
@@ -616,6 +688,7 @@ export async function verifyToolchainArtifact(directory: string) {
     const bytes = await protectedRead(target, 2_097_152);
     if (sha256(bytes) !== file.sha256 || bytes.length !== file.bytes)
       throw new Error("Runtime bundle bytes changed");
+    runtimeBytes.set(target, bytes);
   }
   await verifyToolingContext(
     path.join(root, "runtime/toolchain"),
@@ -629,11 +702,18 @@ export async function verifyToolchainArtifact(directory: string) {
     archive.bytes !== record.archive.bytes
   )
     throw new Error("Toolchain archive changed");
-  const id = (await protectedRead(path.join(root, "image.id")))
-    .toString()
-    .trim();
+  const imageBytes = await protectedRead(path.join(root, "image.id"));
+  const id = imageBytes.toString().trim();
+  const dependencies = JSON.parse(
+    runtimeBytes
+      .get(path.join(root, "runtime/toolchain/package.json"))!
+      .toString(),
+  ).dependencies;
   if (
     id !== record.image.id ||
+    record.audit.architecture !==
+      (record.image.architecture === "amd64" ? "x64" : "arm64") ||
+    jsonDigest(record.audit.dependencies) !== jsonDigest(dependencies) ||
     record.audit.lockSha256 !==
       manifest.files.find((f) => f.path === "toolchain/package-lock.json")
         ?.sha256 ||
@@ -641,7 +721,22 @@ export async function verifyToolchainArtifact(directory: string) {
       manifest.files.find((f) => f.path === "toolchain/package.json")?.sha256
   )
     throw new Error("Toolchain/image identity mismatch");
+  // Recheck every small input after streaming the potentially large archive.
+  for (const [file, bytes] of runtimeBytes)
+    if (!(await protectedRead(file, 2_097_152)).equals(bytes))
+      throw new Error("Runtime changed during verification");
+  await verifyToolingContext(
+    path.join(root, "runtime/toolchain"),
+    manifest.files,
+  );
   if (
+    !(await protectedRead(path.join(root, "request.json"))).equals(
+      requestBytes,
+    ) ||
+    !(await protectedRead(path.join(root, "build-metadata.json"))).equals(
+      metadataBytes,
+    ) ||
+    !(await protectedRead(path.join(root, "image.id"))).equals(imageBytes) ||
     record.request.implementationSha256 !==
       (await freezeBooking()).evaluatorSha256 ||
     sha256(await protectedRead(path.join(root, "runtime/manifest.json"))) !==

@@ -18,7 +18,13 @@ export async function largeFileIdentity(
   );
   try {
     const before = await handle.stat();
-    if (!before.isFile() || before.size > maxBytes || before.mode & 0o022)
+    if (
+      !before.isFile() ||
+      before.nlink !== 1 ||
+      before.uid !== process.getuid?.() ||
+      before.size > maxBytes ||
+      before.mode & 0o022
+    )
       throw new Error("Invalid bounded artifact");
     const digest = createHash("sha256");
     let used = 0;
@@ -28,8 +34,15 @@ export async function largeFileIdentity(
       digest.update(bytes);
     }
     const after = await handle.stat();
+    const current = await open(
+      file,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    const linked = await current.stat().finally(() => current.close());
     if (
       used !== before.size ||
+      linked.ino !== before.ino ||
+      linked.dev !== before.dev ||
       before.mtimeMs !== after.mtimeMs ||
       before.ctimeMs !== after.ctimeMs
     )

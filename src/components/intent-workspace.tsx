@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
+import { ForesightWorkspace } from "./foresight-workspace";
+import type { PublicForesightConfiguration } from "@/server/meta/configuration";
 import type { IntentV1 } from "@/lib/contracts/intents";
 import {
   confirmIntent,
@@ -11,7 +13,6 @@ import {
   type IntentInput,
 } from "@/lib/intents/lifecycle";
 
-type MetaStatus = "missing" | "invalid" | "disabled" | "configured";
 const emptyInput: IntentInput = {
   title: "",
   statement: "",
@@ -46,7 +47,13 @@ function Arrow() {
   return <span aria-hidden="true">↗</span>;
 }
 
-export function IntentWorkspace({ metaStatus }: { metaStatus: MetaStatus }) {
+export function IntentWorkspace({
+  configuration,
+}: {
+  configuration: PublicForesightConfiguration;
+}) {
+  const metaStatus = configuration.status;
+  const [researchRevision, setResearchRevision] = useState(0);
   const [input, setInput] = useState<IntentInput>(emptyInput);
   const [intents, setIntents] = useState<IntentV1[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -78,6 +85,7 @@ export function IntentWorkspace({ metaStatus }: { metaStatus: MetaStatus }) {
     const intent = previous
       ? reviseIntent(previous, parsed.data, new Date())
       : confirmIntent(parsed.data, `intent-${crypto.randomUUID()}`, new Date());
+    setResearchRevision((revision) => revision + 1);
     setIntents((current) =>
       previous
         ? current.map((item) => (item.id === intent.id ? intent : item))
@@ -94,6 +102,7 @@ export function IntentWorkspace({ metaStatus }: { metaStatus: MetaStatus }) {
   }
 
   function edit(intent: IntentV1) {
+    setResearchRevision((revision) => revision + 1);
     setEditingId(intent.id);
     setInput({
       title: intent.title,
@@ -109,6 +118,7 @@ export function IntentWorkspace({ metaStatus }: { metaStatus: MetaStatus }) {
   }
 
   function revoke(intent: IntentV1) {
+    setResearchRevision((revision) => revision + 1);
     setIntents((current) =>
       current.map((item) =>
         item.id === intent.id ? revokeIntent(item, new Date()) : item,
@@ -162,13 +172,12 @@ export function IntentWorkspace({ metaStatus }: { metaStatus: MetaStatus }) {
             </span>
             <span className="step-dot" />
           </a>
-          <div aria-disabled="true">
+          <a href="#foresight">
             <span className="step-number">02</span>
             <span>
               Foresight<small>Hypothesize & challenge</small>
             </span>
-            <span className="step-lock">—</span>
-          </div>
+          </a>
           <div aria-disabled="true">
             <span className="step-number">03</span>
             <span>
@@ -403,7 +412,7 @@ export function IntentWorkspace({ metaStatus }: { metaStatus: MetaStatus }) {
                   </div>
                   <div>
                     <dt>Meta integration</dt>
-                    <dd>Pending</dd>
+                    <dd>Review & consent</dd>
                   </div>
                   <div>
                     <dt>Experiment evidence</dt>
@@ -509,11 +518,17 @@ export function IntentWorkspace({ metaStatus }: { metaStatus: MetaStatus }) {
               </div>
             )}
           </section>
+          <ForesightWorkspace
+            key={researchRevision}
+            intents={intents}
+            configuration={configuration}
+            editing={editingId !== null}
+          />
           <footer className="workspace-footer">
             <span>FORESIGHT + VERIFY</span>
             <p>
-              No architecture recommendation or verification claim has been
-              made.
+              No architecture experiment yet. Model proposals require human
+              review.
             </p>
           </footer>
         </main>

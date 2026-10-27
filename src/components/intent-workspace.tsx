@@ -178,13 +178,13 @@ export function IntentWorkspace({
               Foresight<small>Hypothesize & challenge</small>
             </span>
           </a>
-          <div aria-disabled="true">
+          <Link href="/experiments" prefetch={false}>
             <span className="step-number">03</span>
             <span>
-              Experiment<small>Compare actual outcomes</small>
+              Recorded verification
+              <small>Inspect protected check history</small>
             </span>
-            <span className="step-lock">—</span>
-          </div>
+          </Link>
           <div aria-disabled="true">
             <span className="step-number">04</span>
             <span>

@@ -33,6 +33,12 @@ These are modeled effort points under developer-reviewed assumptions. They are n
 
 The next API dependency is a separately reviewed integration/authority design that resolves how exact confirmed intent revisions, projection review and scope are represented and bound without silently changing v1. Until then, this local worksheet is the complete supported comparison workflow. Broader graph/runtime coverage and independently measured experiments are separate dependencies, not consequences of a passing comparison.
 
+## Separate recorded verification view
+
+The workspace now links to the read-only [`/experiments` history view](RECORDED-VERIFICATION.md). The current developer-reviewed modeled comparison has **no linked measured experiment**. History does not consume confirmed intents, invoke Meta or attach old recordings to current proposals. Editing an intent never changes a recording. Production recordings remain **NOT_PROVISIONED**, with an honest no-approved-evidence state; private historical acceptance output has not been opened, registered or published.
+
+The complete server-only composition and explicit public projection use only the existing protected store, require its in-process authenticity marker and reload evidence for every served view. Required-check acceptance is distinct from run completion, unknown metrics stay unknown and infrastructure acceptance is distinct from an architecture experiment. Registration/publication needs separate operator approval. No certificate, interpretation, evaluation API or inference is added, and the local worksheet arithmetic/consent/invalidation behavior remains unchanged.
+
 ## Actual provider protocol and configuration
 
 Read-only official documentation was checked on October 27, 2026:

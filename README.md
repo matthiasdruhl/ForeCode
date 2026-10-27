@@ -54,3 +54,5 @@ The test reads the pinned Git objects in memory. The external schema, sample rec
 - Model proposals make no claims of architecture improvement, Meta incremental benefit or independent experiment verification.
 
 See [build provenance](docs/BUILD-PROVENANCE.md) and the [implementation log](docs/IMPLEMENTATION-LOG.md). Publication, approved-contributor declarations, final track selection and licensing sign-off remain owner release gates.
+
+Read-only [recorded verification](docs/RECORDED-VERIFICATION.md) is available at `/experiments` from the workspace. Production recordings are NOT_PROVISIONED; the current modeled comparison has no linked measured experiment. The authenticated loading/projection boundary and operator handoff are implemented without publishing private historical output.

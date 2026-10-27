@@ -1,0 +1,105 @@
+# Consented booking Foresight
+
+M6.1–M6.4/M6.6 now have a complete local reasoning flow: confirmed intent → reviewed booking context → status quo A / bounded B → one falsifiable hypothesis → one proposed adversarial counterexample. M6.5 scoring/recommendations, interpretation, experiments and certificates are outside this slice. No live Meta inference has yet been observed for this feature.
+
+## Review and sharing
+
+Confirm a future requirement in the existing editor. In Foresight, choose which confirmed requirements to share, review the goal and partial booking graph, and expand the exact application payload or full provider request body. Confirmation and sharing are distinct actions. The first call sends intents, graph and goal; its proposed visible scenarios are reviewed with A/B before the second call. The challenge gets its own approval of the matching current hypothesis and context. No stage automatically calls the next one. Retries require another explicit approval/action.
+
+Editing an intent immediately discards the current research; confirming a revision, revocation, changing selection/goal or clearing the run also discards results and sharing approval. Unmount cleanup aborts the request; identity checks ignore obsolete completions even if the provider ignores cancellation. There is no retained research history or durable browser storage. Intent JSON export remains available. Model text renders as plain React text, without HTML, Markdown execution, tools or commands.
+
+The graph is newly prepared bounded application data in `src/lib/foresight/booking-context.ts`, reviewed against **ForeCode commit `a564da2fe36a5de3ea95f777c1f5a60fd80ad6f0`**. Its nine real fixture-relative paths and thirteen static imports include type imports. Tests bind those nine files to SHA-256 values prepared from that actual Git object; CI can verify current source without fetching historical app objects. External libraries, UI, tests and config are omitted. The existing dynamic detail route is explicitly omitted because frozen v1 paths cannot represent brackets. The summary describes the fixed-viewer demo, owner-only service, synchronous overlap store and absent team/persistence capabilities. This is not a complete runtime architecture, repository importer or source execution facility. There is no client path/clone parameter.
+
+Only explicitly visible, unfrozen `meta_generated` scenarios enter subsequent prompts; none is a heldout or measured result. The model may propose actions on the reviewed existing paths only. Creating a new file needs a separately reviewed context, rather than inventing a path in this flow.
+
+## Actual provider protocol and configuration
+
+Read-only official documentation was checked on October 27, 2026:
+
+- [Meta Chat completion guide](https://dev.meta.ai/docs/protocols/chat-completions): HTTPS `POST https://api.meta.ai/v1/chat/completions`, messages array, developer role, Bearer authorization, nonstreaming text response, `max_completion_tokens`.
+- [Meta protocol schemas](https://dev.meta.ai/docs/api-reference/chat-completions/schemas): response identity/model, finish reasons, usage, JSON output format and reasoning token accounting.
+- [Meta model catalog](https://dev.meta.ai/docs/models): explicit `muse-spark-1.3` and `muse-spark-1.3-contributor` IDs and their distinct content-use modes. Catalog documentation does not establish this account's access.
+
+The existing local configured model was `muse-spark-1.3-contributor` at `https://api.meta.ai/v1`; only these non-secret settings were inspected. No credential value was printed or changed. No model/provider was silently substituted. This narrow adapter allowlists that exact base URL and the two explicit Spark 1.3 IDs. Other providers, ports, paths and models fail closed. Contributor mode can allow training on submitted content and responses; the review UI states that consequence. `store:false` does not override Contributor mode's content-use terms.
+
+`META_MODEL_API_KEY`, `META_API_BASE_URL`, `META_MODEL` and `META_CALLS_ENABLED` remain server-only. Calls additionally require `META_SPENDING_APPROVED=true`, which must only be set after genuine human approval, account/model access, credits and appropriate provider-side spending controls. An existing key or enable flag is not approval. `.env.local` is never committed or serialized. The trusted public origin is explicitly configured as `FORECODE_ORIGIN`; it is never derived from Host or forwarded headers. HTTPS is required except explicit HTTP loopback origins for local development.
+
+## API and validation boundaries
+
+| POST path                    | Frozen request → response                                      |
+| ---------------------------- | -------------------------------------------------------------- |
+| `/api/foresight/propose`     | `ProposeRequest` → `ProposeResponse`                           |
+| `/api/foresight/hypothesize` | `ScientistHypothesizeRequest` → `ScientistHypothesizeResponse` |
+| `/api/foresight/challenge`   | `ScientistChallengeRequest` → `ScientistChallengeResponse`     |
+
+Success shapes are the original frozen records, with no extra envelope. Routes reuse `readJsonRequest` and `apiErrorResponse`, require same configured origin, JSON, bounded input and literal consent, and return no-store headers on successes and safe errors. Unsupported methods use the same safe error path. Structural violations return 400, oversized input 413, unreviewed/stale/unissued relationships 422, local limits 429 and provider/configuration failures 503. No raw exception, response body or key enters the error envelope.
+
+`validateResearchContext`, `validateHypothesis` and `validateChallenge` remain unchanged and are reused alongside slice-specific checks. A is first, with no changes, constraints or upfront cost. B must have a meaningful allowed action; its cost equals the frozen action-weight sum. All plan/constraint paths resolve to reviewed modules. Points are modeled estimates, never measured savings. IDs, baselines, approved intent/scenario sets and nested provenance must agree. The one hypothesis targets B versus A and states mechanism, observable directional prediction, falsification, assumptions, counterarguments and limitations. The one challenge targets that hypothesis/candidate/baseline, includes an acceptance outline and remains `proposed` / `model_generated_not_heldout`.
+
+The server retains bounded hashes of successfully issued candidate/hypothesis records and their exact approved parent contexts for 30 minutes. Altered metadata, candidates, goals, intent revisions, scenarios or hypothesis bodies cannot be substituted downstream. Restart/expiry requires fresh proposals. This is a single-user demonstration boundary, not authentication or a durable server registry of the user's unsent local edits. The browser enforces current-session invalidation; the server authenticates issuance and snapshot relationships, not arbitrary claims that a remote person clicked consent. No public endpoint retrieves the stored hashes or accepts arbitrary provider responses.
+
+The internal model-content schemas omit provenance. Unexpected fields, including model-authored `provider`, `modelId` or mode identities, are rejected. Only the authenticated configured transport response establishes public live provenance. It verifies the response model, a nonempty observed response ID, a single assistant text choice and natural `stop` termination. Tool calls, refusals, extra output structures, truncation, malformed JSON/UTF-8, excessive bytes, invalid costs/relationships and model mismatches fail closed. No repair call or successful template fallback occurs.
+
+## Fixed local bounds and provenance
+
+| Control                                                     | Current bound                                                                                       |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Application JSON request                                    | 65,536 UTF-8 bytes                                                                                  |
+| Entire provider request body, including instructions/schema | 49,152 UTF-8 bytes                                                                                  |
+| Entire provider response body                               | 65,536 bytes                                                                                        |
+| Completion tokens, including reasoning                      | 4,096                                                                                               |
+| Provider deadline                                           | 30 seconds, including response body consumption                                                     |
+| Concurrency                                                 | One locally active request per process across all three routes; upstream cancellation is unverified |
+| Minimum interval                                            | 10 seconds between attempts                                                                         |
+| Per endpoint                                                | Four attempts per rolling hour                                                                      |
+| Total                                                       | Twelve attempts for the process lifetime, including failures                                        |
+| Retries / repair / tools                                    | Zero automatic retries, no repair or tools                                                          |
+
+`META_APPROVED_PAYLOAD_SHA256`, when set, additionally restricts inference to the exact canonical full provider-body digest. `META_APPROVED_CALL_LIMIT` can lower the process cap (1–12); use **1** for the first smoke. Invalid limits or a different payload fail before dispatch.
+
+The transport records a bounded in-memory observation per structurally valid provider response: configured model, fixed prompt version `booking-scientist-1`, SHA-256 identities of the observed response/request IDs, exact input context and provider payload, and actual available usage. Public `sourceEvidenceId` is `meta-` plus the SHA-256 of the canonical observed response ID; it identifies a model response, not grader evidence. Missing usage/reasoning counts and monetary cost remain unknown/null. Raw prompts, reasoning, provider content, keys and private reports are not logged or written to files. The observation ring is process-local and has no public retrieval endpoint.
+
+These limits are not billing enforcement. Process restarts, replicas, upstream billing and disconnect behavior are outside their guarantees. Cancellation propagates an abort and stops waiting, but cannot prove the provider stopped generation or charging. The demo has no distributed rate limiter, persistent multi-user backend or billing framework. Follow account-side spending controls and stop if no suitable control/approved ceiling exists.
+
+## Synthetic validation and evidence boundaries
+
+Unit/route tests inject synthetic `fetch` responses; ordinary CI uses no real provider credential or paid call. Browser tests intercept endpoint responses with explicitly synthetic **template** provenance and review the complete flow, approvals, cancellation, duplicate clicks, changed/revoked contexts, late responses and inert rendering. A separate disabled-server browser case verifies review remains available while dispatch is disabled. The Playwright launcher installs a test-only external-fetch denial preloader and uses fake server keys; even an accidentally unmocked request cannot reach Meta. That preloader and the synthetic fixtures live outside `src`, are absent from normal start/build imports, and cannot be selected by a public client flag or response-injection endpoint. Route/transport tests separately exercise actual server assembly and lineage checks. Synthetic successes do not establish actual model access or usefulness.
+
+All 49 frozen definitions and the original planning pin remain unchanged. No evaluator/experiment code, protected loader, fixture implementation, dependency/lockfile, sandbox policy or Workstream A runtime changed. The structural web boundary continues to forbid execution and new filesystem pathways. Application coding-agent invocation/export remains hard-disabled. No VM, lease, installation, protected acceptance command or real agent was used for this feature.
+
+Workstream A's historical baseline/distinct-final `VERIFIED` and ownership-regression/forged-success `REJECTED` observations remain the previously completed owner-reviewed fixed Next 16.4.3 Webpack infrastructure results. They were not rerun, registered in the hosted app, relabeled, passed to Meta or treated as architecture/Meta-effectiveness evidence. Current source changes do not erase historical observations; any future runtime admission still requires its own current bindings. Foresight output grants no evaluator-policy, experiment, verification or certificate authority.
+
+## Executable first-smoke handoff — NOT_RUN
+
+Preparation is credential-free and performs no network access:
+
+```sh
+node --import tsx scripts/meta/prepare-smoke.ts muse-spark-1.3-contributor > /private/tmp/forecode-meta-propose-smoke-review.json
+```
+
+The review file contains a prepared sample requirement, exact application request, full provider body and canonical SHA-256 identity. Its `user_confirmed` representation is **not evidence of a confirmation already obtained**: the human must explicitly confirm that exact prepared requirement, context and goal along with the payload before sending it. The review envelope says NOT_RUN and has no spending ceiling until an actual person supplies one. The file contains no keys, private grader reports or candidate snapshot and stays outside Git.
+
+Prepared envelope: **one propose call**, configured Contributor model, **8,417 provider-body bytes**, **4,096 maximum output tokens including reasoning**, **30-second timeout**, **zero retries**; payload SHA-256 **`76817368b33715af4759fa68a4df198fc8757755b9b9332561bbdcfd33016ad7`**. The spending ceiling remains **unset**. Hash changes require renewed payload review.
+
+Before executing: obtain explicit human confirmation of the prepared intent/context and exact body hash, a numerical spending ceiling, confirmed model/account access and credits, appropriate provider-side spending controls, and Contributor content-use approval. No completion probing or model-list request has been made to establish access.
+
+Only **after those actual approvals**, start a local application process with the exact payload restriction and one-attempt cap (keys stay in the existing server environment):
+
+```sh
+META_CALLS_ENABLED=true META_SPENDING_APPROVED=true \
+META_APPROVED_PAYLOAD_SHA256=76817368b33715af4759fa68a4df198fc8757755b9b9332561bbdcfd33016ad7 \
+META_APPROVED_CALL_LIMIT=1 FORECODE_ORIGIN=http://127.0.0.1:3000 npm run dev
+```
+
+In another terminal, extract the already reviewed application request and submit it once to that local server:
+
+```sh
+node --input-type=module -e 'import fs from "node:fs"; const review=JSON.parse(fs.readFileSync("/private/tmp/forecode-meta-propose-smoke-review.json","utf8")); process.stdout.write(JSON.stringify(review.request));' > /private/tmp/forecode-meta-propose-request.json
+curl --silent --show-error --max-time 35 --request POST \
+  http://127.0.0.1:3000/api/foresight/propose \
+  --header 'Origin: http://127.0.0.1:3000' \
+  --header 'Content-Type: application/json' \
+  --data-binary @/private/tmp/forecode-meta-propose-request.json
+```
+
+Do not add curl retries. Inspect the typed response and actual provenance; a provider failure is not permission to retry. Stop the owned server after the observation. This approval does **not** authorize a hypothesis/challenge call. Their exact new bodies depend on the prior observed response and need separate review and approval; do not preauthorize unknown outputs. For the interactive full flow, approve each stage in the browser and use an operator spending envelope that genuinely covers its reviewed exact payload. The prepared CLI smoke and a browser run are separate sessions; do not merge their evidence.

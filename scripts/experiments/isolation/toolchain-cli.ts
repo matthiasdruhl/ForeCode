@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { installationPreflight } from "./installation-preflight";
 import {
   prepareToolchain,
   buildToolchain,
@@ -11,12 +12,15 @@ const { values } = parseArgs({
     output: { type: "string" },
     build: { type: "boolean", default: false },
     verify: { type: "string" },
+    preflight: { type: "string" },
+    config: { type: "string" },
+    inventory: { type: "string" },
     help: { type: "boolean", default: false },
   },
 });
 if (values.help)
   process.stdout.write(
-    "Trusted booking tooling only. --output /new/private/directory [--build], or --verify /private/artifact.\nDefault prepares a byte-bound bundle without Docker. --build builds only its restricted tooling context, runs fixed offline dependency smokes and exports an image. No candidate, sbx, agent or inference entrypoint.\n",
+    "Trusted booking tooling only. --output /new/private/directory [--build], --verify /private/artifact, or --preflight /private/artifact [--config /private/offline.json] [--inventory /private/inventory.json].\nDefault prepares a byte-bound bundle without Docker. --build builds only its restricted tooling context, runs fixed offline dependency smokes and exports an image. Preflight is read-only, grants no authority and never starts a VM. No candidate, sbx, agent or inference entrypoint.\n",
   );
 else {
   const cancellation = new AbortController(),
@@ -24,7 +28,24 @@ else {
   process.on("SIGINT", cancel);
   process.on("SIGTERM", cancel);
   try {
-    if (values.verify) {
+    if (!values.preflight && (values.config || values.inventory))
+      throw new Error("Proposal inputs require preflight");
+    if (values.preflight) {
+      if (
+        values.output ||
+        values.build ||
+        values.verify ||
+        (values.inventory && !values.config)
+      )
+        throw new Error("Separate read-only preflight operation");
+      const report = await installationPreflight(
+        values.preflight,
+        values.config,
+        values.inventory,
+      );
+      process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+      if (report.status === "INPUTS_INVALID") process.exitCode = 1;
+    } else if (values.verify) {
       if (values.output || values.build)
         throw new Error("Separate verification operation");
       const artifact = await verifyToolchainArtifact(values.verify);

@@ -43,7 +43,10 @@ export async function privateDirectory(input: string) {
 export async function protectedRead(file: string, limit = 1_048_576) {
   if ((await realpath(file)) !== path.resolve(file))
     throw new Error("Protected file aliases are forbidden.");
-  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const handle = await open(
+    file,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
   try {
     const before = await handle.stat();
     if (
@@ -57,7 +60,11 @@ export async function protectedRead(file: string, limit = 1_048_576) {
     const bytes = Buffer.alloc(limit + 1);
     const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
     const after = await handle.stat();
+    const linked = await lstat(file);
     if (
+      linked.ino !== before.ino ||
+      linked.dev !== before.dev ||
+      linked.isSymbolicLink() ||
       bytesRead > limit ||
       bytesRead !== before.size ||
       before.mtimeMs !== after.mtimeMs ||

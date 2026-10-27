@@ -32,6 +32,7 @@ export const runtimeBundleInputs = [
 export async function prepareRuntimeBundle(destination: string) {
   if (!path.isAbsolute(destination))
     throw new Error("Absolute new bundle destination required");
+  disjoint(destination, path.resolve(project, "../AgentHarness-Planning"));
   const parent = await realpath(path.dirname(destination));
   if (parent !== path.dirname(destination))
     throw new Error("Bundle parent alias forbidden");

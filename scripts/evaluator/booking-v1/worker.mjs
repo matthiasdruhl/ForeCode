@@ -3,9 +3,10 @@
 import { cp, symlink, mkdir, chmod, readdir } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { createServer } from "node:http";
-await cp("/source", "/work", { recursive: true });
-await mkdir("/work", { recursive: true });
-// The source mount remains immutable; build tools may update their private copy.
+await cp("/source", "/work/task", { recursive: true });
+await mkdir("/work/task", { recursive: true });
+// The root-owned /work tmpfs mount must never be chmodded by UID65534.
+// Its new task directory is worker-owned; source stays immutable.
 async function writable(root) {
   await chmod(root, 0o700);
   for (const entry of await readdir(root, { withFileTypes: true })) {
@@ -14,9 +15,9 @@ async function writable(root) {
     else await chmod(name, 0o600);
   }
 }
-await writable("/work");
-await symlink("/toolchain/node_modules", "/work/node_modules");
-process.chdir("/work");
+await writable("/work/task");
+await symlink("/toolchain/node_modules", "/work/task/node_modules");
+process.chdir("/work/task");
 const mode = process.argv[2];
 if (mode === "isolation") {
   await import("/bridge/probe.mjs");
@@ -25,19 +26,19 @@ if (mode === "isolation") {
 if (mode === "build" || mode === "typecheck") {
   const commands =
     mode === "build"
-      ? [["/toolchain/node_modules/next/dist/bin/next", "build"]]
+      ? [["/toolchain/node_modules/next/dist/bin/next", "build", "--webpack"]]
       : [
           ["/toolchain/node_modules/next/dist/bin/next", "typegen"],
           [
             "/toolchain/node_modules/typescript/bin/tsc",
             "--noEmit",
             "-p",
-            "/work/tsconfig.json",
+            "/work/task/tsconfig.json",
           ],
         ];
   for (const args of commands) {
     const p = spawnSync("/usr/local/bin/node", args, {
-      cwd: "/work",
+      cwd: "/work/task",
       timeout: 90_000,
       maxBuffer: 1_048_576,
       env: {
@@ -54,8 +55,8 @@ if (mode === "build" || mode === "typecheck") {
   process.exit(0);
 }
 const { createBookingService } =
-  await import("/work/src/server/booking-service.ts");
-const { createBookingHttp } = await import("/work/src/server/http.ts");
+  await import("/work/task/src/server/booking-service.ts");
+const { createBookingHttp } = await import("/work/task/src/server/http.ts");
 const subjects = new Map();
 let next = 0;
 createServer(async (req, res) => {

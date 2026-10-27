@@ -1,3 +1,4 @@
+import { syntheticVmResources } from "../helpers/synthetic-vm-resources";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   chmod,
@@ -540,6 +541,7 @@ describe("trusted tooling preparation — SYNTHETIC Docker adapter; no image/gue
       browser: "false",
       mcp: [],
       files,
+      vmResources: syntheticVmResources(config.vmPids),
       worker: { id, repoDigests: [], os: "linux", architecture: "arm64" },
       reviewedLimits: {
         vmDiskBytes: config.vmDiskBytes,

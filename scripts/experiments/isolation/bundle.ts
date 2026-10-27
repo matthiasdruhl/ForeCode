@@ -28,6 +28,10 @@ export const runtimeBundleInputs = [
     target: "runtime-files.py",
   },
   {
+    source: "scripts/experiments/isolation/vm-resources.py",
+    target: "vm-resources.py",
+  },
+  {
     source: "scripts/experiments/isolation/toolchain-audit.mjs",
     target: "toolchain-audit.mjs",
   },

@@ -80,7 +80,11 @@ export async function observeInstalledGrader(
   const pins = await freezeBooking();
   if (pins.evaluatorSha256 !== artifact.request.implementationSha256)
     throw new Error("Maintenance implementation changed");
-  const helperHashes = ["runtime-files.py", "installed-smoke.py"].map(
+  const helperHashes = [
+    "runtime-files.py",
+    "installed-smoke.py",
+    "vm-resources.py",
+  ].map(
     (name) =>
       pins.evaluatorManifest.find(
         (file) => file.path === `scripts/experiments/isolation/${name}`,
@@ -147,10 +151,13 @@ export async function observeInstalledGrader(
   };
   const exec = async (args: string[], commandSignal = signal) => {
     await stable();
+    const pythonIndex = args.indexOf("python3");
     if (
       args[0] === "exec" &&
-      args[2] === "python3" &&
-      !helperHashes.includes(sha256(args[5] ?? ""))
+      pythonIndex !== -1 &&
+      (args[pythonIndex + 1] !== "-I" ||
+        args[pythonIndex + 2] !== "-c" ||
+        !helperHashes.includes(sha256(args[pythonIndex + 3] ?? "")))
     )
       throw new Error("Unreviewed guest helper bytes");
     const result = await boundedProcess(config.sbx, args, {
@@ -276,7 +283,8 @@ export async function observeInstalledGrader(
     stopped,
     leaseRetained: touched && !stopped,
     configuredVmLimits: { diskBytes: config.vmDiskBytes, pids: config.vmPids },
-    observedVmEnforcement: null,
+    observedVmEnforcement:
+      completed && inventory ? inventory.vmResources : null,
     lifecycleAcceptance: "NOT_RUN",
     bookingAcceptance: "NOT_RUN",
     inference: "NOT_RUN",

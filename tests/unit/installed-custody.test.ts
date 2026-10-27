@@ -8,9 +8,13 @@ import {
   rm,
   symlink,
   link,
+  mkdir,
 } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
+import { sha256 } from "../../src/lib/report/digests";
+import { dependencyRowsJson } from "../../scripts/experiments/isolation/toolchain-audit.mjs";
+import { controllerFiles } from "../../scripts/evaluator/booking-v1/installed";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -62,6 +66,86 @@ print(json.dumps(module.metadata, sort_keys=True))
   );
 }
 describe("installed custody guards — synthetic inert files, no VM or runtime execution", () => {
+  it("matches the image dependency digest for nested paths and filename prefixes", async () => {
+    const root = await realpath(
+      await mkdtemp(path.join(tmpdir(), "forecode-custody-order-")),
+    );
+    roots.push(root);
+    const installed = path.join(root, "opt/forecode-booking");
+    for (const name of [
+      "opt",
+      "opt/forecode-booking",
+      "opt/forecode-booking/bin",
+      "opt/forecode-booking/controller",
+      "opt/forecode-booking/node_modules",
+      "opt/forecode-booking/node_modules/pkg",
+      "opt/forecode-booking/node_modules/.bin",
+    ]) {
+      await mkdir(path.join(root, name), { mode: 0o755 });
+    }
+    for (const name of [
+      "bin/node",
+      "package.json",
+      "package-lock.json",
+      ...controllerFiles.map((name) => `controller/${name}`),
+    ]) {
+      await writeFile(path.join(installed, name), "INERT TRUSTED TEST DATA", {
+        mode: name === "bin/node" ? 0o755 : 0o644,
+      });
+    }
+    const files = ["pkg.js", "pkg/item.js", "pkg/bin.js", "\u{1f600}"];
+    const rows: string[][] = [];
+    for (const name of files) {
+      const bytes = `INERT DEPENDENCY ${name}`;
+      await writeFile(path.join(installed, "node_modules", name), bytes, {
+        mode: 0o644,
+      });
+      rows.push([name, sha256(bytes)]);
+    }
+    await symlink(
+      "../pkg/bin.js",
+      path.join(installed, "node_modules/.bin/tool"),
+    );
+    rows.push([".bin/tool", "link", "../pkg/bin.js"]);
+    const executable = path.join(root, "inert-executable");
+    await writeFile(executable, "NEVER EXECUTE THIS INERT FILE", {
+      mode: 0o755,
+    });
+    const observed = spawnSync(
+      "python3",
+      [
+        "-I",
+        "-c",
+        `
+import importlib.util, sys, os, pathlib
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location('inventory', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+original = type(pathlib.Path())
+fixture_root, executable = sys.argv[2], sys.argv[3]
+def mapped(value):
+    value = os.fspath(value)
+    if value == '/usr/bin/ldd':
+        return original(executable)
+    return original(fixture_root + value if value == '/opt' or value.startswith('/opt/') else value)
+module.pathlib.Path = mapped
+module.shutil.which = lambda name, path=None: executable
+# No reviewed Node pin: main hashes inert files, never invokes ldd or Node.
+sys.argv = [sys.argv[0], 'grader']
+module.main()
+`,
+        path.resolve("scripts/experiments/isolation/runtime-files.py"),
+        root,
+        executable,
+      ],
+      { encoding: "utf8", timeout: 2000, maxBuffer: 16384 },
+    );
+    expect(observed.status, observed.stderr).toBe(0);
+    expect(JSON.parse(observed.stdout).node_modules).toBe(
+      sha256(dependencyRowsJson(rows)),
+    );
+  });
   it.each([0o600, 0o644, 0o666, 0o777])(
     "rejects Node mode %s despite unchanged executable bytes",
     async (mode) => {

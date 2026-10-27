@@ -92,7 +92,7 @@ def main():
         paths = ['/home/agent/.codex/config.toml', '/usr/local/bin/codex']
     elif role == 'grader':
         paths = ['/opt/forecode-booking/bin/node', '/opt/forecode-booking/package-lock.json', '/opt/forecode-booking/package.json']
-        names = ['worker-policy.mjs', 'lifecycle-protocol.mjs', 'lifecycle-probes.mjs', 'lifecycle-driver.mjs', 'lifecycle-worker.mjs', 'guest.ts', 'oracle-driver.ts', 'oracle.ts', 'http-oracle.ts', 'remote-oracles.ts', 'probe.mjs', 'worker.mjs', 'client.mjs', 'runtime.mjs', 'lifecycle.mjs']
+        names = ['installed-smoke.mjs', 'installed-sample.ts', 'worker-policy.mjs', 'lifecycle-protocol.mjs', 'lifecycle-probes.mjs', 'lifecycle-driver.mjs', 'lifecycle-worker.mjs', 'guest.ts', 'oracle-driver.ts', 'oracle.ts', 'http-oracle.ts', 'remote-oracles.ts', 'probe.mjs', 'worker.mjs', 'client.mjs', 'runtime.mjs', 'lifecycle.mjs']
         paths += ['/opt/forecode-booking/controller/' + name for name in names]
     else:
         raise ValueError('invalid inventory role')

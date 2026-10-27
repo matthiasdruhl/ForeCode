@@ -582,6 +582,7 @@ describe("trusted tooling preparation — SYNTHETIC Docker adapter; no image/gue
       inventoryFile,
     );
     expect(report.proposal.inventory).toBe("RECORD_BOUND_INTEGRITY_ONLY");
+    expect(report.proposal.inventorySha256).toBe(jsonDigest(observed));
     expect(report.proposal.review).toBe("RECORD_VALID_INTEGRITY_ONLY");
     expect(report.status).toBe("OWNER_ACTION_REQUIRED");
     expect(report.installedRuntime).toBeNull();

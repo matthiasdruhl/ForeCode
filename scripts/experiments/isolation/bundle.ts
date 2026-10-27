@@ -20,6 +20,10 @@ export const runtimeBundleInputs = [
     }),
   ),
   {
+    source: "scripts/experiments/isolation/installed-smoke.py",
+    target: "installed-smoke.py",
+  },
+  {
     source: "scripts/experiments/isolation/runtime-files.py",
     target: "runtime-files.py",
   },

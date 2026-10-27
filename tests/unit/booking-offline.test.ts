@@ -255,6 +255,7 @@ describe("offline acceptance — SYNTHETIC DEVELOPMENT, no sandbox or inference"
       );
     }
     await visit(path.resolve("scripts/experiments/runner/offline-cli.ts"));
+    await visit(path.resolve("scripts/experiments/isolation/toolchain-cli.ts"));
     expect(visited.size).toBeGreaterThan(12);
     const adapter = createOfflineSbxAdapter((await setup()).config);
     expect(Object.keys(adapter).sort()).toEqual([

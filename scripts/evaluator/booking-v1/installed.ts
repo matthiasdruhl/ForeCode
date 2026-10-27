@@ -1,6 +1,8 @@
 // Exact files admitted and provisioned into the protected grader; no app source.
 export const controllerFiles = [
   "guest.ts",
+  "installed-smoke.mjs",
+  "installed-sample.ts",
   "worker-policy.mjs",
   "lifecycle-protocol.mjs",
   "lifecycle-probes.mjs",

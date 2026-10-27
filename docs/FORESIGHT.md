@@ -1,6 +1,6 @@
 # Consented booking Foresight
 
-M6.1–M6.4/M6.6 now have a complete local reasoning flow: confirmed intent → reviewed booking context → status quo A / bounded B → one falsifiable hypothesis → one proposed adversarial counterexample. M6.5 scoring/recommendations, interpretation, experiments and certificates are outside this slice. No live Meta inference has yet been observed for this feature.
+M6.1–M6.4/M6.6 now have a complete local reasoning flow: confirmed intent → reviewed booking context → status quo A / bounded B → one falsifiable hypothesis → one proposed adversarial counterexample. M6.5 scoring/recommendations, interpretation, experiments and certificates are outside this slice. One separately approved live `propose` call has now returned a valid A/B response through the production application and configured Meta model. Live hypothesis/challenge calls remain NOT_RUN; no architecture experiment or Meta-effectiveness result is established.
 
 ## Review and sharing
 
@@ -69,7 +69,9 @@ All 49 frozen definitions and the original planning pin remain unchanged. No eva
 
 Workstream A's historical baseline/distinct-final `VERIFIED` and ownership-regression/forged-success `REJECTED` observations remain the previously completed owner-reviewed fixed Next 16.4.3 Webpack infrastructure results. They were not rerun, registered in the hosted app, relabeled, passed to Meta or treated as architecture/Meta-effectiveness evidence. Current source changes do not erase historical observations; any future runtime admission still requires its own current bindings. Foresight output grants no evaluator-policy, experiment, verification or certificate authority.
 
-## Executable first-smoke handoff — NOT_RUN
+<a id="executable-first-smoke-handoff--not_run"></a>
+
+## Executable first-smoke handoff and observed call
 
 Preparation is credential-free and performs no network access:
 
@@ -79,7 +81,7 @@ node --import tsx scripts/meta/prepare-smoke.ts muse-spark-1.3-contributor > /pr
 
 The review file contains a prepared sample requirement, exact application request, full provider body and canonical SHA-256 identity. Its `user_confirmed` representation is **not evidence of a confirmation already obtained**: the human must explicitly confirm that exact prepared requirement, context and goal along with the payload before sending it. The preparation command emits NOT_RUN with an unset ceiling; it performs no inference or approval itself. The already prepared private review artifact now separately records the owner’s exact-payload approval and the $0.01 budget selected under that delegation. The file contains no keys, private grader reports or candidate snapshot and stays outside Git.
 
-Prepared envelope: **one propose call**, configured Contributor model, **8,417 provider-body bytes**, **4,096 maximum output tokens including reasoning**, **30-second timeout**, **zero retries**; payload SHA-256 **`76817368b33715af4759fa68a4df198fc8757755b9b9332561bbdcfd33016ad7`**. Following the owner’s reply approving this exact smoke and delegating routine decisions, the selected smoke budget is **$0.01**. This is a planning ceiling, not guaranteed provider-side enforcement. Hash changes require renewed payload review. No inference has run: model/account access, available credits and the current account spending-control state remain unverified.
+Prepared envelope: **one propose call**, configured Contributor model, **8,417 provider-body bytes**, **4,096 maximum output tokens including reasoning**, **30-second timeout**, **zero retries**; payload SHA-256 **`76817368b33715af4759fa68a4df198fc8757755b9b9332561bbdcfd33016ad7`**. Following the owner’s reply approving this exact smoke and delegating routine decisions, the selected smoke budget is **$0.01**. This is a planning ceiling, not guaranteed provider-side enforcement. Hash changes require renewed payload review. The approved first attempt has now been consumed successfully; observed details follow below. These commands are a handoff template, not authorization to repeat the call.
 
 Before executing: obtain explicit human confirmation of the prepared intent/context and exact body hash, a numerical spending ceiling, confirmed model/account access and credits, appropriate provider-side spending controls, and Contributor content-use approval. No completion probing or model-list request has been made to establish access.
 
@@ -104,8 +106,30 @@ curl --silent --show-error --max-time 35 --request POST \
 
 Do not add curl retries. Inspect the typed response and actual provenance; a provider failure is not permission to retry. Stop the owned server after the observation. This approval does **not** authorize a hypothesis/challenge call. Their exact new bodies depend on the prior observed response and need separate review and approval; do not preauthorize unknown outputs. For the interactive full flow, approve each stage in the browser and use an operator spending envelope that genuinely covers its reviewed exact payload. The prepared CLI smoke and a browser run are separate sessions; do not merge their evidence.
 
-### Owner approval follow-up
+### Initial owner approval follow-up (before live execution)
 
 The owner authorized the exact first-propose smoke above and delegated routine choices. The selected $0.01 budget retains the same body digest, one-attempt cap, 4,096 completion-token cap, 30-second deadline and zero retries. No downstream payload, provider/model switch, funding purchase or publication is inferred.
 
-Read-only inspection found a signed-in Meta session and the configured model listed in its catalog, but Billing remained at “Loading billing…”; account funding and controls could not be established. Catalog visibility is not confirmed model/account access. [Official current pricing](https://dev.meta.ai/docs/pricing-rate-limits) lists Contributor input/output at $0.10/$0.20 per million tokens. Using every one of the 8,417 request-body bytes as an input-token estimate plus the full output cap gives a conservative modeled amount of about $0.00166; this is not a provider token count, bill or spending guarantee. [Meta’s spending-control help](https://dev.meta.ai/help/billing/spend-limit-alert) states that spend limits are alerts, not hard usage caps. No alert, payment method, auto-recharge, funding or key was changed. Live status remains **NOT_RUN** pending actual account/credit/control facts.
+At the initial approval follow-up, read-only inspection found a signed-in Meta session and the configured model listed in its catalog, but Billing remained at “Loading billing…”; account funding and controls could not yet be established. Catalog visibility is not confirmed model/account access. [Official current pricing](https://dev.meta.ai/docs/pricing-rate-limits) lists Contributor input/output at $0.10/$0.20 per million tokens. Using every one of the 8,417 request-body bytes as an input-token estimate plus the full output cap gives a conservative modeled amount of about $0.00166; this is not a provider token count, bill or spending guarantee. [Meta’s spending-control help](https://dev.meta.ai/help/billing/spend-limit-alert) states that spend limits are alerts, not hard usage caps. No alert, payment method, auto-recharge, funding or key was changed. Live status was **NOT_RUN** at that point; the later approved observation below supersedes that current-status limitation.
+
+### Observed approved first-propose smoke
+
+The owner subsequently confirmed active credits. Billing then loaded and independently showed active free credits; the exact configured Contributor model was selected/available in the signed-in account. No spend alert was configured. No payment, alert, funding, key, provider/model or account setting was changed. The fixed body, one-attempt cap, provider-enforced 4,096 completion-token parameter, 30-second abort deadline, known published rates, funded credits and manual monitoring were judged adequate for this single approved sub-cent request. There is no provider dollar hard cap, and those controls do not guarantee a $0.01 bill or authorize general unattended usage.
+
+The actual production Next app was started on loopback port 3187 with the exact approved body digest and one-attempt cap. A temporary operator-side guard outside the repository additionally rejected any different/repeated outbound request and emitted only bounded sanitized identities/usage; it did not inject a response, log raw content/keys, add a product endpoint or create a filesystem capability in application source. The exact prepared request was submitted once to `/api/foresight/propose`. Meta and the app both returned **HTTP 200**. Independent local `validateFlowOutput` accepted the frozen response: status quo A has an empty plan and zero upfront points; B has two allowed actions totaling five modeled effort points, plus one visible proposed scenario. Those are model proposals and arithmetic, not measured development savings.
+
+| Observation                                   | Actual result                                                           |
+| --------------------------------------------- | ----------------------------------------------------------------------- |
+| Model / prompt                                | `muse-spark-1.3-contributor` / `booking-scientist-1`                    |
+| Attempts / retries                            | 1 / 0                                                                   |
+| Provider response body                        | 3,039 bytes                                                             |
+| Input / output / total tokens                 | 1,777 / 863 / 2,640                                                     |
+| Reasoning / cached input tokens               | 259 (included in output) / 0                                            |
+| Public response identity                      | `meta-cd7163e370554e8707a63ef090dbba4e34fc2b23845c438c2c4a5d16c19ae1db` |
+| Request identity (hash)                       | `c0780dc601f2d67809058b4e06ff411c7b95cc1180c20d277467b73319f0d31a`      |
+| Exact context identity                        | `7330c63404185036715abf4b5d4c9e369994e7a688e5f4661599ce73e7c7f941`      |
+| Published-rate estimate / actual billing cost | $0.0003503 modeled from reported usage / unknown                        |
+
+The public response identity matched the transport observation and was not supplied by model-authored JSON. Private typed response and sanitized observation are outside Git; no raw provider traffic or candidate snapshot was committed. The owned server was stopped by SIGTERM (process exit 143), and a read-only listener check found no remaining listener on 3187. A default-sandbox `ps` inspection was denied; shutdown used the already identified owned listener PID under authorized process control. No VM/lease or Workstream A operation was involved.
+
+The one approved attempt is consumed. Hypothesize/challenge are **NOT_RUN live** and require their own exact-payload approvals. The CLI smoke server is stopped and its parent bindings are ephemeral: a future browser research session must start with a fresh approved proposal, not present these stopped-session results as current or inject them as server-issued records. The complete three-stage browser behavior remains synthetic-test evidence only. No coding agent, experiment, architecture/Meta-effectiveness claim or product certificate occurred.

@@ -71,7 +71,7 @@ test("navigate to honest read-only history without intents or provider calls", a
   expect(calls).toEqual([]);
 });
 
-test("history is available on the provider-disabled server and does not create an evidence API", async ({
+test("history is available on the provider-disabled server with only the frozen demo API", async ({
   page,
   request,
 }) => {
@@ -86,7 +86,13 @@ test("history is available on the provider-disabled server and does not create a
   const repeated = await request.get("http://127.0.0.1:3102/experiments");
   expect(repeated.status()).toBe(200);
   expect(await repeated.text()).not.toContain("synthetic-secret");
-  for (const endpoint of ["/api/demo", "/api/experiments", "/api/recordings"])
+  expect(await (await request.get("/api/demo")).json()).toEqual({
+    schemaVersion: "demo.v1",
+    runs: [],
+    certificates: [],
+    mode: "recorded",
+  });
+  for (const endpoint of ["/api/experiments", "/api/recordings"])
     expect((await request.get(endpoint)).status()).toBe(404);
 });
 

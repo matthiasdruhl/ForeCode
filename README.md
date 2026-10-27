@@ -13,7 +13,7 @@ npm ci --ignore-scripts
 npm run dev
 ```
 
-Open http://127.0.0.1:3000. The current build lets you confirm, revise, revoke and export future requirements. Requirements live in browser memory and disappear on reload; export them before leaving. Example buttons only populate the editor and require explicit confirmation.
+Open http://127.0.0.1:3000. The current build lets you confirm, revise, revoke and export future requirements, then review a pinned booking graph and separately consent to Meta proposals, one falsifiable hypothesis and one proposed counterexample. Requirements and research live in browser memory and disappear on reload; export requirements before leaving. Example buttons only populate the editor and require explicit confirmation. Each model stage has its own exact-payload review and sharing action; editing or revoking a requirement discards dependent research. [Foresight configuration, boundaries and first-smoke handoff](docs/FORESIGHT.md).
 
 ## Verification
 
@@ -48,9 +48,9 @@ The test reads the pinned Git objects in memory. The external schema, sample rec
 
 ## Current limits
 
-- Live Meta transport, architecture proposals, hypotheses and challenges are pending. Environment configuration is server-only and calls default to disabled. No inference or paid network calls are implemented in this build.
+- The Meta transport and three Foresight endpoints are implemented and tested with synthetic responses. One separately approved live `propose` call now returned a valid A/B response through the production app and configured Meta model. Live hypothesis/challenge calls remain **NOT_RUN**; architecture and Meta effectiveness remain unmeasured. Calls default to disabled and need separate spending approval; existing credentials or flags are not permission. Contributor mode content-use terms are shown before sharing. Set the exact deployment `FORECODE_ORIGIN`; see `.env.example` and the Foresight guide.
 - All 49 frozen definitions now have fresh validators, with published structural and semantic conformance checks. Relationships, fixed scoring arithmetic, canonical digests and stale/forged receipt handling are tested. This validates interfaces and development behavior; it does not authenticate a real experiment.
-- The web process has no experiment execution or evaluator endpoint. The protected loader is read-only and accepts controller-allowlisted bytes and freshness pins. Real custody, isolated candidate grading and runner integration remain gated on the separately configured sandbox; no real experiment receipt or certificate exists yet.
-- No claims of architecture improvement, Meta incremental benefit or verified acceptance are made.
+- The web process has no experiment execution or evaluator endpoint. The protected loader remains read-only. Workstream A previously completed owner-reviewed fixed offline Next 16.4.3 Webpack infrastructure acceptance; those historical observations remain separate and are neither hosted here nor evidence of an architecture A/B experiment. This feature does not execute a coding agent, modify its runtime, interpret grader evidence or issue a product certificate.
+- Model proposals make no claims of architecture improvement, Meta incremental benefit or independent experiment verification.
 
 See [build provenance](docs/BUILD-PROVENANCE.md) and the [implementation log](docs/IMPLEMENTATION-LOG.md). Publication, approved-contributor declarations, final track selection and licensing sign-off remain owner release gates.

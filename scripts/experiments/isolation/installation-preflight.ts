@@ -10,6 +10,7 @@ import {
 } from "./offline-gate";
 import { verifyInstalledGrader } from "./installed-grader";
 import { jsonDigest } from "../../../src/lib/report/digests";
+import { validateVmResources } from "./vm-resources";
 
 export async function installationPreflight(
   artifactRoot: string,
@@ -91,6 +92,7 @@ export async function installationPreflight(
       try {
         const raw: unknown = JSON.parse(inventoryBytes.toString());
         const parsed = InventorySchema.parse(raw);
+        validateVmResources(parsed.vmResources, config);
         if (
           parsed.image !== config.graderImage ||
           parsed.sbxSha256 !== config.sbxSha256 ||

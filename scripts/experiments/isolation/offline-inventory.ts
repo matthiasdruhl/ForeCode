@@ -5,6 +5,7 @@ import { z } from "zod";
 import { sha256 } from "../../../src/lib/report/digests";
 import { verifyInstalledGrader } from "./installed-grader";
 import type { OfflineConfig } from "./offline-config";
+import { ensureOfflineVmResources, VmResourcesSchema } from "./vm-resources";
 export type InventoryExec = (
   args: string[],
   signal?: AbortSignal,
@@ -24,6 +25,7 @@ export const InventorySchema = z.strictObject({
   browser: z.literal("false"),
   mcp: z.array(z.unknown()).length(0),
   files: z.record(z.string(), hash),
+  vmResources: VmResourcesSchema,
   worker: z.strictObject({
     id: z.string(),
     repoDigests: z.array(z.string()),
@@ -88,6 +90,7 @@ export async function collectOfflineInventory(
     "utf8",
   );
   touch();
+  const vmResources = await ensureOfflineVmResources(config, exec, signal);
   const files = JSON.parse(
     await exec(
       [
@@ -131,6 +134,7 @@ export async function collectOfflineInventory(
     browser,
     mcp,
     files,
+    vmResources,
     worker: {
       id: image.Id,
       repoDigests: image.RepoDigests ?? [],

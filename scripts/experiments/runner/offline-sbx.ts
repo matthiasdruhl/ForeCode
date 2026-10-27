@@ -148,6 +148,9 @@ export function createOfflineSbxAdapter(config: OfflineConfig): OfflineAdapter {
           await exec(node("lifecycle.mjs", ["cleanup", runId]), deadline);
         }
         await exec(["stop", config.graderSandbox], deadline);
+        // A local sbx restart resets kernel/cgroup controls. Reestablish and
+        // revalidate the reviewed resource envelope before restart recovery.
+        if (runIds.length) await current(deadline);
         for (const runId of runIds) {
           const result = JSON.parse(
             await exec(node("lifecycle.mjs", ["cleanup", runId]), deadline),

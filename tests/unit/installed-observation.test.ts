@@ -1,3 +1,4 @@
+import { syntheticVmResources } from "../helpers/synthetic-vm-resources";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   mkdtemp,
@@ -162,7 +163,23 @@ async function setup(mode = "normal") {
       stdout = JSON.stringify([
         { Id: id, RepoDigests: [], Os: "linux", Architecture: "arm64" },
       ]);
-    else if (args[0] === "exec" && args[2] === "python3") {
+    else if (args[0] === "exec" && args[1] === "-u") {
+      expect(args.slice(1, 7)).toEqual([
+        "-u",
+        "root",
+        config.graderSandbox,
+        "python3",
+        "-I",
+        "-c",
+      ]);
+      expect(args[7]).toContain("Fixed trusted offline-grader supervisor");
+      stdout = JSON.stringify(
+        mode === "vm-readback"
+          ? { ...syntheticVmResources(), kernelThreadsMax: 8192 }
+          : syntheticVmResources(config.vmPids),
+      );
+      if (mode === "vm-failure") exitCode = 1;
+    } else if (args[0] === "exec" && args[2] === "python3") {
       const script = args[5]!;
       if (script.includes("Read-only trusted inventory")) {
         inventories++;
@@ -241,7 +258,9 @@ describe("installed owner maintenance — SYNTHETIC; no actual guest evidence", 
       vmDiskBytes: config.vmDiskBytes,
       vmPids: config.vmPids,
     });
-    expect(record.observedVmEnforcement).toBeNull();
+    expect(record.observedVmEnforcement).toEqual(
+      syntheticVmResources(config.vmPids),
+    );
     expect(record.authority).toContain("REQUIRES_INDEPENDENT_OWNER_REVIEW");
     expect(record.bookingAcceptance).toBe("NOT_RUN");
     expect(smokeCalls()).toHaveLength(1);
@@ -257,7 +276,14 @@ describe("installed owner maintenance — SYNTHETIC; no actual guest evidence", 
       ).args,
     ).toEqual(["version"]);
   });
-  it.each(["controller", "modules", "executable", "running"])(
+  it.each([
+    "controller",
+    "modules",
+    "executable",
+    "running",
+    "vm-failure",
+    "vm-readback",
+  ])(
     "rejects %s substitution before installed tooling executes",
     async (mode) => {
       const { run, destination } = await setup(mode);

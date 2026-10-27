@@ -80,3 +80,11 @@ No sbx provisioning, guest command/start/stop, lifecycle/booking guest acceptanc
 ## Post-merge CI correction — October 27
 
 PR #4 merged as `4268fca6e002d8d8a7f5a3cfbfe4b380e166311f`; the branch/PR checks passed, but main CI hit a Linux proc-stat disappearance race in a test-only termination helper. Freshly authored follow-up work on `codex/fix-merge-ci` handles that exact ESRCH read error and adds deterministic positive/negative kernel-observation regressions. Production code, runtime/tooling identities, frozen contracts, normative pin, dependencies and workflow remain unchanged. Existing live/stopped-process, permission and heartbeat guards remain enabled. This is a CI test correction, not observed guest acceptance, agent execution or inference. No external planning/private operator source or artifacts were copied; no sandbox was changed.
+
+## Workstream A installed-runtime continuation — October 27
+
+Fresh event-authored work on `codex/workstream-a-live-booking-acceptance`, based on main `f146a304f0ec3eaf92d06c11079ce6d0bff33aca`, corrects a real installed-inventory digest mismatch: Python now sorts collected dependency rows by full POSIX relative path, matching the image auditor. An inert-file integration regression exercises the actual Python collector without executing copied Node, candidate code or ldd. Existing custody and isolation assertions remain intact. No frozen contract, dependency, model transport, fixture or workflow changes.
+
+The owner explicitly authorized protected grader installation, separate maintenance and one exact retained-lease recovery. A fresh trusted-tooling artifact was built/audited/exported; actual installed guest Node/dependency/controller/native smokes and stable inventories succeeded. Harmless synthetic denial probes ran separately. Raw outputs, inventories, operator configuration, archives, installation/recovery helpers and evidence remain private outside Git. Planning source/history/private operator tools were not copied or modified.
+
+VM PID enforcement and independent admission remain unresolved. Lifecycle/booking acceptance, coding-agent execution and inference remain NOT_RUN; no architecture, Meta-effectiveness or product-certificate claim is made.

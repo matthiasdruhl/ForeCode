@@ -1,6 +1,6 @@
 # Trusted booking tooling preparation
 
-The installed-verification follow-up now provides a fixed owner maintenance command and exact shared admission inventory: see [installed verification and current owner actions](BOOKING-INSTALLED-VERIFICATION.md). Previous-slice artifact pins below are historical after this implementation change; verify the new artifact before use. Guest maintenance/acceptance remain NOT_RUN.
+The installed-verification follow-up now provides a fixed owner maintenance command and exact shared admission inventory: see [installed verification and current owner actions](BOOKING-INSTALLED-VERIFICATION.md). Previous-slice artifact pins below are historical after this implementation change; verify the new artifact before use. Installed maintenance is now observed in the Workstream A follow-up; lifecycle/booking acceptance remain NOT_RUN.
 
 A real host-side tooling build, offline dependency smoke, installed-byte inventory and image export have now succeeded. This is preparation for the protected grader. Booking grading, guest lifecycle acceptance, guest-to-host containment, coding-agent execution and inference remain **NOT_RUN**. No `sbx` environment was started, installed, changed or stopped by this command.
 
@@ -116,3 +116,11 @@ The existing `runtime-files.py grader REVIEWED_NODE_SHA256` is the required inve
 Return the **complete** inventory shape produced by `offline-sbx.ts`, including stopped VM identity/image/mounts/auth/CPU/memory, effective policy/integrations, actual files/native/executable/mode digests, worker image inspect and configured reviewed limits. Independently retain finite enforced VM disk/PID observations and every required isolation/custody/owner obligation. `jsonDigest(inventory)` binds the full canonical object in the fresh offline review; preflight's inventory-file SHA identifies file bytes only. Do not substitute the private infrastructure single-function grader's receipts.
 
 The precise next action is the owner's review of these inputs and installation window. After installation and fresh independent review, rerun read-only preflight with private configuration/inventory, then the existing admitted lifecycle-only command and full booking command from the offline runbook. Real agent/provider execution remains a separate hard-disabled capability.
+
+## Workstream A installed observation — October 27
+
+The latest current artifact is `/private/tmp/forecode-workstream-a-toolchain-20261027-c`, superseding earlier source pins without editing historical artifacts. Implementation SHA-256 `b69a93e3294bf7737b736382034cd30bd945d9c8cd04db30a76198517ba51b45`; image `sha256:c1b610053f8160b54f8da7f84b227aa051f59bf91a785f7361bd95356d0c6036`; archive SHA-256 `66220857c6244b5ac9e6a0f6b3a3ca14ed5677fec49d1a8750e32ce2fbbebc61`. Node/package/lock/modules and all seventeen installed controller files are unchanged from the preceding artifact. The host-side Python inventory now sorts full relative paths to match the image auditor; see the installed-verification follow-up and implementation log.
+
+The owner authorized the empty-destination installation, separate installed verification and exact recovery of a retained maintenance lease. Actual guest smokes and stable installed inventories passed, with confirmed stop. Read-only preflight still reports owner action required: actual VM PID enforcement and independent review are absent. These observed installation results do not admit lifecycle/booking acceptance. Keep both enable switches false until a genuine fresh review is issued.
+
+A root-owned staged image archive must be hashed and loaded as guest root (`sbx exec -u root forecode-grader ...`); do not relax its file permissions to accommodate an ordinary guest account. Preserve failed command records and recover retained leases only under the owner's explicit decision.

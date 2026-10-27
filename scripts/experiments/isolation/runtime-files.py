@@ -123,6 +123,9 @@ def main():
                 trusted_metadata(p, directory=True)
             else:
                 raise ValueError('nonregular toolchain file')
+        # pathlib orders path components; the image auditor orders full POSIX
+        # relative strings (e.g. pkg.js precedes pkg/item.js). Bind the same rows.
+        rows.sort(key=lambda row: row[0])
         result['node_modules'] = hashlib.sha256(json.dumps(rows, separators=(',', ':')).encode()).hexdigest()
         for name in ['docker', 'python3', 'ldd']:
             executable = '/usr/bin/ldd' if name == 'ldd' else shutil.which(name, path='/usr/local/bin:/usr/bin:/bin')

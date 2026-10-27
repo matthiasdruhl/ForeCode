@@ -14,6 +14,7 @@ export function command(
     milliseconds?: number;
     maxBytes?: number;
     signal?: AbortSignal;
+    onSpawn?: (pid: number) => void;
   },
 ): Promise<Observation>;
 export function successful(result: Observation): boolean;

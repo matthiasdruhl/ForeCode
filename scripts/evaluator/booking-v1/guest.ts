@@ -1,10 +1,10 @@
 // TRUSTED grader microVM controller. Provisioned by the sandbox owner under
 // /opt/forecode-booking/controller, never copied to the agent VM or worker.
 // No candidate import occurs in this process. Only data crosses the RPC bridge.
+import { workerArguments } from "./worker-policy.mjs";
 import { command, successful } from "./runtime.mjs";
 import {
   cleanupOwned,
-  runLabel,
   validRun,
   registerController,
   unregisterController,
@@ -72,60 +72,16 @@ const stop = async (name: string) => {
 async function launch(mode: "rpc" | "build" | "typecheck" | "isolation") {
   const name = `forecode-booking-${input.runId}-${randomUUID()}`;
   containers.add(name);
-  const args = [
-    "run",
-    "--name",
+  const args = workerArguments({
     name,
-    "--label",
-    `${runLabel}=${input.runId}`,
-    "--restart",
-    "no",
-    "--init",
-    "--pull",
-    "never",
-    "--network",
-    "none",
-    "--read-only",
-    "--cap-drop",
-    "ALL",
-    "--security-opt",
-    "no-new-privileges:true",
-    "--user",
-    "65534:65534",
-    "--cpus",
-    "1",
-    "--memory",
-    "768m",
-    "--memory-swap",
-    "768m",
-    "--shm-size",
-    "16m",
-    "--pids-limit",
-    "64",
-    "--ulimit",
-    "nofile=256:256",
-    "--log-driver",
-    "none",
-    "--tmpfs",
-    "/tmp:rw,noexec,nosuid,size=32m",
-    "--tmpfs",
-    "/work:rw,nosuid,size=256m,mode=1777",
-    "--mount",
-    `type=bind,src=${source},dst=/source,readonly`,
-    "--mount",
-    `type=bind,src=${bridge},dst=/bridge,readonly`,
-    "--env",
-    "NEXT_TELEMETRY_DISABLED=1",
-    ...(mode === "rpc" ? ["--detach"] : []),
-    "--entrypoint",
-    "/usr/local/bin/node",
-    input.workerImage,
-    "--conditions=react-server",
-    "--import",
-    "/toolchain/node_modules/tsx/dist/loader.mjs",
-    "/bridge/worker.mjs",
+    runId: input.runId,
+    image: input.workerImage,
+    source,
+    bridge,
+    script: "worker.mjs",
     mode,
-  ];
+    detach: mode === "rpc",
+  });
   const result = await docker(args, undefined, mode === "rpc" ? 10000 : 200000);
   return { name, result };
 }

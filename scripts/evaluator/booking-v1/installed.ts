@@ -1,6 +1,11 @@
 // Exact files admitted and provisioned into the protected grader; no app source.
 export const controllerFiles = [
   "guest.ts",
+  "worker-policy.mjs",
+  "lifecycle-protocol.mjs",
+  "lifecycle-probes.mjs",
+  "lifecycle-driver.mjs",
+  "lifecycle-worker.mjs",
   "oracle-driver.ts",
   "oracle.ts",
   "http-oracle.ts",

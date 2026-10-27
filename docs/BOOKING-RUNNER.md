@@ -2,15 +2,16 @@
 
 Real coding-agent execution is **hard-disabled**, including with `enabled=true`. The previous adapter's stop → exec/export sequence could restart a stopped VM without establishing termination of detached processes. The concrete agent invocation and export path have been removed from the sbx adapter until a supervised agent boundary is reviewed and tested. No paid run is authorized by configuration examples or infrastructure PASS records.
 
-The next supported capability is the separate [no-inference acceptance command and owner handoff](BOOKING-OFFLINE-ACCEPTANCE.md). It uses only `forecode-grader`, four fixed candidate data transformations and resource-limited nested workers. It cannot import the paid runner or provider transport. Its review excludes inference/billing authority and keeps `enabled=false`; it requires independent isolation and owner/lease evidence. It does not weaken the full paid-experiment review, which still requires provider hard-budget evidence.
+The next supported capability is the separate [no-inference acceptance command and owner handoff](BOOKING-OFFLINE-ACCEPTANCE.md). It uses only `forecode-grader`, eight fixed harmless lifecycle probes, four fixed candidate data transformations and resource-limited nested workers. The lifecycle suite runs before booking grades. It cannot import the paid runner or provider transport. Its review excludes inference/billing authority and keeps `enabled=false`; it requires independent isolation and owner/lease evidence. It does not weaken the full paid-experiment review, which still requires provider hard-budget evidence.
 
 ```sh
 npm run acceptance:booking -- --help
 npm run acceptance:booking -- --config scripts/experiments/isolation/offline.example.json
+npm run acceptance:booking -- --config scripts/experiments/isolation/offline.example.json --lifecycle-only
 npm run bundle:booking -- --output /new/absolute/private/runtime-bundle
 ```
 
-The first two commands only print help or validate configuration; neither invokes sbx. Bundle preparation reads a fixed trusted tooling/controller allowlist, refuses existing output and records hashes without building, installing or executing source. Keep the output outside the application and planning trees. Run `--execute` only after the handoff's owner actions and review are complete.
+The help and configuration commands only print help or validate configuration; neither invokes sbx. Bundle preparation reads a fixed trusted tooling/controller allowlist, refuses existing output and records hashes without building, installing or executing source. Keep the output outside the application and planning trees. Run `--execute` only after the handoff's owner actions and review are complete.
 
 ## Preserved experiment contracts
 
@@ -27,6 +28,8 @@ Only the standalone fixture may enter a future agent workspace. Never transfer F
 Source capture rejects traversal, symlinks, hardlinks, duplicate/noncanonical encodings, changed configuration/visible tests and excess bytes. Captures and frozen candidates are rehashed. Runtime identity binds implementation, image, Node, dependency lock/tree, limits, suite and policy. The installed controller, ESM package scope, tooling, image identity and native Node loader closure are checked against the reviewed inventory. Hashes and JSON PASS fields alone do not authenticate custody.
 
 Cleanup now terminates a registered trusted guest controller by PID **and Linux process birth identity**, then removes only workers labelled with the current run UUID, rechecks absence, stops/restarts the grader, checks absence again and confirms stopped state. Interruption retains the lease even if cleanup returns successfully. Cleanup failure prevents publication and retains observations for owner recovery. No VM is deleted/reset/reconfigured, no global forwarding/network policy changes, and no unrelated container cleanup occurs.
+
+`--lifecycle-only --execute` runs the same admitted fixed probes and restart/absence verification without capturing or grading booking source and without creating check receipts. The eight cases are normal exit, exit 7, timeout, SIGINT, SIGTERM, output cap, forcibly killed driver with a detached harmless worker descendant, and a controlled cleanup refusal followed by recovery. The refusal is injected before removal; it is not a claim that a real Docker removal command failed. Heartbeats must advance while attempts to mutate a read-only export marker fail. Exact source marker hashes, process exits/signals/output hashes, cleanup and restart observations are retained. A revived controller record after restart fails acceptance even when no container remains. The probes and booking grader share the same worker policy module.
 
 These mechanisms need actual owner-reviewed runtime testing. They do not establish that an agent with guest sudo can be supervised safely: that separate paid path stays hard-disabled. The present acceptance suite checks public baseline behavior, distinct source selection and forged candidate stdout; it is not an agent trial, Meta contribution, architecture comparison, hidden holdout or completed certificate. Unknown metrics remain null.
 

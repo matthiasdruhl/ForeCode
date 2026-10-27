@@ -3,7 +3,7 @@ import { spawn } from "node:child_process";
 export function command(
   executable,
   args,
-  { input, milliseconds = 5000, maxBytes = 1048576, signal } = {},
+  { input, milliseconds = 5000, maxBytes = 1048576, signal, onSpawn } = {},
 ) {
   return new Promise((resolve) => {
     const started = Date.now();
@@ -72,6 +72,11 @@ export function command(
         elapsedMs: Date.now() - started,
       });
     });
+    try {
+      if (child.pid) onSpawn?.(child.pid);
+    } catch {
+      stop("spawn_error");
+    }
   });
 }
 export const successful = (p) =>

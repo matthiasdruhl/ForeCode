@@ -1,3 +1,4 @@
+import { syntheticLifecycleReport } from "../helpers/synthetic-lifecycle";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   chmod,
@@ -126,6 +127,14 @@ function synthetic(mode = "normal"): OfflineAdapter {
     kind: "synthetic-development",
     observations: () => [],
     admit: vi.fn(async () => ({ synthetic: true })),
+    probe: vi.fn<OfflineAdapter["probe"]>(async (input) => ({
+      exitCode: 0,
+      reason: "completed",
+      signal: null,
+      stdout: JSON.stringify(syntheticLifecycleReport(input)),
+      stderr: "",
+      elapsedMs: 1,
+    })),
     grade: vi.fn<OfflineAdapter["grade"]>(async (input) => {
       // Inspect inert source bytes only. This adapter does not prove guest grading.
       const service = Buffer.from(
@@ -175,9 +184,14 @@ function synthetic(mode = "normal"): OfflineAdapter {
         elapsedMs: 1,
       };
     }),
-    cleanup: vi.fn(async () => {
+    cleanup: vi.fn(async (runIds) => {
       if (mode === "cleanup") throw new Error("synthetic cleanup failure");
-      return { synthetic: true };
+      return {
+        touched: true,
+        restartChecked: true,
+        absentRunIds: [...runIds],
+        observations: [],
+      };
     }),
   };
 }
@@ -248,6 +262,7 @@ describe("offline acceptance — SYNTHETIC DEVELOPMENT, no sandbox or inference"
       "grade",
       "kind",
       "observations",
+      "probe",
     ]);
   });
   it("requires real scoped evidence without provider-budget fabrication", async () => {
@@ -322,6 +337,115 @@ describe("offline acceptance — SYNTHETIC DEVELOPMENT, no sandbox or inference"
         config,
       ),
     ).rejects.toThrow("image mismatch");
+  });
+  it("withholds probes and cleanup if the lease changes during admission", async () => {
+    const { config } = await setup(),
+      adapter = synthetic();
+    adapter.admit = async () => {
+      await writeFile(
+        path.join(config.coordinationRoot, ".booking-run.lock/owner.json"),
+        "another owner",
+      );
+      return { synthetic: true };
+    };
+    const record = await runOfflineAcceptance(
+      config,
+      adapter,
+      new AbortController().signal,
+    );
+    expect(record.status).toBe("failed");
+    expect(record.entries).toEqual([]);
+    expect(adapter.probe).not.toHaveBeenCalled();
+    expect(adapter.cleanup).not.toHaveBeenCalled();
+  });
+  it("runs probe-only mode without candidate capture, grading or receipts", async () => {
+    const { config } = await setup(),
+      adapter = synthetic();
+    const record = await runOfflineAcceptance(
+      config,
+      adapter,
+      new AbortController().signal,
+      "lifecycle-only",
+    );
+    expect(record.status).toBe("completed");
+    expect(record.mode).toBe("lifecycle-only");
+    expect(record.entries).toEqual([]);
+    expect(record.verdicts).toEqual([]);
+    expect(record.lifecycle?.cases).toHaveLength(8);
+    expect(adapter.grade).not.toHaveBeenCalled();
+    expect(await readdir(config.protectedRoot)).toEqual([record.acceptanceId]);
+    expect(record.limits.lifecycleWorkerSeconds).toBe(30);
+  });
+  it.each([
+    "missing",
+    "stale",
+    "cleanup-unconfirmed",
+    "timeout",
+    "output-limit",
+  ])("rejects lifecycle %s before booking grading", async (mode) => {
+    const { config } = await setup(),
+      adapter = synthetic();
+    adapter.probe = async (input) => {
+      const report = syntheticLifecycleReport(input);
+      if (mode === "missing") report.cases.pop();
+      if (mode === "stale") report.requestSha256 = hash;
+      if (mode === "cleanup-unconfirmed") report.cleanupConfirmed = false;
+      return {
+        reason:
+          mode === "timeout"
+            ? "timed_out"
+            : mode === "output-limit"
+              ? "output_limit"
+              : "completed",
+        exitCode: 0,
+        signal: null,
+        stdout: JSON.stringify(report),
+        stderr: "SYNTHETIC probe diagnostic",
+        elapsedMs: 1,
+      };
+    };
+    const record = await runOfflineAcceptance(
+      config,
+      adapter,
+      new AbortController().signal,
+    );
+    expect(record.status).toBe("failed");
+    expect(record.entries).toEqual([]);
+    expect(adapter.grade).not.toHaveBeenCalled();
+    expect(adapter.cleanup).toHaveBeenCalled();
+    expect(await readdir(config.coordinationRoot)).toContain(
+      ".booking-run.lock",
+    );
+    expect(
+      await readFile(
+        path.join(
+          config.protectedRoot,
+          record.acceptanceId,
+          "lifecycle-stderr.txt",
+        ),
+        "utf8",
+      ),
+    ).toBe("SYNTHETIC probe diagnostic");
+  });
+  it("forbids receipt publication without stop/restart absence evidence", async () => {
+    const { config } = await setup(),
+      adapter = synthetic();
+    adapter.cleanup = vi.fn(async () => ({
+      touched: true,
+      restartChecked: true,
+      absentRunIds: [],
+      observations: [],
+    }));
+    const record = await runOfflineAcceptance(
+      config,
+      adapter,
+      new AbortController().signal,
+    );
+    expect(record.entries).toEqual([]);
+    expect(record.status).toBe("failed");
+    expect(await readdir(config.coordinationRoot)).toContain(
+      ".booking-run.lock",
+    );
   });
   it("routes baseline and distinct final data through publication, loading and verdict normalization", async () => {
     const { config } = await setup(),

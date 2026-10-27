@@ -18,6 +18,12 @@ import { offlineConfigurationDigest } from "../isolation/offline-gate";
 import type { OfflineAdapter } from "./offline-sbx";
 import { acceptanceCandidate, acceptanceScenarios } from "./offline-scenarios";
 import { validateGradeReport } from "./protocol";
+import {
+  createLifecycleRequest,
+  validateLifecycleReport,
+  validateRestartCleanup,
+} from "./lifecycle-protocol";
+import { workerLimits } from "../../evaluator/booking-v1/worker-policy.mjs";
 import { acquireBookingLease } from "./lease";
 
 const project = fileURLToPath(new URL("../../../", import.meta.url));
@@ -25,6 +31,7 @@ export async function runOfflineAcceptance(
   config: OfflineConfig,
   adapter: OfflineAdapter,
   userSignal: AbortSignal,
+  mode: "booking-and-lifecycle" | "lifecycle-only" = "booking-and-lifecycle",
 ) {
   const root = await privateDirectory(config.protectedRoot),
     scratch = await privateDirectory(config.scratchRoot);
@@ -44,13 +51,16 @@ export async function runOfflineAcceptance(
     vmMemoryBytes: 4 * 1024 ** 3,
     vmDiskBytes: config.vmDiskBytes,
     vmPids: config.vmPids,
-    workerCpu: 1,
-    workerMemoryBytes: 768 * 1024 ** 2,
-    workerPids: 64,
-    workerWorkBytes: 256 * 1024 ** 2,
-    workerTmpBytes: 32 * 1024 ** 2,
-    workerShmBytes: 16 * 1024 ** 2,
-    workerDescriptors: 256,
+    workerCpu: workerLimits.cpu,
+    workerMemoryBytes: workerLimits.memoryBytes,
+    workerPids: workerLimits.pids,
+    workerWorkBytes: workerLimits.workBytes,
+    workerTmpBytes: workerLimits.tempBytes,
+    workerShmBytes: workerLimits.shmBytes,
+    workerDescriptors: workerLimits.descriptors,
+    lifecycleSeconds: 90,
+    lifecycleWorkerSeconds: 30,
+    lifecycleWorkerOutputBytes: 4096,
     acceptanceSeconds: config.maxSeconds,
     graderSeconds: 580,
     cleanupSeconds: 60,
@@ -78,6 +88,12 @@ export async function runOfflineAcceptance(
   }[] = [];
   const observations: unknown[] = [],
     runIds: string[] = [];
+  const lifecycleRequest = createLifecycleRequest(
+    acceptanceId,
+    pins.evaluatorSha256,
+    config.workerImage,
+  );
+  let lifecycle: ReturnType<typeof validateLifecycleReport> | null = null;
   let inventory: unknown = null,
     cleanup: unknown = null,
     failure: string | null = null,
@@ -89,11 +105,56 @@ export async function runOfflineAcceptance(
     signal.throwIfAborted();
     await lease.assertOwned();
     inventory = await adapter.admit(pins.evaluatorSha256, signal);
-    const baseline = await captureReviewedTree(
-      path.join(project, "fixtures/booking-v1"),
-      acceptanceId,
+    runIds.push(
+      lifecycleRequest.suiteId,
+      ...Object.values(lifecycleRequest.runs),
     );
-    for (const scenario of acceptanceScenarios) {
+    await lease.assertOwned();
+    const probe = await adapter.probe(lifecycleRequest, signal);
+    observations.push({
+      stage: "lifecycle",
+      ...probe,
+      stdout: sha256(probe.stdout),
+      stderr: sha256(probe.stderr),
+    });
+    await writeFile(
+      path.join(directory, "lifecycle-observed.txt"),
+      probe.stdout,
+      { flag: "wx", mode: 0o400 },
+    );
+    await writeFile(
+      path.join(directory, "lifecycle-stderr.txt"),
+      probe.stderr,
+      { flag: "wx", mode: 0o400 },
+    );
+    if (
+      probe.reason !== "completed" ||
+      probe.exitCode !== 0 ||
+      signal.aborted
+    ) {
+      interrupted = true;
+      throw new Error("Lifecycle suite interrupted");
+    }
+    try {
+      lifecycle = validateLifecycleReport(
+        JSON.parse(probe.stdout),
+        lifecycleRequest,
+      );
+    } catch {
+      interrupted = true;
+      throw new Error("Lifecycle observations incomplete or invalid");
+    }
+    const baseline =
+      mode === "lifecycle-only"
+        ? null
+        : await captureReviewedTree(
+            path.join(project, "fixtures/booking-v1"),
+            acceptanceId,
+          );
+    for (const scenario of mode === "lifecycle-only"
+      ? []
+      : acceptanceScenarios) {
+      if (!baseline) throw new Error("Reviewed baseline missing");
       signal.throwIfAborted();
       const runId = randomUUID();
       runIds.push(runId);
@@ -174,6 +235,7 @@ export async function runOfflineAcceptance(
     try {
       await lease.assertOwned();
       cleanup = await adapter.cleanup(runIds);
+      if (lifecycle) validateRestartCleanup(cleanup, runIds);
       cleaned = true;
     } catch {
       failure =
@@ -237,6 +299,9 @@ export async function runOfflineAcceptance(
     acceptanceId,
     scope: config.scope,
     adapter: adapter.kind,
+    mode,
+    lifecycleRequest,
+    lifecycle,
     status: failure ? "failed" : "completed",
     startedAt,
     endedAt: new Date().toISOString(),

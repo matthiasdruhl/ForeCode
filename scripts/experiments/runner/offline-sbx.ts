@@ -5,12 +5,17 @@ import { sha256, jsonDigest } from "../../../src/lib/report/digests";
 import { controllerFiles } from "../../evaluator/booking-v1/installed";
 import { admitOffline, reviewOffline } from "../isolation/offline-gate";
 import type { OfflineConfig } from "../isolation/offline-config";
+import {
+  validateRestartObservation,
+  type LifecycleRequest,
+} from "./lifecycle-protocol";
 import type { GradeInput } from "./protocol";
 import { boundedProcess, type ProcessResult } from "./process";
 export type OfflineAdapter = {
   kind: "sbx-offline" | "synthetic-development";
   admit(implementation: string, signal: AbortSignal): Promise<unknown>;
   grade(input: GradeInput, signal: AbortSignal): Promise<ProcessResult>;
+  probe(input: LifecycleRequest, signal: AbortSignal): Promise<ProcessResult>;
   cleanup(runIds: readonly string[]): Promise<unknown>;
   observations(): unknown;
 };
@@ -211,6 +216,30 @@ export function createOfflineSbxAdapter(config: OfflineConfig): OfflineAdapter {
       fingerprint = jsonDigest(result);
       return result;
     },
+    async probe(input, signal) {
+      await current(signal);
+      if (
+        input.implementationSha256 !== implementation ||
+        input.workerImage !== config.workerImage
+      )
+        throw new Error("Lifecycle runtime mismatch");
+      return boundedProcess(
+        config.sbx,
+        [
+          "exec",
+          "-i",
+          config.graderSandbox,
+          "/opt/forecode-booking/bin/node",
+          "/opt/forecode-booking/controller/lifecycle-probes.mjs",
+        ],
+        {
+          milliseconds: 95_000,
+          maxBytes: config.maxOutputBytes,
+          signal,
+          input: JSON.stringify(input),
+        },
+      );
+    },
     async grade(input, signal) {
       await current(signal);
       return boundedProcess(
@@ -239,6 +268,7 @@ export function createOfflineSbxAdapter(config: OfflineConfig): OfflineAdapter {
       // guest controller/container. Remove only exact run labels, then restart
       // and verify absence; a VM stop alone never grants publication.
       const deadline = AbortSignal.timeout(60_000);
+      const absentRunIds: string[] = [];
       try {
         // Recheck installed controller/toolchain custody before executing recovery.
         // If admission failed before any grade, only stop the VM we started.
@@ -253,8 +283,8 @@ export function createOfflineSbxAdapter(config: OfflineConfig): OfflineAdapter {
           const result = JSON.parse(
             await exec(node("lifecycle.mjs", ["cleanup", runId]), deadline),
           );
-          if (result.removed !== 0 || result.remaining !== 0)
-            throw new Error("Workers resumed after stop");
+          validateRestartObservation(result, runId);
+          absentRunIds.push(runId);
         }
         await exec(["stop", config.graderSandbox], deadline);
         const state = JSON.parse(
@@ -266,7 +296,12 @@ export function createOfflineSbxAdapter(config: OfflineConfig): OfflineAdapter {
         // Even if narrow cleanup fails, attempt the VM stop; retain the lease.
         await exec(["stop", config.graderSandbox], deadline);
       }
-      return { touched: true, restartChecked: true, observations: observed };
+      return {
+        touched: true,
+        restartChecked: true,
+        absentRunIds,
+        observations: observed,
+      };
     },
   };
 }

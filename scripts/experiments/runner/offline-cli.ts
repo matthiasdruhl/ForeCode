@@ -8,13 +8,14 @@ const { values } = parseArgs({
   strict: true,
   options: {
     config: { type: "string" },
+    "lifecycle-only": { type: "boolean", default: false },
     execute: { type: "boolean", default: false },
     help: { type: "boolean", default: false },
   },
 });
 if (values.help)
   process.stdout.write(
-    "Developer-local NO-INFERENCE booking acceptance. --config /private/offline.json [--execute]\nDefault validates only. Execution requires independently reviewed existing runtime/owner authority. Fixed scenarios only; no source, shell, prompt, model or provider options. See docs/BOOKING-OFFLINE-ACCEPTANCE.md.\n",
+    "Developer-local NO-INFERENCE booking acceptance. --config /private/offline.json [--execute] [--lifecycle-only]\nDefault validates only. Execution requires independently reviewed existing runtime/owner authority. Fixed scenarios only; no source, shell, prompt, model or provider options. See docs/BOOKING-OFFLINE-ACCEPTANCE.md.\n",
   );
 else {
   const cancellation = new AbortController(),
@@ -41,10 +42,14 @@ else {
         config,
         createOfflineSbxAdapter(config),
         cancellation.signal,
+        values["lifecycle-only"] ? "lifecycle-only" : "booking-and-lifecycle",
       );
       process.stdout.write(
         JSON.stringify({
           acceptanceId: result.acceptanceId,
+          mode: result.mode,
+          bookingGrading:
+            result.mode === "lifecycle-only" ? "NOT_RUN" : result.status,
           status: result.status,
           inference: "NOT_RUN",
           realAgentExecution: "NOT_RUN",

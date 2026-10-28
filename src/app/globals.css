@@ -1362,3 +1362,14 @@ dd.ready > span {
     grid-template-columns: 1fr;
   }
 }
+
+.certificate-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.certificate-report {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}

@@ -185,13 +185,13 @@ export function IntentWorkspace({
               <small>Inspect protected check history</small>
             </span>
           </Link>
-          <div aria-disabled="true">
+          <Link href="/certificates" prefetch={false}>
             <span className="step-number">04</span>
             <span>
-              Certificate<small>Inspect scoped evidence</small>
+              Recorded certificates
+              <small>Inspect and export scoped evidence</small>
             </span>
-            <span className="step-lock">—</span>
-          </div>
+          </Link>
         </nav>
         <div className="sidebar-footer">
           <span className="build-indicator" /> Foundation build{" "}

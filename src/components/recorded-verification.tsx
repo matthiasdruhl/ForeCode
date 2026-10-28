@@ -21,7 +21,7 @@ const metricLabels = {
   filesTouched: "Files touched",
 };
 
-function Recording({ recording }: { recording: RecordedVerification }) {
+export function Recording({ recording }: { recording: RecordedVerification }) {
   return (
     <article
       className="recording-card"
@@ -177,9 +177,12 @@ export function RecordedVerificationView({
         <Link href="/" className="brand">
           forecode<span className="brand-dot">.</span>
         </Link>
-        <nav aria-label="Workspace navigation">
+        <nav aria-label="Workspace navigation" className="certificate-nav">
           <Link href="/" className="button-secondary">
             Back to workspace
+          </Link>
+          <Link href="/certificates" className="button-secondary">
+            Recorded certificates
           </Link>
         </nav>
       </header>

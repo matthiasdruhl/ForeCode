@@ -104,7 +104,10 @@ export const AcceptanceSchema = z.strictObject({
   lifecycleRequest: z.unknown(),
   lifecycle: z.unknown(),
   inventory: z.unknown(),
-  adapterObservations: z.array(z.unknown()).max(100),
+  // The fixed real adapter records 110 observations across eight inventory
+  // checks and run-scoped cleanup. Keep a finite diagnostic ceiling above that
+  // complete workflow; original byte bounds and authentication remain separate.
+  adapterObservations: z.array(z.unknown()).max(128),
   observations: z.array(z.record(z.string(), z.unknown())).max(5),
   cleanup: z.unknown(),
   failure: z.string().max(1000).nullable(),

@@ -57,63 +57,39 @@ if (mode === "build" || mode === "typecheck") {
 const { createBookingService } =
   await import("/work/task/src/server/booking-service.ts");
 const { createBookingHttp } = await import("/work/task/src/server/http.ts");
-const subjects = new Map();
-let next = 0;
+const team = mode === "rpc-team";
+if (mode !== "rpc" && !team) throw new Error("Unsupported worker mode.");
+const { createBehaviorDispatcher, rpcLimit } =
+  await import("/bridge/team-rpc.mjs");
+const createTeamBenchmark = team
+  ? (await import("/work/task/src/server/team-benchmark.ts"))
+      .createTeamBenchmark
+  : undefined;
+const dispatch = createBehaviorDispatcher({
+  createBookingService,
+  createBookingHttp,
+  createTeamBenchmark,
+  team,
+});
 createServer(async (req, res) => {
-  let input = "";
+  const chunks = [];
+  let used = 0;
   for await (const chunk of req) {
-    input += chunk;
-    if (input.length > 65536) {
+    used += chunk.length;
+    if (used > rpcLimit) {
       req.destroy();
       return;
     }
+    chunks.push(chunk);
   }
+  let input;
   try {
-    const p = JSON.parse(input);
-    let result;
-    if (p.op === "ping") result = true;
-    else if (p.op === "new-domain" || p.op === "new-http") {
-      let id = 0;
-      const service = createBookingService({
-        ...p.options,
-        now: () => new Date("2026-11-01T00:00:00Z"),
-        newId: () => `oracle-${++id}`,
-      });
-      const subject =
-        p.op === "new-http"
-          ? createBookingHttp(service, () => p.viewer)
-          : service;
-      result = String(++next);
-      subjects.set(result, subject);
-    } else {
-      const subject = subjects.get(p.subject);
-      if (!subject) throw new Error("No subject");
-      if (p.op === "domain") result = subject[p.method](...p.args);
-      else {
-        const args = p.request
-          ? [
-              new Request(p.request.url, {
-                method: p.request.method,
-                headers: p.request.headers,
-                ...(p.request.body === null ? {} : { body: p.request.body }),
-              }),
-              ...p.args,
-            ]
-          : [];
-        const response = await subject[p.method](...args);
-        result = {
-          status: response.status,
-          body: await response.text(),
-          headers: [...response.headers],
-        };
-      }
-    }
-    res.end(JSON.stringify({ result }));
-  } catch (e) {
-    res.end(
-      JSON.stringify({
-        error: { code: typeof e?.code === "string" ? e.code : "BRIDGE_ERROR" },
-      }),
+    input = new TextDecoder("utf-8", { fatal: true }).decode(
+      Buffer.concat(chunks),
     );
+  } catch {
+    res.end(JSON.stringify({ error: { code: "BRIDGE_ERROR" } }));
+    return;
   }
+  res.end(await dispatch(input));
 }).listen(4318, "127.0.0.1");

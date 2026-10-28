@@ -4,6 +4,10 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { evaluateRemoteDomain, evaluateRemoteHttp } from "./remote-oracles";
+import { teamOnlyCheckIds, validateTeamProfile } from "./grade-profile";
+import { runInstalledTeamCheck } from "./team-installation";
+import { decodeBehaviorReply, parseBehaviorRpc } from "./team-rpc.mjs";
+import { AssertionError } from "node:assert";
 function boundary(files: { path: string; base64: string }[]): boolean {
   return files
     .filter((f) => /\.[cm]?[jt]sx?$/.test(f.path))
@@ -70,18 +74,30 @@ if (kind === "boundary") {
   );
   process.exitCode = safe ? 0 : 1;
 } else {
+  const future = (teamOnlyCheckIds as readonly string[]).includes(kind ?? "");
   if (
-    !["baseline-domain", "http-integration"].includes(kind ?? "") ||
+    (!["baseline-domain", "http-integration"].includes(kind ?? "") &&
+      !future) ||
     !/^forecode-booking-[a-f0-9-]{36}-[a-f0-9-]{36}$/.test(name ?? "")
   )
     throw new Error("Invalid oracle operation.");
+  let profile;
+  if (future) {
+    const bytes = readFileSync(0);
+    if (bytes.length > 8192) throw new Error("Profile input bound.");
+    profile = validateTeamProfile(
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+    );
+  }
   const rpc = (data: unknown) => {
+    const input = JSON.stringify(data);
+    parseBehaviorRpc(input, future);
     const result = spawnSync(
       "docker",
       ["exec", "-i", name!, "/usr/local/bin/node", "/bridge/client.mjs"],
       {
         encoding: "utf8",
-        input: JSON.stringify(data),
+        input,
         timeout: 5000,
         maxBuffer: 65536,
         env: { NODE_ENV: "production", PATH: "/usr/local/bin:/usr/bin:/bin" },
@@ -89,16 +105,29 @@ if (kind === "boundary") {
     );
     if (result.error || result.signal || result.status !== 0)
       throw new Error("Worker RPC failed.");
-    const body = JSON.parse(result.stdout);
+    const body = decodeBehaviorReply(result.stdout);
     if (body.error)
       throw Object.assign(new Error("Candidate error"), {
         code: body.error.code,
       });
     return body.result;
   };
-  const rows = await (
-    kind === "baseline-domain" ? evaluateRemoteDomain : evaluateRemoteHttp
-  )(rpc);
-  process.stdout.write(rows.map((row) => `${row.id}:${row.status}`).join(","));
-  process.exitCode = rows.every((row) => row.status === "pass") ? 0 : 1;
+  if (future && profile) {
+    try {
+      await runInstalledTeamCheck(kind!, profile, rpc);
+      process.stdout.write("Protected team check completed.");
+      process.exitCode = 0;
+    } catch (error) {
+      process.stdout.write("Protected team check did not pass.");
+      process.exitCode = error instanceof AssertionError ? 1 : 2;
+    }
+  } else {
+    const rows = await (
+      kind === "baseline-domain" ? evaluateRemoteDomain : evaluateRemoteHttp
+    )(rpc);
+    process.stdout.write(
+      rows.map((row) => `${row.id}:${row.status}`).join(","),
+    );
+    process.exitCode = rows.every((row) => row.status === "pass") ? 0 : 1;
+  }
 }

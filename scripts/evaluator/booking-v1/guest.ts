@@ -22,12 +22,25 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { GradeInput } from "../../experiments/runner/protocol";
 import type { GradeReport } from "../../experiments/runner/protocol";
+import {
+  validateGradeInput,
+  selectedChecks,
+  validateGradeReport,
+} from "./grade-profile";
+import { requireInstalledTeamProfile } from "./team-installation";
+import { decodeBehaviorReply } from "./team-rpc.mjs";
 
 const MAX = 1_048_576;
 const raw = readFileSync(0);
 if (raw.length > 12_000_000) throw new Error("Input bound");
-const input = JSON.parse(raw.toString()) as GradeInput;
+const input: GradeInput = validateGradeInput(
+  JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(raw)),
+);
 validRun(input.runId);
+// Fail before any registration, scratch write or Docker operation if the exact
+// protected future installation is absent/substituted. Baseline never loads it.
+const profile = input.evaluationProfile;
+const installed = profile ? await requireInstalledTeamProfile(profile) : null;
 const cancellation = new AbortController();
 const cancel = () => cancellation.abort();
 process.on("SIGINT", cancel);
@@ -69,7 +82,10 @@ const stop = async (name: string) => {
   if (successful(result)) containers.delete(name);
   else throw new Error("Worker cleanup failed.");
 };
-async function launch(mode: "rpc" | "build" | "typecheck" | "isolation") {
+async function launch(
+  mode: "rpc" | "rpc-team" | "build" | "typecheck" | "isolation",
+) {
+  if (cancellation.signal.aborted) throw new Error("Grading cancelled.");
   const name = `forecode-booking-${input.runId}-${randomUUID()}`;
   containers.add(name);
   const args = workerArguments({
@@ -80,9 +96,13 @@ async function launch(mode: "rpc" | "build" | "typecheck" | "isolation") {
     bridge,
     script: "worker.mjs",
     mode,
-    detach: mode === "rpc",
+    detach: mode === "rpc" || mode === "rpc-team",
   });
-  const result = await docker(args, undefined, mode === "rpc" ? 10000 : 200000);
+  const result = await docker(
+    args,
+    undefined,
+    mode === "rpc" || mode === "rpc-team" ? 10000 : 200000,
+  );
   return { name, result };
 }
 async function rpc(name: string, data: unknown): Promise<unknown> {
@@ -91,7 +111,7 @@ async function rpc(name: string, data: unknown): Promise<unknown> {
     data,
   );
   if (!successful(result)) throw new Error("Worker RPC failed.");
-  const body = JSON.parse(result.stdout);
+  const body = decodeBehaviorReply(result.stdout);
   if (body.error)
     throw Object.assign(new Error("Candidate error"), {
       code: body.error.code,
@@ -110,7 +130,12 @@ function oracleProcess(kind: string, name?: string, data?: unknown) {
       ...(name ? [name] : []),
     ],
     {
-      input: data === undefined ? undefined : JSON.stringify(data),
+      input:
+        data === undefined
+          ? profile && kind.startsWith("team-permissions-")
+            ? JSON.stringify(profile)
+            : undefined
+          : JSON.stringify(data),
       milliseconds: 60000,
       maxBytes: 65536,
       signal: cancellation.signal,
@@ -151,7 +176,7 @@ try {
     input.candidate.runId !== input.runId
   )
     throw new Error("Candidate identity mismatch.");
-  for (const name of ["worker.mjs", "client.mjs", "probe.mjs"])
+  for (const name of ["worker.mjs", "client.mjs", "probe.mjs", "team-rpc.mjs"])
     writeFileSync(
       path.join(bridge, name),
       readFileSync(fileURLToPath(new URL(name, import.meta.url))),
@@ -172,8 +197,11 @@ try {
     });
     await stop(name);
   }
-  for (const kind of ["baseline-domain", "http-integration"] as const) {
-    const { name, result: startup } = await launch("rpc");
+  for (const kind of selectedChecks(profile).filter(
+    (id) => !["typecheck", "build", "boundary"].includes(id),
+  )) {
+    const future = kind.startsWith("team-permissions-");
+    const { name, result: startup } = await launch(future ? "rpc-team" : "rpc");
     try {
       if (!successful(startup)) throw new Error("Worker startup failed.");
       let ready = false;
@@ -190,12 +218,19 @@ try {
         result.reason !== "completed" || result.signal ? null : result.status;
       checks.push({
         id: kind,
-        status: exitCode === null ? "error" : exitCode === 0 ? "pass" : "fail",
+        status:
+          exitCode === null || (future && exitCode !== 0 && exitCode !== 1)
+            ? "error"
+            : exitCode === 0
+              ? "pass"
+              : "fail",
         exitCode,
         detail:
           exitCode === null
             ? "Oracle process interrupted."
-            : result.stdout.slice(0, 2048),
+            : future
+              ? "Protected team oracle process observed; private diagnostics withheld."
+              : result.stdout.slice(0, 2048),
       });
     } catch {
       checks.push({
@@ -235,10 +270,28 @@ try {
     evaluatorSha256: input.evaluatorSha256,
     testSuiteSha256: input.testSuiteSha256,
     requiredPolicySha256: input.requiredPolicySha256,
+    ...(profile ? { evaluationProfile: profile } : {}),
     checks,
   };
   await cleanupOwned(input.runId);
   if (cancellation.signal.aborted) throw new Error("Grading cancelled");
+  if (
+    profile &&
+    JSON.stringify(await requireInstalledTeamProfile(profile)) !==
+      JSON.stringify(installed)
+  )
+    throw new Error("Private oracle changed during grading.");
+  validateGradeReport(
+    report,
+    {
+      runId: input.runId,
+      evaluatedTreeSha256: input.evaluatedTreeSha256,
+      evaluatorSha256: input.evaluatorSha256,
+      testSuiteSha256: input.testSuiteSha256,
+      requiredPolicySha256: input.requiredPolicySha256,
+    },
+    profile,
+  );
   process.stdout.write(JSON.stringify(report));
 } finally {
   clearTimeout(deadline);

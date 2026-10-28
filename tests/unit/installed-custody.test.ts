@@ -9,6 +9,7 @@ import {
   symlink,
   link,
   mkdir,
+  open,
 } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
@@ -66,6 +67,49 @@ print(json.dumps(module.metadata, sort_keys=True))
   );
 }
 describe("installed custody guards — synthetic inert files, no VM or runtime execution", () => {
+  it("hashes a current-size inert Codex artifact only with its explicit bounded allowance", async () => {
+    const root = await realpath(
+      await mkdtemp(path.join(tmpdir(), "forecode-codex-size-")),
+    );
+    roots.push(root);
+    const file = path.join(root, "inert-data");
+    const handle = await open(file, "wx", 0o644);
+    await handle.truncate(269094232);
+    await handle.close();
+    const observed = spawnSync(
+      "python3",
+      [
+        "-I",
+        "-c",
+        `
+import importlib.util, sys, json
+sys.dont_write_bytecode = True
+spec = importlib.util.spec_from_file_location('inventory', sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+try:
+    module.hashed(sys.argv[2])
+    raise AssertionError('default grader bound widened')
+except ValueError:
+    pass
+module.total = 0
+accepted = module.hashed(sys.argv[2], maximum_bytes=384 * 1024**2)
+module.total = 0
+try:
+    module.hashed(sys.argv[2], maximum_bytes=269094231)
+    raise AssertionError('explicit executable bound ignored')
+except ValueError:
+    pass
+print(json.dumps({'digest': accepted}))
+`,
+        path.resolve("scripts/experiments/isolation/runtime-files.py"),
+        file,
+      ],
+      { encoding: "utf8", timeout: 5000, maxBuffer: 8192 },
+    );
+    expect(observed.status, observed.stderr).toBe(0);
+    expect(JSON.parse(observed.stdout).digest).toMatch(/^[a-f0-9]{64}$/);
+  });
   it("matches the image dependency digest for nested paths and filename prefixes", async () => {
     const root = await realpath(
       await mkdtemp(path.join(tmpdir(), "forecode-custody-order-")),

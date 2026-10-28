@@ -48,7 +48,7 @@ def trusted_metadata(filename, executable=False, directory=False):
     return info
 
 
-def hashed(filename, trusted=False, executable=False):
+def hashed(filename, trusted=False, executable=False, maximum_bytes=256 * 1024**2):
     global total, count
     p = pathlib.Path(filename).resolve(strict=True)
     if trusted:
@@ -60,7 +60,7 @@ def hashed(filename, trusted=False, executable=False):
             raise ValueError('runtime path changed')
         total += before.st_size
         count += 1
-        if (not stat.S_ISREG(before.st_mode) or before.st_size > 256 * 1024**2
+        if (not stat.S_ISREG(before.st_mode) or before.st_size > maximum_bytes
                 or total > 1024**3 or count > 25000
                 or time.monotonic() - started > 12):
             raise ValueError('runtime inventory bound')
@@ -116,7 +116,13 @@ def main():
                 raise ValueError('installed runtime alias')
         for p in ['/opt', '/opt/forecode-booking', '/opt/forecode-booking/bin', '/opt/forecode-booking/controller']:
             trusted_metadata(p, directory=True)
-    result = {p: hashed(p, trusted=role == 'grader' or p.startswith('/opt/forecode-agent/'), executable=p.endswith('/bin/node')) for p in paths}
+    # The pinned Linux Codex 0.165.0 executable is 269,094,232 bytes. Permit
+    # up to 384MiB for that one fixed agent executable only. Grader/dependency
+    # bounds, chunk size, aggregate 1GiB and 12-second inventory limits stay fixed.
+    result = {p: hashed(p, trusted=role == 'grader' or p.startswith('/opt/forecode-agent/'),
+                        executable=p.endswith('/bin/node'),
+                        maximum_bytes=384 * 1024**2 if role == 'agent' and p == '/usr/local/bin/codex' else 256 * 1024**2)
+              for p in paths}
     if role == 'grader':
         root = pathlib.Path('/opt/forecode-booking/node_modules')
         if root.resolve() != root:

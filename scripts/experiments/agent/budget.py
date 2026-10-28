@@ -168,6 +168,7 @@ class Reservations:
             raise ValueError('unreserved provider response')
         maximum = reservation['maximumOutputTokens']
         media_type = content_type.split(';', 1)[0].strip().lower()
+        streamed_reasoning = []
         if media_type == 'text/event-stream':
             terminal = []
             for line in output.splitlines():
@@ -177,6 +178,11 @@ class Reservations:
                         event = json.loads(data)
                         if not isinstance(event, dict) or event.get('type') == 'error':
                             raise ValueError('invalid provider event')
+                        item = event.get('item')
+                        if (self.request['model'] == 'muse-spark-1.3'
+                                and event.get('type') == 'response.output_item.done'
+                                and isinstance(item, dict) and item.get('type') == 'reasoning'):
+                            streamed_reasoning.append((event.get('output_index'), item))
                         if event.get('type') in ('response.completed', 'response.incomplete', 'response.failed'):
                             response = event.get('response')
                             if (not isinstance(response, dict)
@@ -216,7 +222,25 @@ class Reservations:
             raise ValueError('provider usage exceeds reservation')
         # Cache reads and writes are already covered by the reviewed worst-case
         # input tariff. Do not refund reservations or claim a measured bill.
+        # Meta can encrypt the SAME finalized reasoning item separately in its
+        # item.done and terminal events. Codex replays item.done. Authenticate
+        # both variants from these received bytes, only after terminal/usage
+        # validation and exact item identity/content matching (except cipher).
         nodes = [response]
+        indices = set()
+        for index, item in streamed_reasoning:
+            outputs = response.get('output')
+            if (type(index) is not int or index < 0 or index in indices
+                    or not isinstance(outputs, list) or index >= len(outputs)):
+                raise ValueError('ambiguous streamed reasoning identity')
+            indices.add(index)
+            final = outputs[index]
+            if (not isinstance(final, dict) or not isinstance(item.get('id'), str)
+                    or not item['id'] or final.get('id') != item['id']
+                    or canonical({k: v for k, v in final.items() if k != 'encrypted_content'})
+                    != canonical({k: v for k, v in item.items() if k != 'encrypted_content'})):
+                raise ValueError('streamed reasoning differs from terminal item')
+            nodes.append(item)
         count = 0
         while nodes:
             item = nodes.pop()

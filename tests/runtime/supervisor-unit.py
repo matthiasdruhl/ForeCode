@@ -160,6 +160,41 @@ class Mechanics(unittest.TestCase):
         self.assertLessEqual(b.value['reservedTokens'],500000)
         self.assertLessEqual(b.value['reservedMicroUsd'],900000)
 
+    def test_meta_binds_both_verified_stream_cipher_variants_for_the_same_reasoning_item(self):
+        provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5}
+        b=self.budget(model='muse-spark-1.3',tokenLimit=500000,provider=provider)
+        sent=b.reserve(self.raw(model='muse-spark-1.3',stream=True))
+        done={'type':'reasoning','id':'rs_synthetic','summary':[],'encrypted_content':'item-done-cipher'}
+        final={**done,'encrypted_content':'terminal-cipher'}
+        response=self.response(model='muse-spark-1.3',service_tier='auto',output=[final])
+        events=[{'type':'response.output_item.done','output_index':0,'item':done},
+                {'type':'response.completed','response':response}]
+        stream=b''.join(b'data: '+json.dumps(e).encode()+b'\n\n' for e in events)
+        b.observe(stream,'text/event-stream',sent)
+        for item in [done,final]:
+            b.reserve(self.raw(model='muse-spark-1.3',input=[item]))
+        with self.assertRaises(ValueError):
+            b.reserve(self.raw(model='muse-spark-1.3',input=[{**done,'encrypted_content':'never-received-cipher'}]))
+        self.assertEqual(set(b.value['opaqueInputs']),{hashlib.sha256(i['encrypted_content'].encode()).hexdigest() for i in [done,final]})
+
+    def test_meta_stream_cipher_variants_require_unique_exact_terminal_item_binding(self):
+        done={'type':'reasoning','id':'rs_synthetic','summary':[],'encrypted_content':'item-done-cipher'}
+        final={**done,'encrypted_content':'terminal-cipher'}
+        for number,changes in enumerate([{'id':'rs_other'},{'summary':[{'type':'summary_text','text':'different'}]}, {'index':1}, {'duplicate':True}]):
+            with self.subTest(changes=changes):
+                p=self.root/str(number);p.mkdir()
+                request=self.budget_request(model='muse-spark-1.3',tokenLimit=500000,provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5})
+                b=m.budget.Reservations(p,request);sent=b.reserve(self.raw(model='muse-spark-1.3',stream=True))
+                item={**done,**{k:v for k,v in changes.items() if k not in ['index','duplicate']}}
+                event={'type':'response.output_item.done','output_index':changes.get('index',0),'item':item}
+                response=self.response(model='muse-spark-1.3',service_tier='auto',output=[final])
+                events=[event,event] if changes.get('duplicate') else [event]
+                events.append({'type':'response.completed','response':response})
+                stream=b''.join(b'data: '+json.dumps(e).encode()+b'\n\n' for e in events)
+                with self.assertRaises(ValueError):b.observe(stream,'text/event-stream',sent)
+                with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3',input=[item]))
+                self.assertEqual(b.value['opaqueInputs'],{})
+
     def test_each_provider_uses_only_its_fixed_endpoint_and_host_proxy_sentinel(self):
         calls=[]
         class Reply:

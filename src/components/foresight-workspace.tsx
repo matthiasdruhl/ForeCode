@@ -19,6 +19,9 @@ import type { PublicForesightConfiguration } from "@/server/meta/configuration";
 
 import { ReviewedComparison } from "./reviewed-comparison";
 import { comparisonContext } from "@/lib/foresight/comparison";
+import { ArchitectureAtlas } from "./architecture-atlas";
+import { ResearchHandoff } from "./research-handoff";
+import { createBookingTemplate } from "@/lib/foresight/templates";
 
 type Configuration = PublicForesightConfiguration;
 const labels: Record<Step, string> = {
@@ -83,6 +86,7 @@ export function ForesightWorkspace({
     graph: bookingGraph,
     run,
     editing,
+    configuration,
   });
   return (
     <section
@@ -210,7 +214,11 @@ function ForesightRun({
     null,
   );
   const [challenge, setChallenge] = useState<ChallengeResponse | null>(null);
+  const [exchanges, setExchanges] = useState<
+    Partial<Record<Step, { request: FlowRequest; response: unknown }>>
+  >({});
   const [approved, setApproved] = useState(false);
+  const [localTemplate, setLocalTemplate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const flight = useRef<AbortController | null>(null);
@@ -249,9 +257,34 @@ function ForesightRun({
           hypotheses: hypothesis.hypotheses,
         };
   const ready = !blocked && intents.length > 0 && goal.trim().length > 0;
+  function useTemplate() {
+    if (!ready || loading || (proposal && !localTemplate)) return;
+    try {
+      const output = createBookingTemplate(step, payload);
+      setExchanges((current) => ({
+        ...current,
+        [step]: { request: payload, response: output },
+      }));
+      if (output.schemaVersion === "foresight-proposals.v1")
+        setProposal(output);
+      else if (output.schemaVersion === "scientist-hypotheses.v1")
+        setHypothesis(output);
+      else setChallenge(output);
+      setLocalTemplate(true);
+      setApproved(false);
+      setMessage(
+        "Local template loaded. No model request or experiment ran. Review whether these fixed assumptions apply to your requirement.",
+      );
+    } catch {
+      setMessage(
+        "The local template could not validate this context. Start a fresh research flow.",
+      );
+    }
+  }
   async function send() {
     if (
       flight.current ||
+      localTemplate ||
       !approved ||
       !ready ||
       configuration.status !== "configured"
@@ -287,6 +320,10 @@ function ForesightRun({
         return;
       }
       const output = validateFlowOutput(step, payload, raw);
+      setExchanges((current) => ({
+        ...current,
+        [step]: { request: payload, response: output },
+      }));
       if (output.schemaVersion === "foresight-proposals.v1")
         setProposal(output);
       else if (output.schemaVersion === "scientist-hypotheses.v1")
@@ -318,6 +355,7 @@ function ForesightRun({
   }
   return (
     <div className="research-run">
+      <ArchitectureAtlas proposal={proposal} />
       {blocked && (
         <p className="form-error">
           Requirement editing is in progress. Confirm the revision before
@@ -371,6 +409,12 @@ function ForesightRun({
           {proposal.scenarios.map((scenario) => (
             <div className="visible-scenario" key={scenario.id}>
               <p>{scenario.request}</p>
+              {localTemplate && (
+                <p>
+                  Local template assumption · review relevance to your confirmed
+                  requirement.
+                </p>
+              )}
               <Notes title="Assumptions" items={scenario.assumptions} />
               <small>
                 {scenario.id} · {scenario.origin} · not frozen
@@ -425,6 +469,12 @@ function ForesightRun({
           className="research-result"
         >
           <h3 id="challenge-heading">One proposed counterexample</h3>
+          {localTemplate && (
+            <p>
+              Developer-authored local template. No Meta counterexample call was
+              made.
+            </p>
+          )}
           <Provenance provider={challenge.provider} />
           {challenge.challenges.map((item) => (
             <article key={item.id}>
@@ -455,7 +505,7 @@ function ForesightRun({
           </p>
         </section>
       )}
-      {!challenge && (
+      {!challenge && !localTemplate && (
         <section className="sharing-review" aria-labelledby="sharing-heading">
           <span className="eyebrow accent">
             Next deliberate action / {step}
@@ -550,6 +600,38 @@ function ForesightRun({
           </div>
         </section>
       )}
+      {!challenge && (!proposal || localTemplate) && (
+        <section
+          className="sharing-review"
+          aria-labelledby="local-template-heading"
+        >
+          <span className="eyebrow">Local / template</span>
+          <h3 id="local-template-heading">
+            {localTemplate
+              ? "Continue the local example."
+              : "Explore without a model call."}
+          </h3>
+          <p>
+            Fixed developer-authored booking examples, labeled template at every
+            stage. No information leaves this browser. They do not establish
+            actual Meta reasoning, task relevance or measured benefit. Reset
+            research to return to the provider flow.
+          </p>
+          <button
+            type="button"
+            className="button-secondary"
+            disabled={!ready || loading}
+            onClick={useTemplate}
+          >
+            {!proposal
+              ? "Explore local template"
+              : !hypothesis
+                ? "Read local hypothesis"
+                : "Read local counterexample"}
+          </button>
+        </section>
+      )}
+      {challenge && <ResearchHandoff research={exchanges} />}
       <p className="live-notice" role="status">
         {message}
       </p>

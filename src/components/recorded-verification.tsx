@@ -1,4 +1,5 @@
 import Link from "next/link.js";
+import { TournamentOverview } from "./tournament-overview";
 import type {
   RecordedCatalogView,
   RecordedVerification,
@@ -197,6 +198,7 @@ export function RecordedVerificationView({
             </p>
           </div>
         </div>
+        <TournamentOverview />
         <section
           className="recording-context"
           aria-labelledby="modeled-context"
@@ -216,6 +218,9 @@ export function RecordedVerificationView({
             inference.
           </p>
         </section>
+        <h2 id="evidence-laboratory">
+          Evidence Laboratory / recorded protected checks
+        </h2>
         {!available && (
           <section className="recording-empty" aria-labelledby="no-recordings">
             <span className="eyebrow">Evidence unavailable</span>

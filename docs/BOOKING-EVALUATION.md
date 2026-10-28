@@ -1,5 +1,11 @@
 # Booking evaluation handoff
 
+## Current status — October 28, 2026
+
+The historical preparation description below predates the owner-reviewed offline acceptance. Fixed no-inference guest acceptance subsequently completed with two VERIFIED and two REJECTED cases; see [installed verification](BOOKING-INSTALLED-VERIFICATION.md). That evidence does not admit a real coding agent or establish an A/B experiment. Real agent invocation remains disabled, and production evidence catalogs remain empty. This assignment adds local pre-run preparation and tournament integrity checks; it does not renew the old runtime admission.
+
+## Historical preparation scope
+
 The foundation provides a standalone baseline, independent public baseline oracles, source preparation, strict evidence contracts, receipt assembly and protected read-only loading. The local controller now has a separate [no-inference acceptance path](BOOKING-OFFLINE-ACCEPTANCE.md); real agent execution is hard-disabled pending supervised termination/export acceptance. See [the operator runbook](BOOKING-RUNNER.md). No real agent or offline booking guest execution has occurred, and verified sandbox isolation is not claimed. The existing operator environment was inspected read-only and preserved.
 
 ## Separate custody

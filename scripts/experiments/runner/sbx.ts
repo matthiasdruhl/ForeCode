@@ -16,7 +16,19 @@ export type BookingAdapter = {
     signal?: AbortSignal,
   ): Promise<void>;
   agent(runId: string, signal: AbortSignal): Promise<ProcessResult>;
-  collect(runId: string, signal?: AbortSignal): Promise<unknown>;
+  // Trusted adapter operation; never implement by stop → exec/export. Fields
+  // describe observations, not agent-authored attestations or independent approval.
+  finalizeAgent(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<{
+    runId: string;
+    terminationConfirmed: boolean;
+    restartAbsenceConfirmed: boolean;
+    exportWithoutGuestExecution: boolean;
+    candidate: unknown;
+    candidateSha256: string;
+  }>;
   grade(input: GradeInput, signal: AbortSignal): Promise<ProcessResult>;
   cleanup(): Promise<void>;
 };
@@ -157,7 +169,7 @@ export function createSbxAdapter(
     async agent() {
       throw new Error("Real agent execution disabled.");
     },
-    async collect() {
+    async finalizeAgent() {
       throw new Error("Supervised termination/export acceptance missing.");
     },
     async grade() {

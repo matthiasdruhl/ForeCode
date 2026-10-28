@@ -10,10 +10,15 @@ import { acquireBookingLease } from "./lease";
 import { createSbxAdapter } from "./sbx";
 import { runBookingExperiment } from "./controller";
 import { boundedProcess } from "./process";
+import {
+  prepareBookingExecutionCommitment,
+  realAgentExecutionBlockers,
+} from "./commitment";
 
 const { values } = parseArgs({
   options: {
     config: { type: "string" },
+    "prepare-commitment": { type: "boolean", default: false },
     "inspect-runtime": { type: "boolean", default: false },
     execute: { type: "boolean", default: false },
     help: { type: "boolean", default: false },
@@ -22,7 +27,7 @@ const { values } = parseArgs({
 });
 if (values.help) {
   process.stdout.write(
-    "Developer-local booking runner. --config /absolute/private/config.json [--execute]\nReal agent execution is hard-disabled. Default: validate configuration only; no sandbox command or paid call. --inspect-runtime: explicit operator probes (may start dedicated VMs), then stop them; no inference. See docs/BOOKING-RUNNER.md.\n",
+    "Developer-local booking runner. --config /absolute/private/config.json [--execute]\nReal agent execution is hard-disabled. --prepare-commitment persists a private proposal (no approval, sandbox invocation or paid call). Default: validate configuration only; no sandbox command or paid call. --inspect-runtime: explicit operator probes (may start dedicated VMs), then stop them; no inference. See docs/BOOKING-RUNNER.md.\n",
   );
 } else {
   try {
@@ -30,7 +35,37 @@ if (values.help) {
     const config = OperatorConfigSchema.parse(
       JSON.parse((await protectedRead(values.config)).toString("utf8")),
     );
-    if (values["inspect-runtime"]) {
+    if (values["prepare-commitment"]) {
+      if (values.execute || values["inspect-runtime"])
+        throw new Error(
+          "Preparation, inspection and execution are separate actions.",
+        );
+      const git = await boundedProcess(
+        "/usr/bin/git",
+        [
+          "-C",
+          fileURLToPath(new URL("../../../", import.meta.url)),
+          "rev-parse",
+          "HEAD",
+        ],
+        { milliseconds: 5000, maxBytes: 1024 },
+      );
+      if (git.exitCode !== 0 || git.reason !== "completed")
+        throw new Error("Missing repository identity.");
+      const proposal = await prepareBookingExecutionCommitment(
+        config,
+        git.stdout.trim(),
+      );
+      process.stdout.write(
+        JSON.stringify({
+          runId: proposal.runId,
+          commitmentSha256: proposal.commitmentSha256,
+          execution: "NOT_RUN",
+          admission: "BLOCKED",
+          blockers: realAgentExecutionBlockers,
+        }) + "\n",
+      );
+    } else if (values["inspect-runtime"]) {
       if (values.execute)
         throw new Error("Inspection and execution are separate actions.");
       const root = await privateDirectory(config.protectedRoot);
@@ -77,6 +112,8 @@ if (values.help) {
           configurationValid: true,
           execution: "NOT_RUN",
           enabled: config.enabled,
+          admission: "BLOCKED",
+          blockers: realAgentExecutionBlockers,
           note: "Real agent execution is hard-disabled pending supervised termination/export acceptance. Use acceptance:booking for separately gated no-inference grading.",
         }) + "\n",
       );

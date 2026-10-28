@@ -18,6 +18,10 @@ import { configurationDigest } from "../isolation/gate";
 import type { OperatorConfig } from "../isolation/config";
 import { acquireBookingLease } from "./lease";
 import { fixedTask, validateGradeReport } from "./protocol";
+import {
+  bookingExecutionCommitment,
+  realAgentExecutionBlockers,
+} from "./commitment";
 import type { BookingAdapter } from "./sbx";
 import type { ProcessResult } from "./process";
 
@@ -63,28 +67,41 @@ export async function runBookingExperiment(
     graderModulesSha256: config.graderModulesSha256,
   };
   const evaluatorSha256 = jsonDigest(runtimePins);
-  const lease = await acquireBookingLease(config.coordinationRoot, runId);
+  const proposal = bookingExecutionCommitment(config, repoCommit, runId, pins);
+  let lease: Awaited<ReturnType<typeof acquireBookingLease>> | undefined;
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), config.maxSeconds * 1000);
   const signal = AbortSignal.any([userSignal, deadline.signal]);
   let temporary: string | undefined, directory: string | undefined;
   let agent: ProcessResult | undefined, grading: ProcessResult | undefined;
   let candidate: Awaited<ReturnType<typeof freezeCandidate>> | undefined;
+  let finalization: Omit<
+    Awaited<ReturnType<BookingAdapter["finalizeAgent"]>>,
+    "candidate"
+  > | null = null;
   let status: "completed" | "failed" | "cancelled" | "timed_out" | "blocked" =
     "blocked";
   let failure: string | null = null;
   let cleaned = false;
   let admitted = false;
-  let stage = "admission";
+  let stage = "commitment";
   let entry: Awaited<ReturnType<typeof publishEvaluation>> | null = null;
   try {
+    directory = path.join(root, runId);
+    await mkdir(directory, { mode: 0o700 });
+    await writeFile(
+      path.join(directory, "commitment-proposal.json"),
+      JSON.stringify(proposal, null, 2),
+      { mode: 0o400, flag: "wx" },
+    );
+    stage = "lease";
+    lease = await acquireBookingLease(config.coordinationRoot, runId);
     await lease.assertOwned();
+    stage = "admission";
     await adapter.admit(pins.evaluatorSha256, signal);
     admitted = true;
     if (signal.aborted) throw new Error("cancelled");
     stage = "preparation";
-    directory = path.join(root, runId);
-    await mkdir(directory, { mode: 0o700 });
     temporary = await mkdtemp(path.join(scratch, "booking-"));
     const exported = path.join(temporary, "subject");
     const prepared = await prepareBookingWorkspace(
@@ -97,10 +114,6 @@ export async function runBookingExperiment(
     await adapter.prepare(runId, exported, signal);
     stage = "agent";
     agent = await adapter.agent(runId, signal);
-    // Terminate detached guest processes before observing final source. The
-    // operator must prove stop/restart/export semantics for this exact runtime.
-    await lease.assertOwned();
-    await adapter.cleanup();
     if (agent.reason !== "completed" || signal.aborted) {
       status =
         signal.aborted || agent.reason === "cancelled"
@@ -111,10 +124,27 @@ export async function runBookingExperiment(
       throw new Error("Agent interrupted; final candidate unavailable.");
     }
     stage = "candidate-export";
-    const first = await adapter.collect(runId, signal),
-      second = await adapter.collect(runId, signal);
-    if (jsonDigest(first) !== jsonDigest(second))
-      throw new Error("Source mutation between final exports.");
+    await lease.assertOwned();
+    // Atomic trusted adapter boundary: terminate, prove absence across restart,
+    // seal source and transfer it without executing the untrusted guest again.
+    // The real sbx adapter deliberately has no implementation of this boundary.
+    const finalized = await adapter.finalizeAgent(runId, signal);
+    finalization = {
+      runId: finalized.runId,
+      terminationConfirmed: finalized.terminationConfirmed,
+      restartAbsenceConfirmed: finalized.restartAbsenceConfirmed,
+      exportWithoutGuestExecution: finalized.exportWithoutGuestExecution,
+      candidateSha256: finalized.candidateSha256,
+    };
+    if (
+      finalized.runId !== runId ||
+      finalized.terminationConfirmed !== true ||
+      finalized.restartAbsenceConfirmed !== true ||
+      finalized.exportWithoutGuestExecution !== true ||
+      jsonDigest(finalized.candidate) !== finalized.candidateSha256
+    )
+      throw new Error("Supervised termination/export boundary unconfirmed.");
+    const first = finalized.candidate;
     candidate = await freezeCandidate(
       first,
       runId,
@@ -198,7 +228,7 @@ export async function runBookingExperiment(
     else if (status === "blocked" && agent) status = "failed";
   } finally {
     try {
-      if (!cleaned) {
+      if (!cleaned && lease) {
         await lease.assertOwned();
         await adapter.cleanup();
         cleaned = true;
@@ -209,8 +239,30 @@ export async function runBookingExperiment(
       entry = null;
     }
     clearTimeout(timer);
-    if (temporary) await rm(temporary, { recursive: true, force: true });
-    if (cleaned) await lease.release();
+    if (temporary) {
+      try {
+        await rm(temporary, { recursive: true, force: true });
+      } catch {
+        cleaned = false;
+        status = "blocked";
+        entry = null;
+        stage = "scratch-cleanup";
+        failure =
+          "Scratch cleanup unconfirmed; lease retained and publication forbidden.";
+      }
+    }
+    if (cleaned && lease) {
+      try {
+        await lease.release();
+      } catch {
+        cleaned = false;
+        status = "blocked";
+        entry = null;
+        stage = "lease-release";
+        failure =
+          "Lease release unconfirmed; owner recovery required and publication forbidden.";
+      }
+    }
   }
   const run = ExperimentRunV1Schema.parse({
     schemaVersion: "experiment-run.v1",
@@ -274,6 +326,30 @@ export async function runBookingExperiment(
     stage,
     runtimePins,
     configurationSha256: configurationDigest(config),
+    commitmentSha256: proposal.commitmentSha256,
+    executionBlockers: adapter.kind === "sbx" ? realAgentExecutionBlockers : [],
+    cleanupConfirmed: cleaned,
+    finalization,
+    changedFiles: candidate
+      ? [
+          ...candidate.manifest
+            .filter(
+              (file) =>
+                pins.fixtureManifest.find(
+                  (baseline) => baseline.path === file.path,
+                )?.sha256 !== file.sha256,
+            )
+            .map((file) => file.path),
+          ...pins.fixtureManifest
+            .filter(
+              (file) =>
+                !candidate!.manifest.some(
+                  (current) => current.path === file.path,
+                ),
+            )
+            .map((file) => file.path),
+        ].sort()
+      : null,
     agent: summary(agent),
     grader: summary(grading),
     failure,

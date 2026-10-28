@@ -137,6 +137,9 @@ export function createMetaTransport(options: {
   const attempts: { step: Step; at: number }[] = [];
   // Bounded process memory only: no raw prompts/responses, files or public logs.
   const observations: TransportObservation[] = [];
+  // A provider response identity may authenticate only one observed invocation.
+  // Reusing it for different stages would make sourceEvidenceId ambiguous.
+  const responseIdentities = new Set<string>();
   async function call(step: Step, request: FlowRequest, signal: AbortSignal) {
     const config = foresightConfiguration(options.env());
     if (config.status !== "configured" || signal.aborted)
@@ -215,9 +218,12 @@ export function createMetaTransport(options: {
       )
         throw new RequestFailure("PROVIDER_UNAVAILABLE");
       const responseIdentity = `meta-${digest(envelope.id)}`;
+      if (responseIdentities.has(responseIdentity))
+        throw new RequestFailure("PROVIDER_UNAVAILABLE");
       const requestId = response.headers.get("x-request-id");
       if (requestId !== null && requestId.length > 256)
         throw new RequestFailure("PROVIDER_UNAVAILABLE");
+      responseIdentities.add(responseIdentity);
       const observation: TransportObservation = {
         step,
         model,

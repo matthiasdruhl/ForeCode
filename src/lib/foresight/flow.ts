@@ -124,7 +124,11 @@ export function validateSliceContext(context: ResearchContext): void {
   );
   for (const scenario of context.scenarios)
     invariant(
-      scenario.origin === "meta_generated" &&
+      (scenario.origin === "meta_generated" ||
+        (scenario.origin === "developer_tentative" &&
+          context.candidates.every(
+            (candidate) => candidate.metaProvenance === "template",
+          ))) &&
         scenario.frozen === false &&
         scenario.acceptanceIds.length === 0,
       "Only visible unfrozen proposed scenarios.",

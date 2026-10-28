@@ -48,7 +48,9 @@ function harness(
   ) => Response | Promise<Response>,
 ) {
   let at = 100_000;
+  let responseNumber = 0;
   const network = vi.fn<typeof fetch>(async (_url, options) => {
+    responseNumber++;
     const payload = JSON.parse(options!.body as string);
     const request = JSON.parse(payload.messages[1].content) as FlowRequest;
     const step: Step =
@@ -59,9 +61,14 @@ function harness(
           : "propose";
     return responder
       ? responder(step, request)
-      : Response.json(envelope(syntheticContent(step, request)), {
-          headers: { "x-request-id": "synthetic-req-17" },
-        });
+      : Response.json(
+          envelope(syntheticContent(step, request), {
+            id: `chatcmpl-synthetic-${step}-${responseNumber}`,
+          }),
+          {
+            headers: { "x-request-id": "synthetic-req-17" },
+          },
+        );
   });
   const transport = createMetaTransport({
     env: () => env,
@@ -169,6 +176,7 @@ describe("reviewed booking context and immutable contracts", () => {
     "baseline",
     "status-quo",
     "hidden",
+    "template-scenario-as-live",
     "provenance",
     "unknown-action",
     "duplicate-candidate",
@@ -185,6 +193,10 @@ describe("reviewed booking context and immutable contracts", () => {
       output.candidates[1]!.baselineCommit = "1".repeat(40);
     if (kind === "status-quo") output.candidates.reverse();
     if (kind === "hidden") output.scenarios[0]!.origin = "evaluator_heldout";
+    if (kind === "template-scenario-as-live") {
+      output.scenarios[0]!.origin = "developer_tentative";
+      output.candidates[0]!.metaProvenance = "live";
+    }
     if (kind === "provenance") output.candidates[1]!.modelId = "spoof";
     if (kind === "unknown-action")
       Object.assign(output.candidates[1]!.changePlan[0]!, {
@@ -215,7 +227,7 @@ describe("consented Foresight HTTP and issued-context bindings (synthetic networ
       mode: "live",
       model: env.META_MODEL,
       promptVersion: "booking-scientist-1",
-      sourceEvidenceId: `meta-${digest("chatcmpl-synthetic-17")}`,
+      sourceEvidenceId: `meta-${digest("chatcmpl-synthetic-challenge-3")}`,
     });
     expect(h.network).toHaveBeenCalledTimes(3);
     for (const [url, options] of h.network.mock.calls) {
@@ -381,7 +393,7 @@ describe("consented Foresight HTTP and issued-context bindings (synthetic networ
               provider: { provider: "meta", model: "fake" },
             });
         }
-        return Response.json(envelope(content));
+        return Response.json(envelope(content, { id: `synthetic-${step}` }));
       });
       const input = proposalRequest();
       const proposal = (await (
@@ -553,6 +565,23 @@ describe("server-only Meta protocol and process limits", () => {
     ).rejects.toMatchObject({ code: "RATE_LIMITED" });
     expect(network).toHaveBeenCalledTimes(1);
   });
+  it("rejects reused provider response identities across distinct requests without issuing the next stage", async () => {
+    const h = harness((step, request) =>
+      Response.json(envelope(syntheticContent(step, request))),
+    );
+    const input = proposalRequest();
+    const first = await h.post("propose", input);
+    expect(first.status).toBe(200);
+    const proposal = (await first.json()) as ProposeResponse;
+    const second = await h.post(
+      "hypothesize",
+      hypothesisRequest(input, proposal),
+    );
+    expect(second.status).toBe(503);
+    expect(h.network).toHaveBeenCalledTimes(2);
+    expect(h.transport.observations()).toHaveLength(1);
+    expect(await second.text()).not.toContain("chatcmpl-synthetic");
+  });
   it("rejects unsafe HTTP methods, missing Origin and missing origin configuration before transport", async () => {
     const h = harness();
     for (const method of ["GET", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"]) {
@@ -624,13 +653,16 @@ describe("server-only Meta protocol and process limits", () => {
       resolve = done;
     });
     let firstDispatch = true;
+    let responseNumber = 0;
     const h = harness(() => {
       if (firstDispatch) {
         firstDispatch = false;
         return pending;
       }
       return Response.json(
-        envelope(syntheticContent("propose", proposalRequest())),
+        envelope(syntheticContent("propose", proposalRequest()), {
+          id: `synthetic-limited-${++responseNumber}`,
+        }),
       );
     });
     const signal = new AbortController().signal;

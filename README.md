@@ -15,6 +15,8 @@ npm run dev
 
 Open http://127.0.0.1:3000. The current build lets you confirm, revise, revoke and export future requirements, then review a pinned booking graph and separately consent to Meta proposals, one falsifiable hypothesis and one proposed counterexample. Requirements and research live in browser memory and disappear on reload; export requirements before leaving. Example buttons only populate the editor and require explicit confirmation. Each model stage has its own exact-payload review and sharing action; editing or revoking a requirement discards dependent research. [Foresight configuration, boundaries and first-smoke handoff](docs/FORESIGHT.md).
 
+For a credential-free walkthrough, confirm **Team permissions**, select **Explore local template**, then read the local hypothesis and counterexample. Every stage is explicitly a developer-authored template; no provider call occurs. The source-backed Atlas keeps observed imports separate from B's planned actions and marks missing preparation/future snapshots unavailable. Review/export the research handoff, then inspect `/experiments` for the blocked tournament, Evidence Laboratory and certificate availability. This is a working local product flow with absent experimental evidence, not a completed Meta or coding-agent experiment. See [judge walkthrough](docs/P0-JUDGE-WALKTHROUGH.md).
+
 ## Verification
 
 ```sh
@@ -54,6 +56,8 @@ The test reads the pinned Git objects in memory. The external schema, sample rec
 - Model proposals make no claims of architecture improvement, Meta incremental benefit or independent experiment verification.
 
 See [build provenance](docs/BUILD-PROVENANCE.md) and the [implementation log](docs/IMPLEMENTATION-LOG.md). Publication, approved-contributor declarations, final track selection and licensing sign-off remain owner release gates.
+
+Developer-local [agent commitment preparation](docs/BOOKING-AGENT-EXECUTION.md) and [tournament validation/accounting](docs/ARCHITECTURE-TOURNAMENT.md) preserve source/task bindings and fail-closed readiness. The supervised single-arm adapter is implemented but requires independent operational admission. The [proposed team task and permission matrix](benchmarks/booking-team-permissions/README.md), [future-oracle interface and study preparation](docs/BOOKING-FUTURE-EVALUATION.md) are implemented as public preparation only. Owner task approval, private oracle provisioning, reviewed future guest bridge and independent preregistration remain blocked prerequisites. No real single-arm or A/B agent run was performed by this implementation.
 
 Read-only [recorded verification](docs/RECORDED-VERIFICATION.md) is available at `/experiments` from the workspace. Production recordings are NOT_PROVISIONED; the current modeled comparison has no linked measured experiment. The authenticated loading/projection boundary and operator handoff are implemented without publishing private historical output.
 

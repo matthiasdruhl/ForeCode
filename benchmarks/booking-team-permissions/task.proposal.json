@@ -1,0 +1,295 @@
+{
+  "schemaVersion": "booking-team-task.proposal.v1",
+  "id": "booking-team-permissions-v1",
+  "version": 1,
+  "review": "OWNER_REVIEW_REQUIRED",
+  "visibility": "visible_preregistered_case_study",
+  "specification": "PROPOSED TASK, owner review required before freeze. Implement observable behavior only; any internal organization or strategy is permitted. This public task is a visible benchmark, not a hidden holdout. No team feature is added to the baseline by publishing this task.\n\nSETUP AND IDENTITY\nAn operator-controlled in-process seed creates organizations and memberships; no public organization creation, invitation, role editing or registration endpoint is required. Organization {id,name}; membership {organizationId,userId,role,status} with role owner/admin/member and status active/revoked; exactly one immutable owner per organization, no duplicate organization/user pairs. Reject invalid or duplicate seed data before serving. Stable users retain baseline IDs u-alice/u-bob/u-cara. team-red (Red): Alice owner, Bob admin, Cara member. team-blue (Blue): Bob owner, Cara admin, Alice initially no membership. Dedicated resources room-red and room-blue belong exclusively to their corresponding team; room-1 and room-2 remain personal resources. Team fixture begins with no team bookings, baseline personal bookings unchanged. Fixed creation clock 2026-11-01T00:00:00.000Z; trusted injected team ID counter yields team-booking-0001, team-booking-0002, ...; fresh seed/counter for each independent case. Invalid/denied/conflicting creates do not consume an ID. Existing personal ID injection remains unchanged. Test dates use November 10, 2026 UTC, including adjacent and overlapping slots; assertions are independent of wall time.\n\nAUTHORIZATION\nOnly server-resolved trusted sessions identify the current user. Domain callers may inject a trusted viewer for tests; the HTTP adapter must accept an injected trusted session resolver for all three synthetic users. The production/demo POST /api/session still bootstraps Alice only. Do not add a body/header/query-selected login or a public multiuser endpoint. Unknown/null identity returns UNAUTHENTICATED 401. Ignore untrusted identity/role/organization headers as authority. Reject extra client-controlled ownership, creator, status, ID, createdAt, role or membership fields. No user may elevate their role. Permissions are scoped to the organization of the resource/booking. Consult current membership on every operation, including cancellation of an already-cancelled booking; revocation invalidates access on the next operation even through an existing session.\n\nProposed decisions: owners/admins view/create/cancel all team bookings; ordinary members view/create but cannot cancel even their own team creation. Only owners revoke a different nonowner; admins cannot manage membership. No member of one organization gains authority in another. Personal records stay private even from the user's team owner/admin. These choices require explicit owner review. A different decision requires a new reviewed task version, validator, permission/acceptance rows and specification before a new commitment.\n\nHTTP CONTRACT\nKeep every existing /api/bookings, /api/bookings/:id, /api/resources and /api/session behavior and response shape. Personal collection returns only personal records; team records never appear there. Public /api/resources still returns exactly room-1 and room-2. Team routes:\nGET /api/organizations returns {organizations:[{id,name,role}]} for active memberships only, sorted lexicographically by id. Anonymous/unknown identity gets 401; an authenticated user with none gets an empty list.\nGET /api/organizations/:orgId/resources returns {resources:[{id,name}]} for that team only, sorted by id. Names are Red room and Blue room. GET /api/organizations/:orgId/memberships returns {memberships:[{organizationId,userId,role,status}]} to active members, including revoked records, sorted by userId. Membership data is synthetic, no personal data beyond these fields.\nGET /api/organizations/:orgId/bookings returns {bookings:[...]} including active/cancelled team records only, sorted by startAt instant then id. POST on the same collection accepts exactly baseline {resourceId,title,startAt,endAt}; responds 201 {booking}. GET /api/organizations/:orgId/bookings/:id and DELETE there respond 200 {booking}. Team booking JSON has exactly {id,organizationId,createdBy,resourceId,title,startAt,endAt,status,createdAt}; organizationId and createdBy are server-assigned, there is no ownerId. Status is active/cancelled. No route may expose a booking through the wrong orgId, nor through a personal route.\nDELETE /api/organizations/:orgId/memberships/:userId revokes an active nonowner and returns 200 {membership:{organizationId,userId,role,status:'revoked'}}; repeating by an authorized owner is idempotent. Missing/unknown membership targets return NOT_FOUND 404. Attempts to revoke the immutable owner return FORBIDDEN 403. No other membership mutations are required. Unsupported methods return 405 with no mutation.\n\nERRORS AND VALIDATION\nAuthentication precedes organization authorization. Unknown organizations, inactive membership, nonmembership, unknown booking and wrong-organization booking return indistinguishable NOT_FOUND 404 envelopes {error:{code:'NOT_FOUND',message:'Booking not found.'}}. For active members on an existing organization, disallowed create/cancel/revoke and owner self-revocation return FORBIDDEN 403 {error:{code:'FORBIDDEN',message:'Operation not permitted.'}}; perform this role decision before looking up a booking/target, so member cancellation always returns 403 within an accessible organization. Existing personal routes keep original error semantics. Invalid resource (including a resource of another team or personal resource on a team route), unknown body keys, malformed times/title, malformed/oversized JSON return INVALID_INPUT 400 with baseline envelope. Malformed input never changes state. Team route parameters use baseline ID grammar (1-128 ASCII letters/digits/dot/underscore/hyphen, first alphanumeric); malformed parameters return INVALID_INPUT. Authorization precedes body validation for syntactically valid parameters. Mutation HTTP order: same-origin check, parameter syntax, authentication, organization/role authorization, body/target validation, atomic mutation. GET order: parameter syntax, authentication, authorization, target. Session unknown identity behaves as unauthenticated. DELETE requires no body and ignores any supplied bytes. Use baseline content-type, 8192-byte body bound, strict UTF-8/JSON, UTC interval/title validation, no-store responses, safe errors and same-origin mutation check. Same-origin failure remains baseline INVALID_INPUT. Unsupported methods return 405 before other processing. No internal stack/raw diagnostics in responses.\n\nBOOKING INVARIANTS\nResource conflicts are global per stable resource ID and active rows, checked atomically with insert in one process. Across concurrent creates of overlapping slots at most one active booking succeeds, regardless of creator. Conflict returns baseline CONFLICT 409 without revealing another record. Half-open [startAt,endAt) UTC intervals allow adjacency, require end>start, normalize output to ISO milliseconds; accept exactly baseline input syntax. Cancellation is idempotent for authorized owners/admins, preserves ID/creator/timestamps/title/resource/org, sets cancelled, and frees the slot. Cancelled rows remain visible to active team members. Revocation preserves existing bookings and their conflict occupancy; owner/admin may still cancel them. Return copies so response mutation cannot alter stored rows. All baseline personal ownership/conflict/cancellation/HTTP tests must still pass. No production OAuth, database, payments or architecture abstraction is required.\n\nPUBLIC ACCEPTANCE OUTLINE\nCover all structured permission cells, owner/admin/member positives and negatives, two-team isolation, personal cross-user isolation, forged identity/header/body roles, revoked session reuse, cancellation retry, concurrent overlap, adjacency, malformed input and baseline regression. Private oracle implementations/inputs remain separately controlled; this outline is public. Candidate execution belongs only inside an independently reviewed network-off grader guest. A successful process or submitted verification JSON does not establish correctness.",
+  "decisions": {
+    "memberCreate": "allow",
+    "memberCancel": "deny_even_creator",
+    "membershipAdministration": "owner_only_revoke_nonowner",
+    "organizationCreation": "operator_seed_only",
+    "resources": "dedicated_team_resources_preserve_personal_catalog"
+  },
+  "permissions": [
+    {
+      "role": "owner",
+      "action": "view",
+      "allowed": true
+    },
+    {
+      "role": "owner",
+      "action": "create",
+      "allowed": true
+    },
+    {
+      "role": "owner",
+      "action": "cancel",
+      "allowed": true
+    },
+    {
+      "role": "owner",
+      "action": "revoke",
+      "allowed": true
+    },
+    {
+      "role": "admin",
+      "action": "view",
+      "allowed": true
+    },
+    {
+      "role": "admin",
+      "action": "create",
+      "allowed": true
+    },
+    {
+      "role": "admin",
+      "action": "cancel",
+      "allowed": true
+    },
+    {
+      "role": "admin",
+      "action": "revoke",
+      "allowed": false
+    },
+    {
+      "role": "member",
+      "action": "view",
+      "allowed": true
+    },
+    {
+      "role": "member",
+      "action": "create",
+      "allowed": true
+    },
+    {
+      "role": "member",
+      "action": "cancel",
+      "allowed": false
+    },
+    {
+      "role": "member",
+      "action": "revoke",
+      "allowed": false
+    },
+    {
+      "role": "nonmember",
+      "action": "view",
+      "allowed": false
+    },
+    {
+      "role": "nonmember",
+      "action": "create",
+      "allowed": false
+    },
+    {
+      "role": "nonmember",
+      "action": "cancel",
+      "allowed": false
+    },
+    {
+      "role": "nonmember",
+      "action": "revoke",
+      "allowed": false
+    },
+    {
+      "role": "revoked",
+      "action": "view",
+      "allowed": false
+    },
+    {
+      "role": "revoked",
+      "action": "create",
+      "allowed": false
+    },
+    {
+      "role": "revoked",
+      "action": "cancel",
+      "allowed": false
+    },
+    {
+      "role": "revoked",
+      "action": "revoke",
+      "allowed": false
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "team-owner-view",
+      "permission": {
+        "role": "owner",
+        "action": "view",
+        "allowed": true
+      }
+    },
+    {
+      "id": "team-owner-create",
+      "permission": {
+        "role": "owner",
+        "action": "create",
+        "allowed": true
+      }
+    },
+    {
+      "id": "team-owner-cancel",
+      "permission": {
+        "role": "owner",
+        "action": "cancel",
+        "allowed": true
+      }
+    },
+    {
+      "id": "team-owner-revoke",
+      "permission": {
+        "role": "owner",
+        "action": "revoke",
+        "allowed": true
+      }
+    },
+    {
+      "id": "team-admin-view",
+      "permission": {
+        "role": "admin",
+        "action": "view",
+        "allowed": true
+      }
+    },
+    {
+      "id": "team-admin-create",
+      "permission": {
+        "role": "admin",
+        "action": "create",
+        "allowed": true
+      }
+    },
+    {
+      "id": "team-admin-cancel",
+      "permission": {
+        "role": "admin",
+        "action": "cancel",
+        "allowed": true
+      }
+    },
+    {
+      "id": "team-admin-revoke",
+      "permission": {
+        "role": "admin",
+        "action": "revoke",
+        "allowed": false
+      }
+    },
+    {
+      "id": "team-member-view",
+      "permission": {
+        "role": "member",
+        "action": "view",
+        "allowed": true
+      }
+    },
+    {
+      "id": "team-member-create",
+      "permission": {
+        "role": "member",
+        "action": "create",
+        "allowed": true
+      }
+    },
+    {
+      "id": "team-member-cancel",
+      "permission": {
+        "role": "member",
+        "action": "cancel",
+        "allowed": false
+      }
+    },
+    {
+      "id": "team-member-revoke",
+      "permission": {
+        "role": "member",
+        "action": "revoke",
+        "allowed": false
+      }
+    },
+    {
+      "id": "team-nonmember-view",
+      "permission": {
+        "role": "nonmember",
+        "action": "view",
+        "allowed": false
+      }
+    },
+    {
+      "id": "team-nonmember-create",
+      "permission": {
+        "role": "nonmember",
+        "action": "create",
+        "allowed": false
+      }
+    },
+    {
+      "id": "team-nonmember-cancel",
+      "permission": {
+        "role": "nonmember",
+        "action": "cancel",
+        "allowed": false
+      }
+    },
+    {
+      "id": "team-nonmember-revoke",
+      "permission": {
+        "role": "nonmember",
+        "action": "revoke",
+        "allowed": false
+      }
+    },
+    {
+      "id": "team-revoked-view",
+      "permission": {
+        "role": "revoked",
+        "action": "view",
+        "allowed": false
+      }
+    },
+    {
+      "id": "team-revoked-create",
+      "permission": {
+        "role": "revoked",
+        "action": "create",
+        "allowed": false
+      }
+    },
+    {
+      "id": "team-revoked-cancel",
+      "permission": {
+        "role": "revoked",
+        "action": "cancel",
+        "allowed": false
+      }
+    },
+    {
+      "id": "team-revoked-revoke",
+      "permission": {
+        "role": "revoked",
+        "action": "revoke",
+        "allowed": false
+      }
+    }
+  ],
+  "invariants": [
+    "baseline-personal-compatibility",
+    "half-open-utc-atomic-conflicts",
+    "idempotent-cancel-frees-slot",
+    "cross-tenant-and-user-isolation",
+    "revocation-effective-next-operation",
+    "trusted-session-no-header-authority",
+    "strict-input-validation-no-existence-leaks"
+  ],
+  "fixtures": {
+    "clock": "2026-11-01T00:00:00.000Z",
+    "organizations": ["team-red", "team-blue"],
+    "users": ["u-alice", "u-bob", "u-cara"],
+    "teamResources": ["room-red", "room-blue"],
+    "idPrefix": "team-booking-"
+  }
+}

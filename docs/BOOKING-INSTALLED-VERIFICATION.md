@@ -76,7 +76,7 @@ npm run acceptance:booking -- --config /absolute/private/offline.json --execute
 
 Retain actual commands/exits/identities/resources/cleanup/failures and private artifact locations. Lifecycle-only cannot issue booking verification. Full booking acceptance retains the existing baseline, ownership regression, distinct final selection, denial/lifecycle probes and controller publication → protected loader → verdict normalization; unconfirmed termination prevents publication. Neither was run here. Synthetic tamper/forgery/missing-check/mutation tests remain development evidence, never guest acceptance. Candidate variants remain inert host data and must never be imported, installed, built or executed on the host.
 
-No-inference acceptance is not a coding-agent trial, Meta contribution, architecture comparison, hidden holdout or completed product certificate. Application agent execution remains hard-disabled. No inference or paid application execution is authorized by this workflow.
+No-inference acceptance is not a coding-agent trial, Meta contribution, architecture comparison, hidden holdout or completed product certificate. The current separately gated agent implementation is described in BOOKING-AGENT-EXECUTION.md; this offline workflow grants no agent authority. No inference or paid application execution is authorized by this workflow.
 
 ## Observed installation follow-up — October 27
 
@@ -127,3 +127,9 @@ Actual lifecycle-only acceptance `39e30a6e-ebaa-4fcb-b46f-ed320ea1fe8a` passed a
 Protected publication, allowlist registration and normalized loading succeeded for all4 receipts. A separate read-only reload rechecked authenticated loader results, source/tree/receipt/check/runtime digests,0400 publication custody and all4 distinct candidate identities. Baseline alone matched the reviewed fixture. Candidate claims did not override oracle failures.
 
 Full recovery confirmed all13 suite/run identities absent after a real resource-supervised restart, then stopped the grader. All110 adapter commands completed/exit0. Final inspection confirmed stopped/zero sessions, no retained lease, and unchanged stopped experiments/unrelated sandboxes. No candidate ran on host, no paid call/real agent ran, and no PR was merged. Scope remains Next16.4.3 Webpack production build under the reviewed fixed offline worker boundary; future root-capable agents/provider spending/export/lifecycle require separate controls.
+
+## Supervised agent follow-up — October 28
+
+The trusted bundle now also contains `agent/{supervisor.py,budget.py,worker.mjs,Dockerfile}`. These are host-of-worker helpers, not additions to the protected grader controller or guest worker manifest. The owner installs only the three runtime helper files into root-owned `/opt/forecode-agent` and provisions a private0700 state root and independently reviewed credential-free worker image under separate maintenance authority. Do not copy the test harness or expose the Docker socket to the coding agent. Existing grader installation identities are reused unchanged, while the overall implementation commitment changes. Prior admissions cannot admit this source. See [the complete current sequence](BOOKING-AGENT-EXECUTION.md).
+
+Disposable no-inference controls exercised the concrete supervisor and unchanged grader, including actual sbx restart. They do not renew the historical operational review, establish compatible provider access/spending limits or constitute a genuine agent run. No existing operator VM was modified by those controls.

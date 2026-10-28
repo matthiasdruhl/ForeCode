@@ -1373,3 +1373,171 @@ dd.ready > span {
   gap: 1rem;
   min-width: 0;
 }
+
+.architecture-atlas {
+  min-width: 0;
+  padding: 24px;
+  margin: 24px 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.architecture-atlas .register-heading h3 {
+  margin: 8px 0 0;
+}
+.atlas-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 20px 0 12px;
+}
+.atlas-controls button {
+  gap: 8px;
+}
+.atlas-controls [aria-pressed="true"] {
+  border-color: var(--ink);
+  background: #e9eddf;
+}
+.atlas-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 230px;
+  margin-top: 20px;
+  border: 1px solid var(--line);
+}
+.atlas-scroll {
+  min-width: 0;
+  overflow: auto;
+  background: #f0f1e9;
+}
+.atlas-canvas {
+  position: relative;
+  width: 750px;
+  height: 405px;
+}
+.atlas-canvas svg {
+  position: absolute;
+  inset: 0;
+  width: 750px;
+  height: 385px;
+}
+.atlas-edge {
+  stroke: #b9bdae;
+  stroke-width: 1;
+}
+.atlas-edge.selected {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.atlas-canvas marker path {
+  fill: var(--muted);
+}
+.atlas-node {
+  position: absolute;
+  width: 210px;
+  min-height: 62px;
+  padding: 9px 10px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid #c2c7b7;
+  border-radius: 2px;
+  color: var(--ink);
+}
+.atlas-node strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 550;
+}
+.atlas-node span {
+  display: block;
+  font: 9px/1.6 var(--mono);
+  overflow-wrap: anywhere;
+}
+.atlas-node small {
+  display: block;
+  font: 9px/1.6 var(--mono);
+  color: #64458d;
+}
+.atlas-node[aria-pressed="true"] {
+  border: 2px solid var(--accent);
+}
+.atlas-node.proposed {
+  background: #f3edf9;
+}
+.atlas-inspector {
+  padding: 17px;
+  border-left: 1px solid var(--line);
+  min-width: 0;
+}
+.atlas-inspector ul {
+  padding-left: 15px;
+}
+.atlas-snapshot {
+  padding: 15px;
+  border-left: 2px solid var(--accent);
+  background: var(--paper);
+}
+.study-overview {
+  min-width: 0;
+  padding: 24px;
+  border: 1px solid var(--line);
+  margin-bottom: 24px;
+  background: var(--surface);
+}
+.study-overview h2 {
+  font-size: 20px;
+  margin: 10px 0 16px;
+}
+.study-overview h3 {
+  font-size: 13px;
+  margin: 20px 0 8px;
+}
+.study-overview ul {
+  padding-left: 18px;
+}
+.study-overview .comparison-table-scroll td {
+  vertical-align: top;
+}
+.study-overview .comparison-table-scroll th {
+  min-width: 120px;
+}
+.research-handoff {
+  padding: 24px;
+  margin: 24px 0;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--ink);
+  background: var(--surface);
+}
+.research-handoff p {
+  margin: 12px 0;
+}
+.workflow-path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 14px 0;
+  margin-bottom: 20px;
+  border-block: 1px solid var(--line);
+  font-size: 11px;
+}
+.workflow-path a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 1150px) {
+  .atlas-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .atlas-inspector {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
+@media (max-width: 600px) {
+  .architecture-atlas,
+  .study-overview,
+  .research-handoff {
+    padding: 17px;
+  }
+  .architecture-atlas .register-heading {
+    align-items: flex-start;
+  }
+}

@@ -12,6 +12,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import * as hostFiles from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import * as sourceFreeze from "../../scripts/evaluator/booking-v1/freeze";
@@ -29,6 +30,7 @@ import {
   freezeCandidate,
 } from "../../scripts/experiments/artifacts/files";
 import { runBookingExperiment } from "../../scripts/experiments/runner/controller";
+import { prepareBookingExecutionCommitment } from "../../scripts/experiments/runner/commitment";
 import {
   boundedProcess,
   type ProcessResult,
@@ -53,6 +55,11 @@ import {
   evaluateRemoteHttp,
 } from "../../scripts/evaluator/booking-v1/remote-oracles";
 
+vi.mock("node:fs/promises", async (original) => {
+  const actual = await original<typeof import("node:fs/promises")>();
+  return { ...actual, rm: vi.fn(actual.rm) };
+});
+
 const temporary: string[] = [],
   hash = "a".repeat(64);
 async function makeWritable(directory: string): Promise<void> {
@@ -63,6 +70,13 @@ async function makeWritable(directory: string): Promise<void> {
 }
 afterEach(async () => {
   vi.restoreAllMocks();
+  vi.mocked(hostFiles.rm).mockImplementation(
+    (
+      await vi.importActual<typeof import("node:fs/promises")>(
+        "node:fs/promises",
+      )
+    ).rm,
+  );
   for (const root of temporary.splice(0)) {
     await makeWritable(root);
     await rm(root, { recursive: true, force: true });
@@ -185,13 +199,22 @@ function synthetic(config: OperatorConfig, options: { mode?: string } = {}) {
               : {},
       );
     },
-    async collect(runId) {
+    async finalizeAgent(runId) {
       collects++;
-      if (options.mode === "wrong") return { ...envelope, runId: randomUUID() };
-      if (options.mode === "mutation" && collects === 2)
-        return { ...envelope, runId: randomUUID() };
+      const candidate =
+        options.mode === "wrong"
+          ? { ...envelope, runId: randomUUID() }
+          : structuredClone(envelope);
       expect(envelope.runId).toBe(runId);
-      return structuredClone(envelope);
+      return {
+        runId,
+        terminationConfirmed: options.mode !== "termination",
+        restartAbsenceConfirmed: options.mode !== "resurrection",
+        exportWithoutGuestExecution: options.mode !== "guest-export",
+        candidate,
+        candidateSha256:
+          options.mode === "mutation" ? "a".repeat(64) : jsonDigest(candidate),
+      };
     },
     async grade(input) {
       gradedHash = input.evaluatedTreeSha256;
@@ -287,6 +310,87 @@ async function run(mode?: string) {
 }
 
 describe("controlled booking pipeline — SYNTHETIC DEVELOPMENT evidence only", () => {
+  it("writes durable stage observations and a canonical original run; a commitment cannot be retried", async () => {
+    const data = await setup(),
+      bridge = synthetic(data.config, { mode: "pass" });
+    const { commitment, commitmentSha256 } =
+      await prepareBookingExecutionCommitment(data.config, "b".repeat(40));
+    const proposal = { commitment, commitmentSha256 };
+    const result = await runBookingExperiment(
+      data.config,
+      bridge.adapter,
+      new AbortController().signal,
+      "b".repeat(40),
+      proposal,
+    );
+    expect(result.run.status).toBe("completed");
+    const directory = path.join(data.config.protectedRoot, result.run.id);
+    const files = await readdir(directory);
+    const stages = await Promise.all(
+      files
+        .filter((f) => /^attempt-\d{4}\.json$/.test(f))
+        .sort()
+        .map(
+          async (f) =>
+            JSON.parse(await readFile(path.join(directory, f), "utf8")).stage,
+        ),
+    );
+    expect(stages).toEqual([
+      "lease",
+      "admission",
+      "preparation",
+      "agent",
+      "candidate-export",
+      "grading",
+      "report-validation",
+      "cleanup-and-freshness",
+      "publication",
+      "finished",
+    ]);
+    expect(
+      JSON.parse(
+        await readFile(path.join(directory, "experiment-run.json"), "utf8"),
+      ),
+    ).toEqual(result.run);
+    expect(
+      JSON.parse(
+        await readFile(path.join(directory, "verification.json"), "utf8"),
+      ).origin,
+    ).toBe("trusted_evaluator");
+    const prior = await readFile(path.join(directory, "run.json"));
+    await expect(
+      runBookingExperiment(
+        data.config,
+        bridge.adapter,
+        new AbortController().signal,
+        "b".repeat(40),
+        proposal,
+      ),
+    ).rejects.toThrow();
+    expect(await readFile(path.join(directory, "run.json"))).toEqual(prior);
+    expect(bridge.observations().cleanups).toBe(1);
+  });
+  it("rejects plain finalization flags even when an adapter labels itself sbx", async () => {
+    const data = await setup(),
+      bridge = synthetic(data.config, { mode: "pass" });
+    const { commitment, commitmentSha256 } =
+      await prepareBookingExecutionCommitment(data.config, "b".repeat(40));
+    const proposal = { commitment, commitmentSha256 };
+    bridge.adapter.kind = "sbx";
+    const graded = vi.spyOn(bridge.adapter, "grade");
+    const result = await runBookingExperiment(
+      data.config,
+      bridge.adapter,
+      new AbortController().signal,
+      "b".repeat(40),
+      proposal,
+    );
+    expect(result.run.status).toBe("failed");
+    expect(result.entry).toBeNull();
+    expect(result.run.evidenceOrigin).toBe("none");
+    expect(result.run.isolationAttestationId).toBeNull();
+    expect(graded).not.toHaveBeenCalled();
+  });
   it("routes the exact changed candidate through independent assertions, publication and trusted loading", async () => {
     const data = await run();
     expect(data.result.run.evidenceOrigin).toBe("none");
@@ -319,7 +423,7 @@ describe("controlled booking pipeline — SYNTHETIC DEVELOPMENT evidence only", 
     expect(artifact.runtimePins.configurationSha256).toBe(
       configurationDigest(data.config),
     );
-    expect(data.observations().cleanups).toBe(2);
+    expect(data.observations().cleanups).toBe(1);
     expect(await readdir(data.config.scratchRoot)).toEqual([]);
     expect(await readdir(data.config.protectedRoot)).not.toContain(
       ".booking-run.lock",
@@ -355,14 +459,23 @@ describe("controlled booking pipeline — SYNTHETIC DEVELOPMENT evidence only", 
       ),
     ).rejects.toThrow("disjoint");
     await mkdir(path.join(data.config.protectedRoot, ".booking-run.lock"));
-    await expect(
-      runBookingExperiment(
-        data.config,
-        bridge.adapter,
-        new AbortController().signal,
-        "b".repeat(40),
-      ),
-    ).rejects.toThrow();
+    const conflict = await runBookingExperiment(
+      data.config,
+      bridge.adapter,
+      new AbortController().signal,
+      "b".repeat(40),
+    );
+    expect(conflict.run.status).toBe("blocked");
+    expect(conflict.stage).toBe("lease");
+    expect(conflict.entry).toBeNull();
+    expect(
+      JSON.parse(
+        await readFile(
+          path.join(data.config.protectedRoot, conflict.run.id, "run.json"),
+          "utf8",
+        ),
+      ).stage,
+    ).toBe("lease");
   });
   it("publishes missing checks as insufficient and retains observed agent failure", async () => {
     const missing = await run("missing");
@@ -386,6 +499,9 @@ describe("controlled booking pipeline — SYNTHETIC DEVELOPMENT evidence only", 
     "evaluator",
     "source-tamper",
     "cleanup",
+    "termination",
+    "resurrection",
+    "guest-export",
   ])("preserves failure and cleans up for %s", async (mode) => {
     const data = await run(mode);
     expect(data.result.entry).toBeNull();
@@ -394,12 +510,66 @@ describe("controlled booking pipeline — SYNTHETIC DEVELOPMENT evidence only", 
     expect(await readdir(data.config.scratchRoot)).toEqual([]);
     expect(data.result.failure).not.toBeNull();
     if (
-      ["gate", "timeout", "cancel", "wrong", "mutation", "cleanup"].includes(
-        mode,
-      )
+      [
+        "gate",
+        "timeout",
+        "cancel",
+        "wrong",
+        "mutation",
+        "termination",
+        "resurrection",
+        "guest-export",
+      ].includes(mode)
     )
       expect(data.observations().gradedHash).toBeNull();
   });
+  it.each(["scratch-removal", "lease-release"])(
+    "retains a durable blocked disposition for host %s failure",
+    async (failure) => {
+      const data = await setup(),
+        bridge = synthetic(data.config);
+      const original = (
+        await vi.importActual<typeof import("node:fs/promises")>(
+          "node:fs/promises",
+        )
+      ).rm;
+      vi.mocked(hostFiles.rm).mockImplementation(async (target, options) => {
+        const name = String(target);
+        if (
+          (failure === "scratch-removal" &&
+            name.startsWith(data.config.scratchRoot)) ||
+          (failure === "lease-release" && name.endsWith(".booking-run.lock"))
+        )
+          throw new Error("SYNTHETIC host cleanup refusal");
+        return original(target, options);
+      });
+      const result = await runBookingExperiment(
+        data.config,
+        bridge.adapter,
+        new AbortController().signal,
+        "b".repeat(40),
+      );
+      expect(result.run.status).toBe("blocked");
+      expect(result.entry).toBeNull();
+      expect(result.run.receiptId).toBeNull();
+      expect(result.cleanupConfirmed).toBe(false);
+      for (const name of ["evaluation.json", "allowlist-entry.json"])
+        await expect(
+          readFile(path.join(data.config.protectedRoot, result.run.id, name)),
+        ).rejects.toThrow();
+      expect(
+        await readFile(
+          path.join(data.config.protectedRoot, result.run.id, "run.json"),
+          "utf8",
+        ),
+      ).toContain('"blocked"');
+      expect(
+        await hostFiles.stat(
+          path.join(data.config.coordinationRoot, ".booking-run.lock"),
+        ),
+      ).toBeDefined();
+    },
+  );
   it("refuses publication when the trusted evaluator changes while grading", async () => {
     const pins = await sourceFreeze.freezeBooking();
     vi.spyOn(sourceFreeze, "freezeBooking")
@@ -458,17 +628,19 @@ describe("runtime admission", () => {
       OperatorConfigSchema.parse({ ...config, arbitraryCommand: "echo pass" }),
     ).toThrow();
   });
-  it("keeps real agent entrypoints disabled even if operator config enables them", async () => {
+  it("requires actual commitment/admission even if operator config enables execution", async () => {
     const { config } = await setup();
     config.enabled = true;
     const adapter = createSbxAdapter(config);
     await expect(adapter.admit(hash)).rejects.toThrow(
-      "Real agent execution disabled",
+      "Exact pre-run commitment",
     );
     await expect(
       adapter.agent(randomUUID(), new AbortController().signal),
-    ).rejects.toThrow("disabled");
-    await expect(adapter.collect(randomUUID())).rejects.toThrow("Supervised");
+    ).rejects.toThrow("Wrong or stale run");
+    await expect(adapter.finalizeAgent(randomUUID())).rejects.toThrow(
+      "Wrong or stale run",
+    );
   });
   it("requires current reviewed bytes bound to implementation/config/inventory and all observations", async () => {
     const { config, root } = await setup();

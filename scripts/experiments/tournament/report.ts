@@ -67,7 +67,9 @@ export function buildTournamentReport(input: {
     "Duplicate attempt IDs.",
   );
   const deviations: string[] = [];
-  if (attempts.some((run) => run.endedAt < run.startedAt))
+  if (
+    attempts.some((run) => Date.parse(run.endedAt) < Date.parse(run.startedAt))
+  )
     deviations.push("ATTEMPT_CHRONOLOGY_INVALID");
   try {
     validatePair(
@@ -96,14 +98,14 @@ export function buildTournamentReport(input: {
     attempts.filter((run) => run.variant === "B").length > 1
   )
     deviations.push("PREDECLARED_TRIAL_COUNT_EXCEEDED");
-  const ordered = [...attempts].sort((a, b) =>
-    a.startedAt.localeCompare(b.startedAt),
+  const ordered = [...attempts].sort(
+    (a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt),
   );
   if (ordered.length === 2) {
     const first = plan.trialPolicy.order === "A_then_B" ? "A" : "B";
     if (
       ordered[0]!.variant !== first ||
-      ordered[0]!.endedAt > ordered[1]!.startedAt
+      Date.parse(ordered[0]!.endedAt) > Date.parse(ordered[1]!.startedAt)
     )
       deviations.push("PREDECLARED_RUN_ORDER_MISMATCH");
   }
@@ -132,7 +134,9 @@ export function buildTournamentReport(input: {
           "Baseline prepared source mismatch.",
         );
         invariant(
-          !run || baseline.receipt.finishedAt <= run.startedAt,
+          !run ||
+            Date.parse(baseline.receipt.finishedAt) <=
+              Date.parse(run.startedAt),
           "Initial correctness not established before future task.",
         );
         baselineIds.push(baseline.receipt.runId);
@@ -164,7 +168,8 @@ export function buildTournamentReport(input: {
         invariant(
           run.variant === variant &&
             run.repoCommit === arm.initialCommit &&
-            candidate.receipt.startedAt >= run.startedAt,
+            Date.parse(candidate.receipt.startedAt) >=
+              Date.parse(run.startedAt),
           "Future run does not bind to the prepared arm and execution chronology.",
         );
         verdict = candidate.verification.verdict;

@@ -358,6 +358,14 @@ describe("tournament authenticated evidence linkage and retention", () => {
       expect(report.attempts).toHaveLength(2);
     },
   );
+  it("compares timestamp instants across valid fractional-second representations", async () => {
+    const data = await evidenceFixture();
+    data.attempts[0]!.startedAt = start.replace(".000Z", "Z");
+    data.attempts[0]!.endedAt = start.replace(".000Z", "Z");
+    const report = buildTournamentReport(data);
+    expect(report.arms[0]!.verdict).toBe("VERIFIED");
+    expect(report.deviations).toEqual([]);
+  });
   it("retains independently authenticated failed checks from an unsuccessful process without upgrading execution", async () => {
     const data = await evidenceFixture("fail");
     data.attempts[1]!.status = "failed";

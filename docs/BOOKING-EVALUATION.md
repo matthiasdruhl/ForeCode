@@ -2,6 +2,8 @@
 
 ## Current status — October 28, 2026
 
+The [future team evaluator adapter](BOOKING-FUTURE-EVALUATION.md) extends the existing receipt/store boundary with public task/oracle/policy bindings and synthetic tests. No private oracle or future guest bridge is provisioned. Baseline suites/required checks remain unchanged; adding the public task/validator to the source freeze changes the trusted implementation identity and invalidates earlier admissions. This is preparation only, with owner policy review and operational gates still blocked.
+
 The historical preparation description below predates the owner-reviewed offline acceptance. Fixed no-inference guest acceptance subsequently completed with two VERIFIED and two REJECTED cases; see [installed verification](BOOKING-INSTALLED-VERIFICATION.md). That evidence does not admit a real coding agent or establish an A/B experiment. Real agent invocation remains disabled, and production evidence catalogs remain empty. This assignment adds local pre-run preparation and tournament integrity checks; it does not renew the old runtime admission.
 
 ## Historical preparation scope

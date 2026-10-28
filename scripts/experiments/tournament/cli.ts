@@ -4,6 +4,7 @@ import { protectedRead, privateDirectory } from "../artifacts/files";
 import { realAgentExecutionBlockers } from "../runner/commitment";
 import { canonicalJson } from "../../../src/lib/report/canonical";
 import { buildTournamentReport, tournamentExecutionBlockers } from "./report";
+import { assessFutureStudy } from "./future-study";
 
 export async function tournamentCli(args: readonly string[]): Promise<number> {
   if (args.length === 1 && args[0] === "--help") {
@@ -11,6 +12,7 @@ export async function tournamentCli(args: readonly string[]): Promise<number> {
       "Developer-local, no-execution tournament preparation.\n" +
         "  --status                 report unavailable independent gates\n" +
         "  --plan /absolute/plan.json validate a private local plan and report missing evidence\n" +
+        "  --future-draft /absolute/draft.json validate task/oracle/preparation bindings (always blocked)\n" +
         "No approval, agent, provider, grader, artifact registration or certificate is invoked.\n",
     );
     return 0;
@@ -25,7 +27,11 @@ export async function tournamentCli(args: readonly string[]): Promise<number> {
     );
     return 2;
   }
-  if (args.length !== 2 || args[0] !== "--plan" || !path.isAbsolute(args[1]!)) {
+  if (
+    args.length !== 2 ||
+    !["--plan", "--future-draft"].includes(args[0]!) ||
+    !path.isAbsolute(args[1]!)
+  ) {
     process.stderr.write("Use --help for local tournament preparation.\n");
     return 1;
   }
@@ -36,7 +42,10 @@ export async function tournamentCli(args: readonly string[]): Promise<number> {
     const plan: unknown = JSON.parse(
       new TextDecoder("utf-8", { fatal: true }).decode(bytes),
     );
-    const report = buildTournamentReport({ plan, attempts: [] });
+    const report =
+      args[0] === "--future-draft"
+        ? assessFutureStudy({ draft: plan })
+        : buildTournamentReport({ plan, attempts: [] });
     process.stdout.write(canonicalJson(report) + "\n");
     return 2;
   } catch {

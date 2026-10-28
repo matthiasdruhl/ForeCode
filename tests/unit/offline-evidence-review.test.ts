@@ -116,6 +116,10 @@ async function produced(mode = "normal") {
       },
     );
   }
+  if (mode === "source-write-failure")
+    vi.spyOn(originals, "publishOfflineRun").mockRejectedValue(
+      new Error(sentinel),
+    );
   const cancellation = new AbortController();
   if (mode === "pre-cancel") cancellation.abort();
   const record = await runOfflineAcceptance(
@@ -414,6 +418,27 @@ describe("prospective evidence intake — synthetic, no runtime or publication",
     report = await reviewOfflineEvidence(f.config, f.selection);
     expect(report.cases[1]!.reasons).toContain("SOURCE_REFERENCE_MISSING");
     expect(report.sourceState).toBe("incomplete");
+  });
+  it("retains all failed-publication and attempt diagnostics when both source writers fail", async () => {
+    const f = await produced("source-write-failure");
+    expect(f.record.sourceRecords).toEqual([]);
+    expect(f.record.publicationFailures).toHaveLength(4);
+    const report = await reviewOfflineEvidence(f.config, f.selection);
+    expect(report.sourceState).toBe("incomplete");
+    expect(report.publicationFailures).toEqual(f.record.publicationFailures);
+    expect(report.attemptDiagnostics).toEqual(f.record.attemptDiagnostics);
+    expect(
+      report.cases.every(
+        (row) =>
+          row.run === null &&
+          row.verdict === null &&
+          row.reasons.includes("SOURCE_REFERENCE_MISSING"),
+      ),
+    ).toBe(true);
+    expect(report.candidate).toBeNull();
+    expect(JSON.stringify(reviewConsoleSummary(report))).not.toContain(
+      sentinel,
+    );
   });
   it.each([
     "acceptance",

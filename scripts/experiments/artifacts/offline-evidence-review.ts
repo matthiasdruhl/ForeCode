@@ -93,6 +93,13 @@ export type Review = {
   selection: Selection;
   profile: unknown;
   declaredCaseCount: number | null;
+  // Pinned private accounting data only; never substitutes for original runs.
+  attemptDiagnostics: {
+    scenario: (typeof cases)[number];
+    runId: string;
+    status: ExperimentRunV1["status"];
+  }[];
+  publicationFailures: string[];
   sourceState: "validated" | "incomplete" | "invalid" | "unsupported";
   suiteStatus: "completed" | "failed" | null;
   reasons: Reason[];
@@ -228,6 +235,8 @@ async function intake(config: OfflineConfig, selection: Selection) {
     selection,
     profile: null,
     declaredCaseCount: null,
+    attemptDiagnostics: [],
+    publicationFailures: [],
     sourceState: "invalid",
     suiteStatus: null,
     reasons: [],
@@ -260,6 +269,8 @@ async function intake(config: OfflineConfig, selection: Selection) {
   }
   const a = acceptance.data;
   report.declaredCaseCount = a.casePlan.length;
+  report.attemptDiagnostics = a.attemptDiagnostics;
+  report.publicationFailures = a.publicationFailures;
   report.suiteStatus = a.status;
   invariant(
     a.acceptanceId === selection.acceptanceId,

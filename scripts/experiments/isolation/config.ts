@@ -70,7 +70,7 @@ export const OperatorConfigSchema = z
     reviewSha256: Sha256Schema,
     maxSeconds: z.number().int().min(1).max(600),
     maxOutputBytes: z.number().int().min(1024).max(8_000_000),
-    tokenLimit: z.number().int().min(1).max(500_000),
+    tokenLimit: z.number().int().min(1).max(1_000_000),
     spendUsd: z.number().positive().max(10),
     authorizedModel: BookingModelSchema,
     supervision: SupervisionConfigSchema.optional(),

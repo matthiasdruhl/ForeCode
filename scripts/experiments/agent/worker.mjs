@@ -88,9 +88,9 @@ server.listen(8787, "127.0.0.1", () => {
     "-c",
     'web_search="disabled"',
     "-c",
-    // Above the largest reviewed 500k-token reservation ceiling: no hidden
+    // Above the largest reviewed 1M-token reservation ceiling: no hidden
     // compact/history request outside the finite stateless Responses protocol.
-    "model_auto_compact_token_limit=1000000",
+    "model_auto_compact_token_limit=2000000",
     input.prompt,
   ];
   if (input.model === "muse-spark-1.3")

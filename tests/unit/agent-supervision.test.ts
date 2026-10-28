@@ -92,11 +92,14 @@ describe("concrete agent supervision private mechanics", () => {
       "muse-spark-1.3",
     );
     expect(OperatorConfigSchema.parse(meta).tokenLimit).toBe(500000);
+    expect(
+      OperatorConfigSchema.parse({ ...meta, tokenLimit: 1000000 }).tokenLimit,
+    ).toBe(1000000);
     for (const bad of [
       { ...meta, authorizedModel: "muse-spark-1.3-contributor" },
       { ...meta, authorizedModel: "gpt-5.6-sol" },
       { ...meta, supervision: undefined },
-      { ...meta, tokenLimit: 500001 },
+      { ...meta, tokenLimit: 1000001 },
       {
         ...meta,
         authorizedModel: "gpt-5.6-sol",

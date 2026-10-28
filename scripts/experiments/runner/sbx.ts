@@ -478,6 +478,7 @@ export function createSbxAdapter(
         nonce,
         candidate,
         prompt: fixedTask.prompt,
+        model: config.authorizedModel,
         workerImage: config.supervision.workerImage,
         codexBinarySha256: config.codexBinarySha256,
         agentConfigSha256: config.agentConfigSha256,

@@ -13,6 +13,22 @@ import time
 import urllib.request
 
 
+PROFILES = {
+    'gpt-5.6-sol': {'endpoint': 'https://api.openai.com/v1/responses',
+                    'sentinel': 'sk-sandbox', 'minimumOutputTokens': 1},
+    'muse-spark-1.3': {'endpoint': 'https://api.meta.ai/v1/responses',
+                       'sentinel': 'forecode-meta-sandbox', 'minimumOutputTokens': 16},
+}
+
+
+def reviewed_profile(request):
+    model = request.get('model')
+    if (model not in PROFILES
+            or request.get('provider', {}).get('endpoint') != PROFILES[model]['endpoint']):
+        raise ValueError('model and fixed provider endpoint mismatch')
+    return PROFILES[model]
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
 
@@ -41,6 +57,7 @@ class Reservations:
     def __init__(self, directory, request):
         self.file = directory / 'budget.json'
         self.request = request
+        self.profile = reviewed_profile(request)
         self.value = {'requests': [], 'reservedTokens': 0, 'reservedMicroUsd': 0,
                       'opaqueInputs': {}, 'blockedReason': None}
         if self.file.exists():
@@ -56,7 +73,7 @@ class Reservations:
         if time.time() >= r['deadline'] or len(raw) > 1_048_576:
             raise ValueError('budget deadline or request limit')
         body = json.loads(raw)
-        if not isinstance(body, dict) or body.get('model') != 'gpt-5.6-sol':
+        if not isinstance(body, dict) or body.get('model') != r['model']:
             raise ValueError('unapproved model')
         # Stateless, text-only requests. Hidden server-side history, remote
         # files/media and separately billed hosted tools defeat byte accounting.
@@ -112,7 +129,7 @@ class Reservations:
         micro_left = r['spendMicroUsd'] - self.value['reservedMicroUsd']
         output = min(output, (micro_left - input_upper * provider['inputMicroUsdPerToken'])
                      // provider['outputMicroUsdPerToken'])
-        if output < 1:
+        if output < self.profile['minimumOutputTokens']:
             raise ValueError('hard reservation exhausted')
         body['max_output_tokens'] = output
         reserved = input_upper * provider['inputMicroUsdPerToken'] + output * provider['outputMicroUsdPerToken']
@@ -174,7 +191,7 @@ class Reservations:
         else:
             raise ValueError('unsupported provider content type')
         if (not isinstance(response, dict) or response.get('object') != 'response'
-                or response.get('model') != 'gpt-5.6-sol'
+                or response.get('model') != self.request['model']
                 or response.get('service_tier') != 'default'
                 or response.get('status') not in ('completed', 'incomplete')):
             raise ValueError('provider identity or outcome mismatch')
@@ -187,13 +204,15 @@ class Reservations:
                 raise ValueError('invalid provider token accounting')
             return value
         used_input, used_output, total = tokens('input_tokens'), tokens('output_tokens'), tokens('total_tokens')
-        details = usage.get('input_tokens_details')
+        meta = self.request['model'] == 'muse-spark-1.3'
+        details = usage.get('input_tokens_details', {} if meta else None)
         if not isinstance(details, dict):
             raise ValueError('provider input accounting unavailable')
-        cached = tokens('cached_tokens', details)
+        cached = tokens('cached_tokens', {'cached_tokens': details.get('cached_tokens', 0)} if meta else details)
         written = tokens('cache_write_tokens', {'cache_write_tokens': details.get('cache_write_tokens', 0)})
         if (used_input > reservation['inputTokenUpperBound'] or used_output > maximum
-                or total != used_input + used_output or cached + written > used_input):
+                or total != used_input + used_output or cached + written > used_input
+                or (meta and written != 0)):
             raise ValueError('provider usage exceeds reservation')
         # Cache reads and writes are already covered by the reviewed worst-case
         # input tariff. Do not refund reservations or claim a measured bill.
@@ -229,9 +248,13 @@ def provider_request(body):
     if not proxy.startswith('http://'):
         raise ValueError('reviewed credential proxy unavailable')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({'https': proxy}), NoRedirect())
-    request = urllib.request.Request('https://api.openai.com/v1/responses', data=body,
+    model = json.loads(body).get('model')
+    if model not in PROFILES:
+        raise ValueError('unapproved provider model')
+    profile = PROFILES[model]
+    request = urllib.request.Request(profile['endpoint'], data=body,
                                      headers={'Content-Type': 'application/json',
-                                              'Authorization': 'Bearer sk-sandbox'})
+                                              'Authorization': 'Bearer ' + profile['sentinel']})
     with opener.open(request, timeout=30) as response:
         data = response.read(8_000_001)
         if len(data) > 8_000_000 or response.status != 200:

@@ -157,6 +157,7 @@ class Supervisor:
         return ids
 
     def prepare(self, request):
+        budget.reviewed_profile(request)
         run_id = request['runId']
         p = self.directory(run_id)
         if self.owned(run_id):
@@ -195,7 +196,7 @@ class Supervisor:
                 os.chmod(pathlib.Path(parent) / name, 0o600)
         gateway = p / 'gateway'
         gateway.mkdir(mode=0o755)
-        task = {'prompt': request['prompt'], 'codexBinarySha256': request['codexBinarySha256'],
+        task = {'prompt': request['prompt'], 'model': request['model'], 'codexBinarySha256': request['codexBinarySha256'],
                 'agentConfigSha256': request['agentConfigSha256'], 'workerNodeSha256': request.get('workerNodeSha256')}
         (p / 'task.json').write_bytes(budget.canonical(task))
         os.chmod(p / 'task.json', 0o444)

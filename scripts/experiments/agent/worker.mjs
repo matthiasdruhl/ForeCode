@@ -7,6 +7,8 @@ import { spawn } from "node:child_process";
 let input;
 try {
   input = JSON.parse(readFileSync("/run/forecode-task.json", "utf8"));
+  if (!["gpt-5.6-sol", "muse-spark-1.3"].includes(input.model))
+    process.exit(125);
   for (const [file, expected] of [
     ["/usr/local/bin/codex", input.codexBinarySha256],
     ["/usr/local/bin/node", input.workerNodeSha256],
@@ -57,7 +59,7 @@ server.listen(8787, "127.0.0.1", () => {
     "never",
     "--skip-git-repo-check",
     "--model",
-    "gpt-5.6-sol",
+    input.model,
     "--sandbox",
     "workspace-write",
     "-C",
@@ -88,6 +90,19 @@ server.listen(8787, "127.0.0.1", () => {
     "model_auto_compact_token_limit=1000000",
     input.prompt,
   ];
+  if (input.model === "muse-spark-1.3")
+    args.splice(
+      args.length - 1,
+      0,
+      "-c",
+      "model_context_window=1048576",
+      "-c",
+      "model_supports_reasoning_summaries=true",
+      "-c",
+      'model_reasoning_effort="high"',
+      "-c",
+      'model_reasoning_summary="auto"',
+    );
   const child = spawn("/usr/local/bin/codex", args, {
     shell: false,
     stdio: ["ignore", "inherit", "inherit"],

@@ -61,8 +61,8 @@ for changed in [False, True]:
         'workerImage':image,'prompt':'HARMLESS LAUNCHER CONTROL',
         'codexBinarySha256': 'a'*64 if changed else hashlib.sha256(stand_in).hexdigest(),
         'agentConfigSha256': hashlib.sha256(config).hexdigest(), 'workerNodeSha256':node_hash,
-        'maxSeconds':10,'maxOutputBytes':4096,'tokenLimit':100000,'spendMicroUsd':1000000,
-        'provider':{'maxOutputTokens':32,'inputMicroUsdPerToken':1,'outputMicroUsdPerToken':1}}
+        'maxSeconds':10,'maxOutputBytes':4096,'model':'gpt-5.6-sol','tokenLimit':100000,'spendMicroUsd':1000000,
+        'provider':{'endpoint':'https://api.openai.com/v1/responses','maxOutputTokens':32,'inputMicroUsdPerToken':1,'outputMicroUsdPerToken':1}}
     s.prepare(request)
     p=s.directory(run_id)
     (p/'codex').write_bytes(stand_in); (p/'codex').chmod(0o555)

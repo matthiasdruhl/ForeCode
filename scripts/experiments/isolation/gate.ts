@@ -41,7 +41,8 @@ export async function reviewIsolation(
   if (
     review.configurationSha256 !== configurationDigest(config) ||
     review.implementationSha256 !== implementationSha256 ||
-    review.maxSpendUsd < config.spendUsd
+    review.maxSpendUsd < config.spendUsd ||
+    review.authorizedModel !== config.authorizedModel
   )
     throw new Error(
       "Isolation review does not bind actual runtime, implementation and budget.",

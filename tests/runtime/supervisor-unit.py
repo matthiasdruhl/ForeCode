@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 # These imports inspect trusted source. Never create bytecode beside it: that
 # changes the source commitment while other tests authenticate producer records.
@@ -33,8 +34,8 @@ class Mechanics(unittest.TestCase):
         self.temp.cleanup()
 
     def budget_request(self, **changes):
-        request = {'deadline': time.time() + 60, 'tokenLimit': 100000, 'spendMicroUsd': 1000000,
-                   'provider': {'maxOutputTokens': 4096, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 2}}
+        request = {'model': 'gpt-5.6-sol', 'deadline': time.time() + 60, 'tokenLimit': 100000, 'spendMicroUsd': 1000000,
+                   'provider': {'endpoint': 'https://api.openai.com/v1/responses', 'maxOutputTokens': 4096, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 2}}
         request.update(changes)
         return request
 
@@ -101,6 +102,50 @@ class Mechanics(unittest.TestCase):
         b.observe(json.dumps(self.response(status='incomplete')).encode(), 'application/json', sent)
         self.assertEqual(b.value['reservedMicroUsd'], reserved)
         b.reserve(self.raw())
+
+    def test_meta_reserves_exact_pair_and_accepts_bounded_usage_without_optional_cache_details(self):
+        provider = {'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,
+                    'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5}
+        b = self.budget(model='muse-spark-1.3', provider=provider)
+        sent = b.reserve(self.raw(model='muse-spark-1.3'))
+        self.assertEqual(json.loads(sent)['model'], 'muse-spark-1.3')
+        response=self.response(model='muse-spark-1.3',usage={'input_tokens':100,'output_tokens':20,'total_tokens':120})
+        b.observe(json.dumps(response).encode(), 'application/json', sent)
+        with self.assertRaises(ValueError):
+            b.reserve(self.raw(model='gpt-5.6-sol'))
+        self.assertLessEqual(b.value['reservedMicroUsd'],1000000)
+
+    def test_model_endpoint_substitution_and_meta_subminimum_output_are_denied(self):
+        for model, endpoint in [('muse-spark-1.3','https://api.openai.com/v1/responses'),
+                                ('gpt-5.6-sol','https://api.meta.ai/v1/responses'),
+                                ('muse-spark-1.3-contributor','https://api.meta.ai/v1/responses')]:
+            with self.subTest(model=model), self.assertRaises(ValueError):
+                m.budget.reviewed_profile({'model':model,'provider':{'endpoint':endpoint}})
+        provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':15,
+                  'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5}
+        b=self.budget(model='muse-spark-1.3',provider=provider)
+        with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3'))
+        self.assertEqual(b.value['requests'],[])
+
+    def test_each_provider_uses_only_its_fixed_endpoint_and_host_proxy_sentinel(self):
+        calls=[]
+        class Reply:
+            status=200
+            headers={'Content-Type':'application/json'}
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def read(self,limit):return b'{}'
+        class Opener:
+            def open(self,request,timeout):
+                calls.append((request.full_url,request.get_header('Authorization')))
+                return Reply()
+        with mock.patch.dict(m.budget.os.environ,{'HTTPS_PROXY':'http://proxy.invalid:3128'}), \
+             mock.patch.object(m.budget.urllib.request,'build_opener',return_value=Opener()):
+            for model in ['gpt-5.6-sol','muse-spark-1.3']:
+                m.budget.provider_request(self.raw(model=model))
+            with self.assertRaises(ValueError):m.budget.provider_request(self.raw(model='unapproved'))
+        self.assertEqual(calls,[('https://api.openai.com/v1/responses','Bearer sk-sandbox'),
+                                ('https://api.meta.ai/v1/responses','Bearer forecode-meta-sandbox')])
 
     def test_reserves_before_forwarding_and_preserves_integer_ceilings(self):
         b = self.budget()

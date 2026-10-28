@@ -1,0 +1,100 @@
+import { describe, expect, it } from "vitest";
+import { boundedProcess } from "../../scripts/experiments/runner/process";
+import { isTrustedAgentFinalization } from "../../scripts/experiments/runner/sbx";
+import { SupervisionConfigSchema } from "../../scripts/experiments/isolation/config";
+
+describe("concrete agent supervision private mechanics", () => {
+  it("loads CLI help and validates the disabled example without a server-only import failure or sandbox operation", async () => {
+    for (const args of [
+      ["--help"],
+      [
+        "--config",
+        "scripts/experiments/isolation/operator.supervised.example.json",
+      ],
+    ]) {
+      const result = await boundedProcess(
+        process.execPath,
+        [
+          "--conditions=react-server",
+          "--import",
+          "tsx",
+          "scripts/experiments/runner/cli.ts",
+          ...args,
+        ],
+        { milliseconds: 15000, maxBytes: 8192 },
+      );
+      expect(result.exitCode).toBe(0);
+      expect(result.stderr).toBe("");
+      if (args[0] === "--help")
+        expect(result.stdout).toContain("--execute --commitment");
+      else
+        expect(JSON.parse(result.stdout)).toMatchObject({
+          execution: "NOT_RUN",
+          enabled: false,
+          admission: "BLOCKED",
+        });
+    }
+  });
+  it("runs actual Python broker/filesystem mechanics without Docker, inference or fake runtime admission", async () => {
+    const result = await boundedProcess(
+      "/usr/bin/python3",
+      ["tests/runtime/supervisor-unit.py"],
+      { milliseconds: 15000, maxBytes: 65536 },
+    );
+    expect(result.stderr).not.toContain("FAILED");
+    expect(result.reason).toBe("completed");
+    expect(result.exitCode).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      classification: "UNIT_NO_RUNTIME_OR_INFERENCE",
+      tests: 20,
+      failures: 0,
+      errors: 0,
+    });
+  });
+  it("plain, cloned or serialized termination flags never authenticate finalization", () => {
+    const forged = {
+      runId: "fake",
+      terminationConfirmed: true,
+      restartAbsenceConfirmed: true,
+      exportWithoutGuestExecution: true,
+      candidate: {},
+      candidateSha256: "a".repeat(64),
+    };
+    for (const value of [
+      forged,
+      { ...forged },
+      JSON.parse(JSON.stringify(forged)),
+      null,
+      "trusted",
+      { issuer: "trusted_supervisor" },
+    ])
+      expect(isTrustedAgentFinalization(value)).toBe(false);
+  });
+  it("keeps the private worker/provider configuration finite and rejects alternate endpoints or commands", () => {
+    const config = {
+      schemaVersion: "booking-supervised-worker.v1",
+      sbxSha256: "a".repeat(64),
+      workerImage: `sha256:${"a".repeat(64)}`,
+      workerNodeSha256: "a".repeat(64),
+      vmDiskBytes: 8 * 1024 ** 3,
+      vmPids: 4096,
+      provider: {
+        endpoint: "https://api.openai.com/v1/responses",
+        inputMicroUsdPerToken: 1,
+        outputMicroUsdPerToken: 2,
+        maxOutputTokens: 4096,
+      },
+    };
+    expect(SupervisionConfigSchema.parse(config)).toEqual(config);
+    for (const bad of [
+      { ...config, command: "arbitrary" },
+      { ...config, vmPids: 50000 },
+      {
+        ...config,
+        provider: { ...config.provider, endpoint: "https://unapproved" },
+      },
+      { ...config, provider: { ...config.provider, inputMicroUsdPerToken: 0 } },
+    ])
+      expect(() => SupervisionConfigSchema.parse(bad)).toThrow();
+  });
+});

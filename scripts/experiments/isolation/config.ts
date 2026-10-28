@@ -7,6 +7,27 @@ import {
 
 const absolute = z.string().refine((value) => path.isAbsolute(value));
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+// Private runtime inputs, not additions to the frozen application contracts.
+export const SupervisionConfigSchema = z.strictObject({
+  schemaVersion: z.literal("booking-supervised-worker.v1"),
+  sbxSha256: Sha256Schema,
+  workerImage: digest,
+  workerNodeSha256: Sha256Schema,
+  vmDiskBytes: z
+    .number()
+    .int()
+    .positive()
+    .max(64 * 1024 ** 3),
+  vmPids: z.number().int().min(128).max(4096),
+  provider: z.strictObject({
+    endpoint: z.literal("https://api.openai.com/v1/responses"),
+    // Independently approved conservative tariff ceilings. The trusted broker
+    // reserves these BEFORE sending a request; failed requests are not refunded.
+    inputMicroUsdPerToken: z.number().int().min(1).max(1000),
+    outputMicroUsdPerToken: z.number().int().min(1).max(10000),
+    maxOutputTokens: z.number().int().min(1).max(8192),
+  }),
+});
 export const obligations = [
   "sanitized-workspace",
   "host-read-write-denial",
@@ -47,6 +68,7 @@ export const OperatorConfigSchema = z.strictObject({
   tokenLimit: z.number().int().min(1).max(100_000),
   spendUsd: z.number().positive().max(10),
   authorizedModel: z.literal("gpt-5.6-sol"),
+  supervision: SupervisionConfigSchema.optional(),
 });
 export type OperatorConfig = z.infer<typeof OperatorConfigSchema>;
 // This is a private, operator-reviewed record, NOT an infrastructure PASS field.
@@ -60,6 +82,17 @@ export const IsolationReviewSchema = z.strictObject({
   authorizedTask: z.literal("booking-ownership-refactor-v1"),
   authorizedModel: z.literal("gpt-5.6-sol"),
   maxSpendUsd: z.number().positive().max(10),
+  execution: z
+    .strictObject({
+      runId: z.string().uuid(),
+      repoCommit: z.string().regex(/^[a-f0-9]{40}$/),
+      commitmentSha256: Sha256Schema,
+      // Maintained by the independent reviewer. Removal/replacement revokes this
+      // exact admission; its content is not itself a new approval system.
+      revocationFile: absolute,
+      revocationSha256: Sha256Schema,
+    })
+    .optional(),
   evidence: z
     .array(
       z.strictObject({

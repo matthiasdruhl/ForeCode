@@ -18,6 +18,7 @@ import {
 const { values } = parseArgs({
   options: {
     config: { type: "string" },
+    commitment: { type: "string" },
     "prepare-commitment": { type: "boolean", default: false },
     "inspect-runtime": { type: "boolean", default: false },
     execute: { type: "boolean", default: false },
@@ -27,7 +28,7 @@ const { values } = parseArgs({
 });
 if (values.help) {
   process.stdout.write(
-    "Developer-local booking runner. --config /absolute/private/config.json [--execute]\nReal agent execution is hard-disabled. --prepare-commitment persists a private proposal (no approval, sandbox invocation or paid call). Default: validate configuration only; no sandbox command or paid call. --inspect-runtime: explicit operator probes (may start dedicated VMs), then stop them; no inference. See docs/BOOKING-RUNNER.md.\n",
+    "Developer-local booking runner. --config /absolute/private/config.json [--execute --commitment /absolute/private/UUID/commitment-proposal.json]\nConcrete supervised worker execution requires an independently reviewed exact commitment, current admission, installed helper/image and enforced provider envelope. --prepare-commitment persists a private proposal only. Default validates configuration without VM/provider operations. --inspect-runtime requires explicit owner authority and the shared lease. No task/model/command override. See docs/BOOKING-RUNNER.md.\n",
   );
 } else {
   try {
@@ -35,6 +36,8 @@ if (values.help) {
     const config = OperatorConfigSchema.parse(
       JSON.parse((await protectedRead(values.config)).toString("utf8")),
     );
+    if (values.commitment && !values.execute)
+      throw new Error("Commitment selection requires execution.");
     if (values["prepare-commitment"]) {
       if (values.execute || values["inspect-runtime"])
         throw new Error(
@@ -84,7 +87,10 @@ if (values.help) {
       process.on("SIGINT", cancel);
       process.on("SIGTERM", cancel);
       try {
-        const inventory = await adapter.inspectRuntime(cancellation.signal);
+        const inventory = await adapter.inspectRuntime(
+          cancellation.signal,
+          lease,
+        );
         await writeFile(
           path.join(root, "inventory.json"),
           JSON.stringify(inventory),
@@ -94,7 +100,7 @@ if (values.help) {
           JSON.stringify({
             execution: "NOT_RUN",
             inventorySha256: jsonDigest(inventory),
-            note: "Read-only runtime probes only; no containment or inference claim.",
+            note: "Trusted inventory/resource setup only; no containment or inference claim.",
           }) + "\n",
         );
       } finally {
@@ -114,7 +120,7 @@ if (values.help) {
           enabled: config.enabled,
           admission: "BLOCKED",
           blockers: realAgentExecutionBlockers,
-          note: "Real agent execution is hard-disabled pending supervised termination/export acceptance. Use acceptance:booking for separately gated no-inference grading.",
+          note: "Execution requires separately approved exact commitment, supervised runtime installation, current independent admission and provider hard-budget evidence.",
         }) + "\n",
       );
     } else {
@@ -140,6 +146,11 @@ if (values.help) {
           createSbxAdapter(config),
           cancellation.signal,
           git.stdout.trim(),
+          values.commitment
+            ? JSON.parse(
+                (await protectedRead(values.commitment)).toString("utf8"),
+              )
+            : undefined,
         );
         process.stdout.write(
           JSON.stringify({

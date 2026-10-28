@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  writeFile,
+  open,
+} from "node:fs/promises";
+import { z } from "zod";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { prepareBookingWorkspace } from "../prepare-booking";
@@ -7,8 +15,10 @@ import { freezeBooking } from "../../evaluator/booking-v1/freeze";
 import { snapshotTree } from "../../evaluator/booking-v1/snapshot";
 import { jsonDigest, sha256 } from "../../../src/lib/report/digests";
 import { ExperimentRunV1Schema } from "../../../src/lib/contracts/evidence";
+import { validateReceiptRelationships } from "../../../src/lib/contracts/validation";
 import {
   captureReviewedTree,
+  protectedRead,
   disjoint,
   freezeCandidate,
   privateDirectory,
@@ -17,12 +27,20 @@ import { publishEvaluation } from "../artifacts/publish";
 import { configurationDigest } from "../isolation/gate";
 import type { OperatorConfig } from "../isolation/config";
 import { acquireBookingLease } from "./lease";
-import { fixedTask, validateGradeReport } from "./protocol";
+import { fixedTask, validateGradeReport, type GradeReport } from "./protocol";
+import { canonicalJson } from "../../../src/lib/report/canonical";
+import {
+  createProtectedEvaluationStore,
+  isTrustedEvaluation,
+  type TrustedEvaluation,
+} from "../../../src/server/artifacts/evaluation-store";
+import { writeOfflineOriginal } from "../artifacts/offline-runs";
 import {
   bookingExecutionCommitment,
   realAgentExecutionBlockers,
 } from "./commitment";
 import type { BookingAdapter } from "./sbx";
+import { isTrustedAgentFinalization } from "./sbx";
 import type { ProcessResult } from "./process";
 
 const projectRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -46,10 +64,17 @@ export async function runBookingExperiment(
   adapter: BookingAdapter,
   userSignal: AbortSignal,
   repoCommit: string,
+  preparedProposal?: unknown,
 ) {
+  config = structuredClone(config);
+  const supplied = preparedProposal as
+    | { commitment?: { runId?: unknown }; commitmentSha256?: unknown }
+    | undefined;
   const start = Date.now(),
     startedAt = new Date(start).toISOString(),
-    runId = randomUUID();
+    runId = supplied
+      ? z.string().uuid().parse(supplied.commitment?.runId)
+      : randomUUID();
   const root = await privateDirectory(config.protectedRoot),
     scratch = await privateDirectory(config.scratchRoot);
   disjoint(root, scratch);
@@ -68,6 +93,10 @@ export async function runBookingExperiment(
   };
   const evaluatorSha256 = jsonDigest(runtimePins);
   const proposal = bookingExecutionCommitment(config, repoCommit, runId, pins);
+  if (supplied && jsonDigest(supplied) !== jsonDigest(proposal))
+    throw new Error(
+      "Prepared commitment is stale or does not match exact inputs.",
+    );
   let lease: Awaited<ReturnType<typeof acquireBookingLease>> | undefined;
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(), config.maxSeconds * 1000);
@@ -86,22 +115,73 @@ export async function runBookingExperiment(
   let admitted = false;
   let stage = "commitment";
   let entry: Awaited<ReturnType<typeof publishEvaluation>> | null = null;
+  let pendingReport: GradeReport | undefined;
+  let authenticated: TrustedEvaluation | undefined;
+  let gradingStartedAt = startedAt,
+    gradingFinishedAt = startedAt;
+  let journalIndex = 0;
+  async function transition(next: string) {
+    stage = next;
+    if (!directory) return;
+    const handle = await open(
+      path.join(
+        directory,
+        `attempt-${String(journalIndex++).padStart(4, "0")}.json`,
+      ),
+      "wx",
+      0o400,
+    );
+    try {
+      await handle.writeFile(
+        canonicalJson({
+          runId,
+          stage,
+          observedAt: new Date().toISOString(),
+          commitmentSha256: proposal.commitmentSha256,
+          cleanupConfirmed: cleaned,
+          publication: entry ? "WRITTEN" : "NOT_PERFORMED",
+        }),
+      );
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+  }
   try {
     directory = path.join(root, runId);
-    await mkdir(directory, { mode: 0o700 });
-    await writeFile(
-      path.join(directory, "commitment-proposal.json"),
-      JSON.stringify(proposal, null, 2),
-      { mode: 0o400, flag: "wx" },
-    );
-    stage = "lease";
+    if (supplied) {
+      await privateDirectory(directory);
+      const original = JSON.parse(
+        (
+          await protectedRead(path.join(directory, "commitment-proposal.json"))
+        ).toString(),
+      );
+      if (jsonDigest(original) !== jsonDigest(proposal))
+        throw new Error("Original prepared commitment changed.");
+    } else {
+      await mkdir(directory, { mode: 0o700 });
+      await writeFile(
+        path.join(directory, "commitment-proposal.json"),
+        JSON.stringify(proposal, null, 2),
+        { mode: 0o400, flag: "wx" },
+      );
+    }
+    await transition("lease");
     lease = await acquireBookingLease(config.coordinationRoot, runId);
     await lease.assertOwned();
-    stage = "admission";
-    await adapter.admit(pins.evaluatorSha256, signal);
+    await transition("admission");
+    if (adapter.kind === "sbx" && !supplied)
+      throw new Error("Independently reviewed prepared commitment required.");
+    await adapter.admit(pins.evaluatorSha256, signal, {
+      runId,
+      repoCommit,
+      commitmentSha256: proposal.commitmentSha256,
+      fixtureSha256: pins.fixtureSha256,
+      assertOwned: lease.assertOwned,
+    });
     admitted = true;
     if (signal.aborted) throw new Error("cancelled");
-    stage = "preparation";
+    await transition("preparation");
     temporary = await mkdtemp(path.join(scratch, "booking-"));
     const exported = path.join(temporary, "subject");
     const prepared = await prepareBookingWorkspace(
@@ -112,7 +192,7 @@ export async function runBookingExperiment(
       throw new Error("Reviewed fixture changed.");
     const baseline = await captureReviewedTree(exported, runId);
     await adapter.prepare(runId, exported, signal);
-    stage = "agent";
+    await transition("agent");
     agent = await adapter.agent(runId, signal);
     if (agent.reason !== "completed" || signal.aborted) {
       status =
@@ -123,12 +203,15 @@ export async function runBookingExperiment(
             : "failed";
       throw new Error("Agent interrupted; final candidate unavailable.");
     }
-    stage = "candidate-export";
+    await transition("candidate-export");
     await lease.assertOwned();
     // Atomic trusted adapter boundary: terminate, prove absence across restart,
     // seal source and transfer it without executing the untrusted guest again.
-    // The real sbx adapter deliberately has no implementation of this boundary.
     const finalized = await adapter.finalizeAgent(runId, signal);
+    if (adapter.kind === "sbx" && !isTrustedAgentFinalization(finalized))
+      throw new Error(
+        "Concrete supervised finalization authenticity required.",
+      );
     finalization = {
       runId: finalized.runId,
       terminationConfirmed: finalized.terminationConfirmed,
@@ -159,7 +242,8 @@ export async function runBookingExperiment(
       requiredPolicySha256: pins.requiredPolicySha256,
     };
     if (signal.aborted) throw new Error("cancelled");
-    stage = "grading";
+    await transition("grading");
+    gradingStartedAt = new Date().toISOString();
     grading = await adapter.grade(
       {
         ...expected,
@@ -168,6 +252,7 @@ export async function runBookingExperiment(
       },
       signal,
     );
+    gradingFinishedAt = new Date().toISOString();
     // Preserve bounded protected controller output even if malformed or failing.
     // It is not a receipt and is never loaded as authority.
     await writeFile(
@@ -190,9 +275,9 @@ export async function runBookingExperiment(
             : "failed";
       throw new Error("Independent grader did not finish.");
     }
-    stage = "report-validation";
+    await transition("report-validation");
     const report = validateGradeReport(JSON.parse(grading.stdout), expected);
-    stage = "cleanup-and-freshness";
+    await transition("cleanup-and-freshness");
     await lease.assertOwned();
     await adapter.cleanup();
     cleaned = true;
@@ -203,23 +288,7 @@ export async function runBookingExperiment(
     )
       throw new Error("Candidate or evaluator source mutated during grading.");
     if (signal.aborted) throw new Error("cancelled");
-    stage = "publication";
-    entry = await publishEvaluation(
-      directory,
-      {
-        ...expected,
-        fixtureSha256: pins.fixtureSha256,
-        requiredCheckIds: pins.policy.requiredCheckIds,
-      },
-      report,
-      startedAt,
-      new Date().toISOString(),
-      {
-        ...runtimePins,
-        configurationSha256: configurationDigest(config),
-        isolationReviewSha256: config.reviewSha256,
-      },
-    );
+    pendingReport = report;
     status = agent.exitCode === 0 ? "completed" : "failed";
   } catch {
     failure =
@@ -264,7 +333,58 @@ export async function runBookingExperiment(
       }
     }
   }
-  const run = ExperimentRunV1Schema.parse({
+  // Publish only after sandbox, scratch AND owned-lease cleanup have succeeded.
+  if (pendingReport && cleaned && candidate && directory && !signal.aborted) {
+    try {
+      if (
+        (await snapshotTree(candidate.directory)).treeSha256 !==
+          candidate.treeSha256 ||
+        (await freezeBooking()).evaluatorSha256 !== pins.evaluatorSha256
+      )
+        throw new Error("Source changed before publication.");
+      await transition("publication");
+      entry = await publishEvaluation(
+        directory,
+        {
+          runId,
+          evaluatedTreeSha256: candidate.treeSha256,
+          fixtureSha256: pins.fixtureSha256,
+          evaluatorSha256,
+          testSuiteSha256: pins.testSuiteSha256,
+          requiredPolicySha256: pins.requiredPolicySha256,
+          requiredCheckIds: pins.policy.requiredCheckIds,
+        },
+        pendingReport,
+        gradingStartedAt,
+        gradingFinishedAt,
+        {
+          ...runtimePins,
+          configurationSha256: configurationDigest(config),
+          isolationReviewSha256: config.reviewSha256,
+        },
+      );
+      const trusted = await (
+        await createProtectedEvaluationStore({
+          root,
+          agentWorkspaceRoot: scratch,
+          entries: new Map([[runId, entry]]),
+        })
+      ).load(runId);
+      if (!isTrustedEvaluation(trusted))
+        throw new Error("Published evaluation failed fresh authentication.");
+      authenticated = trusted;
+      await writeFile(
+        path.join(directory, "verification.json"),
+        canonicalJson(trusted.verification),
+        { flag: "wx", mode: 0o400 },
+      );
+    } catch {
+      entry = null;
+      status = "failed";
+      failure = "Protected publication or fresh authentication failed.";
+    }
+  }
+  let run = ExperimentRunV1Schema.parse({
     schemaVersion: "experiment-run.v1",
     id: runId,
     variant: "A",
@@ -284,10 +404,8 @@ export async function runBookingExperiment(
     }),
     evaluatorSha256,
     requiredPolicySha256: pins.requiredPolicySha256,
-    isolationAttestationId:
-      adapter.kind === "sbx" && admitted
-        ? `review-${config.reviewSha256.slice(0, 32)}`
-        : null,
+    // A private isolation review is not an original frozen attestation record.
+    isolationAttestationId: null,
     seed: null,
     startedAt,
     endedAt: new Date().toISOString(),
@@ -309,10 +427,13 @@ export async function runBookingExperiment(
           ).length
         : null,
     },
-    evidenceOrigin: adapter.kind === "sbx" && entry ? "measured" : "none",
+    // Measured origin also requires a genuine frozen isolation attestation.
+    // A private runtime admission/review is not that original record.
+    evidenceOrigin: "none",
     presentationMode: "recorded",
     limitations: [
       "Public baseline behavior checks only; no hidden holdout, refactor-quality certificate, A/B study or Meta inference.",
+      "No original IsolationAttestationV1 is supplied; a private runtime admission does not authorize a measured-origin label.",
       ...(adapter.kind === "synthetic-development"
         ? [
             "SYNTHETIC DEVELOPMENT ADAPTER: not real agent or containment evidence.",
@@ -320,6 +441,31 @@ export async function runBookingExperiment(
         : []),
     ],
   });
+  if (entry && authenticated) {
+    try {
+      validateReceiptRelationships(
+        authenticated.receipt,
+        authenticated.verification,
+        run,
+      );
+      if (
+        Date.parse(authenticated.receipt.startedAt) <
+          Date.parse(run.startedAt) ||
+        Date.parse(authenticated.receipt.finishedAt) > Date.parse(run.endedAt!)
+      )
+        throw new Error("Receipt time outside the observed run.");
+    } catch {
+      entry = null;
+      failure =
+        "Original run/evaluation relationships invalid; no linked evidence.";
+      run = ExperimentRunV1Schema.parse({
+        ...run,
+        status: "failed",
+        receiptId: null,
+        verificationId: null,
+      });
+    }
+  }
   const record = {
     run,
     adapter: adapter.kind,
@@ -327,7 +473,8 @@ export async function runBookingExperiment(
     runtimePins,
     configurationSha256: configurationDigest(config),
     commitmentSha256: proposal.commitmentSha256,
-    executionBlockers: adapter.kind === "sbx" ? realAgentExecutionBlockers : [],
+    executionBlockers:
+      adapter.kind === "sbx" && !admitted ? realAgentExecutionBlockers : [],
     cleanupConfirmed: cleaned,
     finalization,
     changedFiles: candidate
@@ -355,6 +502,10 @@ export async function runBookingExperiment(
     failure,
     entry,
   };
+  if (directory) {
+    await writeOfflineOriginal(directory, runId, "experiment-run.json", run);
+    await transition("finished");
+  }
   // Preserve blocked attempts too; no raw agent output, secrets or host paths.
   const recordPath = directory
     ? path.join(directory, "run.json")

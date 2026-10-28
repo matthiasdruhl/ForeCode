@@ -89,7 +89,21 @@ def hashed(filename, trusted=False, executable=False):
 def main():
     role = sys.argv[1]
     if role == 'agent':
-        paths = ['/home/agent/.codex/config.toml', '/usr/local/bin/codex']
+        paths = ['/home/agent/.codex/config.toml', '/usr/local/bin/codex',
+                 '/opt/forecode-agent/supervisor.py', '/opt/forecode-agent/budget.py', '/opt/forecode-agent/worker.mjs']
+        for p in ['/opt', '/opt/forecode-agent']:
+            trusted_metadata(p, directory=True)
+            if pathlib.Path(p).lstat().st_uid != 0:
+                raise ValueError('supervisor must be root owned')
+        state_root = pathlib.Path('/var/lib/forecode-agent')
+        state_info = state_root.lstat()
+        if state_root.is_symlink() or state_info.st_uid != 0 or stat.S_IMODE(state_info.st_mode) != 0o700:
+            raise ValueError('private supervisor state custody')
+        remember(state_root, state_info)
+        for p in paths[2:]:
+            trusted_metadata(p)
+            if pathlib.Path(p).lstat().st_uid != 0:
+                raise ValueError('supervisor must be root owned')
     elif role == 'grader':
         paths = ['/opt/forecode-booking/bin/node', '/opt/forecode-booking/package-lock.json', '/opt/forecode-booking/package.json']
         names = ['installed-smoke.mjs', 'installed-sample.ts', 'worker-policy.mjs', 'lifecycle-protocol.mjs', 'lifecycle-probes.mjs', 'lifecycle-driver.mjs', 'lifecycle-worker.mjs', 'guest.ts', 'oracle-driver.ts', 'oracle.ts', 'http-oracle.ts', 'remote-oracles.ts', 'probe.mjs', 'worker.mjs', 'client.mjs', 'runtime.mjs', 'lifecycle.mjs']
@@ -102,7 +116,7 @@ def main():
                 raise ValueError('installed runtime alias')
         for p in ['/opt', '/opt/forecode-booking', '/opt/forecode-booking/bin', '/opt/forecode-booking/controller']:
             trusted_metadata(p, directory=True)
-    result = {p: hashed(p, trusted=role == 'grader', executable=p.endswith('/bin/node')) for p in paths}
+    result = {p: hashed(p, trusted=role == 'grader' or p.startswith('/opt/forecode-agent/'), executable=p.endswith('/bin/node')) for p in paths}
     if role == 'grader':
         root = pathlib.Path('/opt/forecode-booking/node_modules')
         if root.resolve() != root:
@@ -146,6 +160,13 @@ def main():
             for raw in libraries:
                 p = raw.decode()
                 result['native:' + p] = hashed(p, trusted=True)
+        result['runtime_metadata'] = hashlib.sha256(json.dumps(sorted(metadata.items()), separators=(',', ':')).encode()).hexdigest()
+    elif role == 'agent':
+        for name in ['docker', 'python3']:
+            executable = shutil.which(name, path='/usr/local/bin:/usr/bin:/bin')
+            if not executable:
+                raise ValueError('missing trusted supervisor executable')
+            result['executable:' + name] = hashed(executable, trusted=True, executable=True)
         result['runtime_metadata'] = hashlib.sha256(json.dumps(sorted(metadata.items()), separators=(',', ':')).encode()).hexdigest()
     assert_unchanged()
     print(json.dumps(result, sort_keys=True, separators=(',', ':')))

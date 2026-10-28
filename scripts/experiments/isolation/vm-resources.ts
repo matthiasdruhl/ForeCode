@@ -50,7 +50,9 @@ export function validateVmResources(
 // Owner authority/lease and source identity must be checked by the caller first.
 // This is synchronous setup, never an asynchronous kit hook or candidate program.
 export async function ensureOfflineVmResources(
-  config: OfflineConfig,
+  config: Pick<OfflineConfig, "vmPids" | "vmDiskBytes"> & {
+    graderSandbox: string;
+  },
   exec: InventoryExec,
   signal: AbortSignal,
 ) {

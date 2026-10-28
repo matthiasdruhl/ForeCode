@@ -123,12 +123,21 @@ describe("booking pre-run commitment — integrity preparation, never runtime ad
       { ...config, tokenLimit: config.tokenLimit + 1 },
       { ...config, agentImage: `sha256:${"a".repeat(64)}` },
       { ...config, codexBinarySha256: "a".repeat(64) },
-      { ...config, reviewSha256: "a".repeat(64) },
     ])
       expect(
         bookingExecutionCommitment(changed, "b".repeat(40), runId, pins)
           .commitmentSha256,
       ).not.toBe(proposal.commitmentSha256);
+    // Preparation precedes independent approval. Binding the later review hash
+    // here would make the two digests circular and no real launch possible.
+    expect(
+      bookingExecutionCommitment(
+        { ...config, reviewSha256: "b".repeat(64) },
+        "b".repeat(40),
+        runId,
+        pins,
+      ).commitmentSha256,
+    ).toBe(proposal.commitmentSha256);
     for (const key of [
       "fixtureSha256",
       "evaluatorSha256",

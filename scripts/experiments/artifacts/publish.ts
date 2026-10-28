@@ -1,4 +1,4 @@
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { link, mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { assembleEvaluatorReceipt } from "../../evaluator/booking-v1/receipt";
 import type { EvaluationIdentity } from "../../../src/server/artifacts/evaluation-store";
@@ -62,7 +62,8 @@ export async function publishEvaluation(
   const bytes = JSON.stringify(bundle);
   const staging = path.join(directory, ".evaluation.pending");
   await writeFile(staging, bytes, { flag: "wx", mode: 0o400 });
-  await rename(staging, path.join(directory, "evaluation.json"));
+  await link(staging, path.join(directory, "evaluation.json"));
+  await unlink(staging);
   // Local registration record only. The hosted app has no registration route.
   const entry = {
     directory: path.basename(directory),

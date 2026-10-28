@@ -9,6 +9,12 @@ try {
   input = JSON.parse(readFileSync("/run/forecode-task.json", "utf8"));
   if (!["gpt-5.6-sol", "muse-spark-1.3"].includes(input.model))
     process.exit(125);
+  if (
+    !Number.isSafeInteger(input.tokenLimit) ||
+    input.tokenLimit < 1 ||
+    input.tokenLimit > (input.model === "muse-spark-1.3" ? 1000000 : 100000)
+  )
+    process.exit(125);
   for (const [file, expected] of [
     ["/usr/local/bin/codex", input.codexBinarySha256],
     ["/usr/local/bin/node", input.workerNodeSha256],
@@ -85,6 +91,10 @@ server.listen(8787, "127.0.0.1", () => {
     "model_providers.forecode_budget.stream_max_retries=0",
     "-c",
     'approval_policy="never"',
+    "-c",
+    // Keep the native guard finite and aligned with the exact reviewed task;
+    // never inherit an unrelated operator-home experimental rollout budget.
+    `features.rollout_budget={enabled=true,limit_tokens=${input.tokenLimit},reminder_at_remaining_tokens=[],sampling_token_weight=1.0,prefill_token_weight=1.0}`,
     "-c",
     'web_search="disabled"',
     "-c",

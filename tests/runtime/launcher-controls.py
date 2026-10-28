@@ -30,6 +30,7 @@ assert.equal(args[args.indexOf('--sandbox')+1], 'danger-full-access');
 assert.equal(args[args.indexOf('-C')+1], '/workspace');
 assert.ok(args.includes('approval_policy="never"'));
 assert.ok(args.includes('model_auto_compact_token_limit=2000000'));
+assert.ok(args.includes('features.rollout_budget={enabled=true,limit_tokens=100000,reminder_at_remaining_tokens=[],sampling_token_weight=1.0,prefill_token_weight=1.0}'));
 assert.ok(args.includes('model_providers.forecode_budget.request_max_retries=0'));
 assert.ok(args.includes('model_providers.forecode_budget.stream_max_retries=0'));
 assert.equal(args.at(-1), 'HARMLESS LAUNCHER CONTROL');

@@ -233,6 +233,32 @@ async function produced(mode = "normal") {
 // No hand-authored run replaces a captured original; negative mutations affect
 // only fresh synthetic originals, never historical/private operator evidence.
 describe("prospective evidence intake — synthetic, no runtime or publication", () => {
+  it.each([110, 128, 129])(
+    "bounds adapter diagnostic accounting at %i observations without granting disclosure",
+    async (count) => {
+      const f = await produced();
+      f.record.adapterObservations = Array.from({ length: count }, () => ({
+        operation: "inspect",
+        stdout: sentinel,
+      }));
+      await f.repinAcceptance();
+      const before = await fs.readFile(f.acceptanceFile);
+      const compose = vi.spyOn(certificates, "loadRecordedCertificates");
+      const report = await reviewOfflineEvidence(f.config, f.selection);
+      expect(report.sourceState).toBe(count <= 128 ? "validated" : "invalid");
+      expect(report.cases.filter((row) => row.verdict !== null)).toHaveLength(
+        count <= 128 ? 4 : 0,
+      );
+      expect(report.disclosure).toBe("not_supplied");
+      expect(report.candidate).toBeNull();
+      expect(compose).not.toHaveBeenCalled();
+      expect(JSON.stringify(reviewConsoleSummary(report))).not.toContain(
+        sentinel,
+      );
+      expect(await fs.readFile(f.acceptanceFile)).toEqual(before);
+    },
+  );
+
   it.each(["normal", "missing", "unexpected"])(
     "reviews %s producer originals through actual custody, disclosure, certificate and export boundaries",
     async (mode) => {

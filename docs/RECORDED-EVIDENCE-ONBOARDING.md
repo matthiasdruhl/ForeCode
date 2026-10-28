@@ -72,3 +72,15 @@ This does not alter the reviewed four historical recordings or their original ev
 ## Prospective intake and disclosure review
 
 For newly captured future fixed source records, use the separately documented [private intake/review workflow](OFFLINE-EVIDENCE-REVIEW.md) after appropriate source-review authority. It binds an independently pinned acceptance and source contexts, authenticates original evaluations and prepares proposed complete-run digests without granting disclosure or publication. A separately supplied complete four-run disclosure input can exercise existing certificate/export composition into private candidate files. No historical runs are backfilled, private preview changed or catalog populated; actual future execution remains NOT_RUN and new production records NOT_PROVISIONED.
+
+## Later prospective source set — separate from historical preview
+
+The October 27 Eastern operator follow-up obtained explicit current fixed offline admission and captured four new genuine complete runs. The read-only [intake workflow](OFFLINE-EVIDENCE-REVIEW.md#october-27-eastern-operator-follow-up-genuine-prospective-intake) authenticated all four original runs and twenty protected checks: VERIFIED / VERIFIED / REJECTED / REJECTED. The private review is unapproved for disclosure; no certificate candidate or production registration is implied. Production remains empty/NOT_PROVISIONED.
+
+These are new A-family infrastructure records with unknown metrics, not backfilled historical runs or an architecture pair. The earlier preview's run:null, unknown metrics and unavailable certificates remain unchanged, and its checkout/server/configuration were untouched. The next dependency is exact complete-run/public-metadata disclosure review, then private candidate validation. Publication requires a separate concrete authorization. Future execution also needs admission for the corrected current implementation; the completed originals retain their original identities.
+
+## October 28 UTC — Private candidate gate passed
+
+The owner subsequently approved the exact four complete runs/public-metadata proposal for private validation. The real intake CLI and unchanged certificate consumer generated a private canonical demo/certificate candidate, with all four genuine runs, twenty authenticated checks and both rejected cases retained. Independent source/reference/byte validation and fresh deterministic recomposition passed. The [certificate guide](RECORDED-CERTIFICATES.md#october-28-utc--genuine-private-certificate-candidate) distinguishes this new prospective private result from the unchanged historical preview's unavailable run/certificate records.
+
+No production catalog, protected-store configuration, page/API/download, private-preview service or hosted artifact was provisioned. Private-candidate approval does not authorize registration/publication. The next task is a concrete code-owned registration/product-serving review and separate explicit approval for that change.

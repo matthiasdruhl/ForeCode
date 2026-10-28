@@ -6,7 +6,11 @@ import {
 } from "../../../src/lib/contracts/common";
 
 const absolute = z.string().refine((value) => path.isAbsolute(value));
-export const BookingModelSchema = z.enum(["gpt-5.6-sol", "muse-spark-1.3"]);
+export const BookingModelSchema = z.enum([
+  "gpt-5.6-sol",
+  "muse-spark-1.3",
+  "muse-spark-1.3-contributor",
+]);
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 // Private runtime inputs, not additions to the frozen application contracts.
 export const SupervisionConfigSchema = z.strictObject({
@@ -84,12 +88,16 @@ export const OperatorConfigSchema = z
         message: "OpenAI token reservations are limited to 100000.",
         path: ["tokenLimit"],
       });
-    const endpoint =
-      config.authorizedModel === "muse-spark-1.3"
-        ? "https://api.meta.ai/v1/responses"
-        : "https://api.openai.com/v1/responses";
+    const endpoint = ["muse-spark-1.3", "muse-spark-1.3-contributor"].includes(
+      config.authorizedModel,
+    )
+      ? "https://api.meta.ai/v1/responses"
+      : "https://api.openai.com/v1/responses";
     if (
-      (config.authorizedModel === "muse-spark-1.3" && !config.supervision) ||
+      (["muse-spark-1.3", "muse-spark-1.3-contributor"].includes(
+        config.authorizedModel,
+      ) &&
+        !config.supervision) ||
       (config.supervision && config.supervision.provider.endpoint !== endpoint)
     )
       context.addIssue({
@@ -98,7 +106,9 @@ export const OperatorConfigSchema = z
         path: ["supervision", "provider", "endpoint"],
       });
     if (
-      config.authorizedModel === "muse-spark-1.3" &&
+      ["muse-spark-1.3", "muse-spark-1.3-contributor"].includes(
+        config.authorizedModel,
+      ) &&
       config.supervision &&
       config.supervision.provider.maxOutputTokens < 16
     )

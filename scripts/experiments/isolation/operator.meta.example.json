@@ -20,7 +20,7 @@
   "maxOutputBytes": 1048576,
   "tokenLimit": 500000,
   "spendUsd": 1,
-  "authorizedModel": "muse-spark-1.3",
+  "authorizedModel": "muse-spark-1.3-contributor",
   "coordinationRoot": "/absolute/private/shared-booking-coordination",
   "supervision": {
     "schemaVersion": "booking-supervised-worker.v1",
@@ -31,8 +31,8 @@
     "vmPids": 4096,
     "provider": {
       "endpoint": "https://api.meta.ai/v1/responses",
-      "inputMicroUsdPerToken": 2,
-      "outputMicroUsdPerToken": 5,
+      "inputMicroUsdPerToken": 1,
+      "outputMicroUsdPerToken": 1,
       "maxOutputTokens": 4096
     }
   }

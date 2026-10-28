@@ -7,12 +7,19 @@ import { spawn } from "node:child_process";
 let input;
 try {
   input = JSON.parse(readFileSync("/run/forecode-task.json", "utf8"));
-  if (!["gpt-5.6-sol", "muse-spark-1.3"].includes(input.model))
+  if (
+    !["gpt-5.6-sol", "muse-spark-1.3", "muse-spark-1.3-contributor"].includes(
+      input.model,
+    )
+  )
     process.exit(125);
   if (
     !Number.isSafeInteger(input.tokenLimit) ||
     input.tokenLimit < 1 ||
-    input.tokenLimit > (input.model === "muse-spark-1.3" ? 1000000 : 100000)
+    input.tokenLimit >
+      (["muse-spark-1.3", "muse-spark-1.3-contributor"].includes(input.model)
+        ? 1000000
+        : 100000)
   )
     process.exit(125);
   for (const [file, expected] of [
@@ -103,7 +110,7 @@ server.listen(8787, "127.0.0.1", () => {
     "model_auto_compact_token_limit=2000000",
     input.prompt,
   ];
-  if (input.model === "muse-spark-1.3")
+  if (["muse-spark-1.3", "muse-spark-1.3-contributor"].includes(input.model))
     args.splice(
       args.length - 1,
       0,

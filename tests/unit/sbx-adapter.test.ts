@@ -39,7 +39,12 @@ const observed = (stdout: string): processes.ProcessResult => ({
   stderr: "",
   elapsedMs: 1,
 });
-async function setup(model: "gpt-5.6-sol" | "muse-spark-1.3" = "gpt-5.6-sol") {
+async function setup(
+  model:
+    | "gpt-5.6-sol"
+    | "muse-spark-1.3"
+    | "muse-spark-1.3-contributor" = "gpt-5.6-sol",
+) {
   const root = await fs.realpath(
     await fs.mkdtemp(path.join(tmpdir(), "forecode-sbx-adapter-unit-")),
   );
@@ -68,7 +73,7 @@ async function setup(model: "gpt-5.6-sol" | "muse-spark-1.3" = "gpt-5.6-sol") {
       vmDiskBytes: 8 * 1024 ** 3,
       provider: {
         endpoint:
-          model === "muse-spark-1.3"
+          model !== "gpt-5.6-sol"
             ? "https://api.meta.ai/v1/responses"
             : "https://api.openai.com/v1/responses",
         inputMicroUsdPerToken: 1,
@@ -344,18 +349,18 @@ async function setup(model: "gpt-5.6-sol" | "muse-spark-1.3" = "gpt-5.6-sol") {
 
 describe("concrete sbx adapter — synthetic finite transport, real methods", () => {
   it("carries Meta model and endpoint into the trusted supervisor request", async () => {
-    const f = await setup("muse-spark-1.3"),
+    const f = await setup("muse-spark-1.3-contributor"),
       adapter = createSbxAdapter(f.config);
     await adapter.admit(hash, undefined, f.context);
     await adapter.prepare(f.context.runId, f.exported);
     expect(f.preparedRequest()).toMatchObject({
-      model: "muse-spark-1.3",
+      model: "muse-spark-1.3-contributor",
       provider: { endpoint: "https://api.meta.ai/v1/responses" },
     });
     // Synthetic transport creates no guest; afterEach removes its host fixture.
   });
   it("rejects an OpenAI-model review for Meta before any sandbox operation", async () => {
-    const f = await setup("muse-spark-1.3");
+    const f = await setup("muse-spark-1.3-contributor");
     f.review.authorizedModel = "gpt-5.6-sol";
     await f.save();
     await expect(

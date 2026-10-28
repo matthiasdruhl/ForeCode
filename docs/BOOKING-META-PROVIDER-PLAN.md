@@ -1,8 +1,10 @@
+> October 28 Contributor update: the owner explicitly selected `muse-spark-1.3-contributor`, including Meta’s use of submitted content for training. The disabled Meta example and current private operator profile now select that exact model, with conservative integer ceilings of 1/1 microUSD per input/output token (published Contributor prices $0.10/$0.20 per million). Standard remains supported explicitly; no fallback is permitted. Historical Standard execution evidence below is unchanged and does not verify a Contributor generation. Fresh source/runtime review and per-run admission remain required.
+
 # Meta Muse provider adaptation
 
 October 28, 2026. The owner prefers Meta Muse inference for the local booking coding worker. This changes the previous OpenAI-only model selection; it does not authorize a paid call or a new task/evaluator. Author this adaptation here during the event. External planning was consulted as read-only design context; no planning implementation is copied.
 
-Meta documents Codex integration against its Responses API. Keep the reviewed Codex executable as the tool-execution harness, existing root supervisor, source-only writable worker, separate offline grader, cleanup/lease, exact proposal and admission checks. The actual coding model is Meta `muse-spark-1.3` Standard, served only at `https://api.meta.ai/v1/responses`. This is not the separate Muse Code CLI. Standard is selected explicitly; Contributor mode is excluded. Keep OpenAI's prior exact pair usable for historical configurations, with no automatic fallback or arbitrary endpoint/model override.
+Meta documents Codex integration against its Responses API. Keep the reviewed Codex executable as the tool-execution harness, existing root supervisor, source-only writable worker, separate offline grader, cleanup/lease, exact proposal and admission checks. The actual coding model is Meta `muse-spark-1.3` Standard, served only at `https://api.meta.ai/v1/responses`. This is not the separate Muse Code CLI. Standard is selected explicitly; Contributor selection is now explicitly authorized as noted above. Keep OpenAI's prior exact pair usable for historical configurations, with no automatic fallback or arbitrary endpoint/model override.
 
 Implementation order:
 

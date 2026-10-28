@@ -18,6 +18,8 @@ PROFILES = {
                     'sentinel': 'sk-sandbox', 'minimumOutputTokens': 1, 'serviceTier': 'default'},
     'muse-spark-1.3': {'endpoint': 'https://api.meta.ai/v1/responses',
                        'sentinel': 'forecode-meta-sandbox', 'minimumOutputTokens': 16, 'serviceTier': 'auto'},
+    'muse-spark-1.3-contributor': {'endpoint': 'https://api.meta.ai/v1/responses',
+                       'sentinel': 'forecode-meta-sandbox', 'minimumOutputTokens': 16, 'serviceTier': 'auto'},
 }
 
 
@@ -179,7 +181,7 @@ class Reservations:
                         if not isinstance(event, dict) or event.get('type') == 'error':
                             raise ValueError('invalid provider event')
                         item = event.get('item')
-                        if (self.request['model'] == 'muse-spark-1.3'
+                        if (self.request['model'] in ('muse-spark-1.3', 'muse-spark-1.3-contributor')
                                 and event.get('type') == 'response.output_item.done'
                                 and isinstance(item, dict) and item.get('type') == 'reasoning'):
                             streamed_reasoning.append((event.get('output_index'), item))
@@ -210,7 +212,7 @@ class Reservations:
                 raise ValueError('invalid provider token accounting')
             return value
         used_input, used_output, total = tokens('input_tokens'), tokens('output_tokens'), tokens('total_tokens')
-        meta = self.request['model'] == 'muse-spark-1.3'
+        meta = self.request['model'] in ('muse-spark-1.3', 'muse-spark-1.3-contributor')
         details = usage.get('input_tokens_details', {} if meta else None)
         if not isinstance(details, dict):
             raise ValueError('provider input accounting unavailable')

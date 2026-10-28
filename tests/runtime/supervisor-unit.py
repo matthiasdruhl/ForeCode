@@ -106,11 +106,11 @@ class Mechanics(unittest.TestCase):
     def test_meta_reserves_exact_pair_and_accepts_bounded_usage_without_optional_cache_details(self):
         provider = {'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,
                     'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5}
-        b = self.budget(model='muse-spark-1.3', provider=provider)
-        sent = b.reserve(self.raw(model='muse-spark-1.3'))
-        self.assertEqual(json.loads(sent)['model'], 'muse-spark-1.3')
+        b = self.budget(model='muse-spark-1.3-contributor', provider=provider)
+        sent = b.reserve(self.raw(model='muse-spark-1.3-contributor'))
+        self.assertEqual(json.loads(sent)['model'], 'muse-spark-1.3-contributor')
         self.assertEqual(json.loads(sent)['service_tier'], 'auto')
-        response=self.response(model='muse-spark-1.3',service_tier='auto',usage={'input_tokens':100,'output_tokens':20,'total_tokens':120})
+        response=self.response(model='muse-spark-1.3-contributor',service_tier='auto',usage={'input_tokens':100,'output_tokens':20,'total_tokens':120})
         b.observe(json.dumps(response).encode(), 'application/json', sent)
         disk=json.loads((self.root/'budget.json').read_text())
         self.assertEqual(disk['requests'][0]['observedUsage'],{'inputTokens':100,'outputTokens':20,'totalTokens':120,'cachedTokens':0})
@@ -123,36 +123,36 @@ class Mechanics(unittest.TestCase):
         for index,tier in enumerate(['default','priority','flex','scale',None]):
             with self.subTest(tier=tier):
                 directory=self.root/str(index);directory.mkdir()
-                request=self.budget_request(model='muse-spark-1.3',provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':256,'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5})
+                request=self.budget_request(model='muse-spark-1.3-contributor',provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':256,'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5})
                 b=m.budget.Reservations(directory,request)
-                sent=b.reserve(self.raw(model='muse-spark-1.3'))
+                sent=b.reserve(self.raw(model='muse-spark-1.3-contributor'))
                 reserved=b.value['reservedMicroUsd']
-                response=self.response(model='muse-spark-1.3',service_tier=tier)
+                response=self.response(model='muse-spark-1.3-contributor',service_tier=tier)
                 with self.assertRaises(ValueError):b.observe(json.dumps(response).encode(),'application/json',sent)
-                with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3'))
+                with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3-contributor'))
                 self.assertEqual(b.value['reservedMicroUsd'],reserved)
                 self.assertNotIn('observedUsage',b.value['requests'][0])
 
     def test_model_endpoint_substitution_and_meta_subminimum_output_are_denied(self):
         for model, endpoint in [('muse-spark-1.3','https://api.openai.com/v1/responses'),
                                 ('gpt-5.6-sol','https://api.meta.ai/v1/responses'),
-                                ('muse-spark-1.3-contributor','https://api.meta.ai/v1/responses')]:
+                                ('muse-spark-1.3-unknown','https://api.meta.ai/v1/responses')]:
             with self.subTest(model=model), self.assertRaises(ValueError):
                 m.budget.reviewed_profile({'model':model,'provider':{'endpoint':endpoint}})
         provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':15,
                   'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5}
-        b=self.budget(model='muse-spark-1.3',provider=provider)
-        with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3'))
+        b=self.budget(model='muse-spark-1.3-contributor',provider=provider)
+        with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3-contributor'))
         self.assertEqual(b.value['requests'],[])
 
     def test_meta_multiple_explicit_context_turns_keep_full_reservations_and_same_spend_cap(self):
-        b=self.budget(model='muse-spark-1.3',tokenLimit=500000,spendMicroUsd=900000,
+        b=self.budget(model='muse-spark-1.3-contributor',tokenLimit=500000,spendMicroUsd=900000,
                       provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,
                                 'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5})
         for _ in range(4):
-            sent=b.reserve(self.raw(model='muse-spark-1.3',input='x'*30259))
+            sent=b.reserve(self.raw(model='muse-spark-1.3-contributor',input='x'*30259))
             reserved=b.value['reservedMicroUsd']
-            response=self.response(model='muse-spark-1.3',service_tier='auto',usage={'input_tokens':5000,'output_tokens':100,'total_tokens':5100})
+            response=self.response(model='muse-spark-1.3-contributor',service_tier='auto',usage={'input_tokens':5000,'output_tokens':100,'total_tokens':5100})
             b.observe(json.dumps(response).encode(),'application/json',sent)
             self.assertEqual(b.value['reservedMicroUsd'],reserved)
         self.assertEqual(len(b.value['requests']),4)
@@ -162,19 +162,19 @@ class Mechanics(unittest.TestCase):
 
     def test_meta_binds_both_verified_stream_cipher_variants_for_the_same_reasoning_item(self):
         provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5}
-        b=self.budget(model='muse-spark-1.3',tokenLimit=500000,provider=provider)
-        sent=b.reserve(self.raw(model='muse-spark-1.3',stream=True))
+        b=self.budget(model='muse-spark-1.3-contributor',tokenLimit=500000,provider=provider)
+        sent=b.reserve(self.raw(model='muse-spark-1.3-contributor',stream=True))
         done={'type':'reasoning','id':'rs_synthetic','summary':[],'encrypted_content':'item-done-cipher'}
         final={**done,'encrypted_content':'terminal-cipher'}
-        response=self.response(model='muse-spark-1.3',service_tier='auto',output=[final])
+        response=self.response(model='muse-spark-1.3-contributor',service_tier='auto',output=[final])
         events=[{'type':'response.output_item.done','output_index':0,'item':done},
                 {'type':'response.completed','response':response}]
         stream=b''.join(b'data: '+json.dumps(e).encode()+b'\n\n' for e in events)
         b.observe(stream,'text/event-stream',sent)
         for item in [done,final]:
-            b.reserve(self.raw(model='muse-spark-1.3',input=[item]))
+            b.reserve(self.raw(model='muse-spark-1.3-contributor',input=[item]))
         with self.assertRaises(ValueError):
-            b.reserve(self.raw(model='muse-spark-1.3',input=[{**done,'encrypted_content':'never-received-cipher'}]))
+            b.reserve(self.raw(model='muse-spark-1.3-contributor',input=[{**done,'encrypted_content':'never-received-cipher'}]))
         self.assertEqual(set(b.value['opaqueInputs']),{hashlib.sha256(i['encrypted_content'].encode()).hexdigest() for i in [done,final]})
 
     def test_meta_stream_cipher_variants_require_unique_exact_terminal_item_binding(self):
@@ -183,16 +183,16 @@ class Mechanics(unittest.TestCase):
         for number,changes in enumerate([{'id':'rs_other'},{'summary':[{'type':'summary_text','text':'different'}]}, {'index':1}, {'duplicate':True}]):
             with self.subTest(changes=changes):
                 p=self.root/str(number);p.mkdir()
-                request=self.budget_request(model='muse-spark-1.3',tokenLimit=500000,provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5})
-                b=m.budget.Reservations(p,request);sent=b.reserve(self.raw(model='muse-spark-1.3',stream=True))
+                request=self.budget_request(model='muse-spark-1.3-contributor',tokenLimit=500000,provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5})
+                b=m.budget.Reservations(p,request);sent=b.reserve(self.raw(model='muse-spark-1.3-contributor',stream=True))
                 item={**done,**{k:v for k,v in changes.items() if k not in ['index','duplicate']}}
                 event={'type':'response.output_item.done','output_index':changes.get('index',0),'item':item}
-                response=self.response(model='muse-spark-1.3',service_tier='auto',output=[final])
+                response=self.response(model='muse-spark-1.3-contributor',service_tier='auto',output=[final])
                 events=[event,event] if changes.get('duplicate') else [event]
                 events.append({'type':'response.completed','response':response})
                 stream=b''.join(b'data: '+json.dumps(e).encode()+b'\n\n' for e in events)
                 with self.assertRaises(ValueError):b.observe(stream,'text/event-stream',sent)
-                with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3',input=[item]))
+                with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3-contributor',input=[item]))
                 self.assertEqual(b.value['opaqueInputs'],{})
 
     def test_each_provider_uses_only_its_fixed_endpoint_and_host_proxy_sentinel(self):
@@ -209,10 +209,11 @@ class Mechanics(unittest.TestCase):
                 return Reply()
         with mock.patch.dict(m.budget.os.environ,{'HTTPS_PROXY':'http://proxy.invalid:3128'}), \
              mock.patch.object(m.budget.urllib.request,'build_opener',return_value=Opener()):
-            for model in ['gpt-5.6-sol','muse-spark-1.3']:
+            for model in ['gpt-5.6-sol','muse-spark-1.3','muse-spark-1.3-contributor']:
                 m.budget.provider_request(self.raw(model=model))
             with self.assertRaises(ValueError):m.budget.provider_request(self.raw(model='unapproved'))
         self.assertEqual(calls,[('https://api.openai.com/v1/responses','Bearer sk-sandbox'),
+                                ('https://api.meta.ai/v1/responses','Bearer forecode-meta-sandbox'),
                                 ('https://api.meta.ai/v1/responses','Bearer forecode-meta-sandbox')])
 
     def test_reserves_before_forwarding_and_preserves_integer_ceilings(self):

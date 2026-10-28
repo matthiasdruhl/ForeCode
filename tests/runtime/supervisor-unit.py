@@ -32,16 +32,75 @@ class Mechanics(unittest.TestCase):
             os.chmod(parent, 0o700)
         self.temp.cleanup()
 
-    def budget(self, **changes):
+    def budget_request(self, **changes):
         request = {'deadline': time.time() + 60, 'tokenLimit': 100000, 'spendMicroUsd': 1000000,
                    'provider': {'maxOutputTokens': 4096, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 2}}
         request.update(changes)
-        return m.budget.Reservations(self.root, request)
+        return request
+
+    def budget(self, **changes):
+        return m.budget.Reservations(self.root, self.budget_request(**changes))
 
     def raw(self, **changes):
         value = {'model': 'gpt-5.6-sol', 'input': 'Harmless synthetic text.'}
         value.update(changes)
         return json.dumps(value).encode()
+
+    def response(self, **changes):
+        value = {'object': 'response', 'model': 'gpt-5.6-sol', 'service_tier': 'default',
+                 'status': 'completed', 'output': [],
+                 'usage': {'input_tokens': 100, 'output_tokens': 20, 'total_tokens': 120,
+                           'input_tokens_details': {'cached_tokens': 0, 'cache_write_tokens': 0}}}
+        value.update(changes)
+        return value
+
+    def test_provider_response_mismatch_stops_further_paid_attempts(self):
+        cases = [self.response(model='another-model'), self.response(service_tier='priority'),
+                 self.response(usage=None), self.response(status='in_progress'),
+                 self.response(usage={'input_tokens': 100001, 'output_tokens': 20, 'total_tokens': 100021}),
+                 self.response(usage={'input_tokens': 100, 'output_tokens': 4097, 'total_tokens': 4197}),
+                 self.response(usage={'input_tokens': 100, 'output_tokens': 20, 'total_tokens': 119}),
+                 self.response(usage={'input_tokens': True, 'output_tokens': 20, 'total_tokens': 21}),
+                 self.response(usage={'input_tokens': 100, 'output_tokens': 20, 'total_tokens': 120,
+                                     'input_tokens_details': {'cached_tokens': 90, 'cache_write_tokens': 20}})]
+        for index, response in enumerate(cases):
+            with self.subTest(index=index):
+                directory = self.root / str(index)
+                directory.mkdir()
+                b = m.budget.Reservations(directory, self.budget_request())
+                sent = b.reserve(self.raw())
+                reserved = b.value['reservedMicroUsd']
+                with self.assertRaises(ValueError):
+                    b.observe(json.dumps(response).encode(), 'application/json', sent)
+                with self.assertRaises(ValueError):
+                    b.reserve(self.raw())
+                disk = json.loads((directory/'budget.json').read_text())
+                self.assertEqual(disk['reservedMicroUsd'], reserved)
+                self.assertEqual(disk['blockedReason'], 'provider-outcome-unverified')
+
+    def test_stream_requires_one_complete_matching_terminal_response(self):
+        complete = b'data: '+json.dumps({'type':'response.completed', 'response': self.response()}).encode()+b'\n\n'
+        cases = [b'data: {"type":"response.created"}\n\ndata: [DONE]\n',
+                 complete + complete, b'data: {"type":"error"}\n\n' + complete,
+                 b'data: '+json.dumps({'type':'response.completed', 'response': self.response(status='incomplete')}).encode()+b'\n\n']
+        for index, output in enumerate(cases):
+            with self.subTest(index=index):
+                directory = self.root / str(index)
+                directory.mkdir()
+                b = m.budget.Reservations(directory, self.budget_request())
+                sent = b.reserve(self.raw(stream=True))
+                with self.assertRaises(ValueError):
+                    b.observe(output, 'text/event-stream', sent)
+                with self.assertRaises(ValueError):
+                    b.reserve(self.raw())
+
+    def test_verified_incomplete_output_retains_full_reservation_and_can_continue(self):
+        b = self.budget()
+        sent = b.reserve(self.raw())
+        reserved = b.value['reservedMicroUsd']
+        b.observe(json.dumps(self.response(status='incomplete')).encode(), 'application/json', sent)
+        self.assertEqual(b.value['reservedMicroUsd'], reserved)
+        b.reserve(self.raw())
 
     def test_reserves_before_forwarding_and_preserves_integer_ceilings(self):
         b = self.budget()
@@ -125,6 +184,9 @@ class Mechanics(unittest.TestCase):
             self.assertEqual(len(called), 1)
             self.assertNotIn(b'PRIVATE_HEADER', called[0])
             self.assertGreater(b.value['reservedMicroUsd'], 0)
+            self.assertEqual(b.value['blockedReason'], 'provider-outcome-unverified')
+            with self.assertRaises(ValueError):
+                b.reserve(self.raw())
             client.close()
         finally:
             os.chdir(previous)
@@ -135,7 +197,7 @@ class Mechanics(unittest.TestCase):
         b = self.budget()
         sent = b.reserve(self.raw(include=['reasoning.encrypted_content']))
         opaque = {'type': 'reasoning', 'encrypted_content': 'SYNTHETIC_NOT_REAL_ENCRYPTION'}
-        b.observe(b'data: '+json.dumps({'type':'response.output_item.done','item':opaque}).encode()+b'\n\ndata: [DONE]\n', 'text/event-stream', sent)
+        b.observe(b'data: '+json.dumps({'type':'response.completed','response':self.response(output=[opaque])}).encode()+b'\n\ndata: [DONE]\n', 'text/event-stream', sent)
         before = b.value['reservedTokens']
         repeated = self.raw(input=[opaque, opaque])
         b.reserve(repeated)

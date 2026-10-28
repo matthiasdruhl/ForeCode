@@ -41,7 +41,8 @@ class Reservations:
     def __init__(self, directory, request):
         self.file = directory / 'budget.json'
         self.request = request
-        self.value = {'requests': [], 'reservedTokens': 0, 'reservedMicroUsd': 0, 'opaqueInputs': {}}
+        self.value = {'requests': [], 'reservedTokens': 0, 'reservedMicroUsd': 0,
+                      'opaqueInputs': {}, 'blockedReason': None}
         if self.file.exists():
             # A broker is never resumed: its previous paid request might still
             # be executing. Recovery can only clean up the original attempt.
@@ -50,6 +51,8 @@ class Reservations:
 
     def reserve(self, raw):
         r = self.request
+        if self.value['blockedReason'] is not None:
+            raise ValueError('provider outcome requires owner review')
         if time.time() >= r['deadline'] or len(raw) > 1_048_576:
             raise ValueError('budget deadline or request limit')
         body = json.loads(raw)
@@ -123,24 +126,78 @@ class Reservations:
         return canonical(body)
 
 
+    def block(self):
+        # Preserve the entire reservation, with no provider text or diagnostics.
+        # A failed or unverified upstream outcome cannot trigger another call.
+        self.value['blockedReason'] = 'provider-outcome-unverified'
+        atomic(self.file, self.value)
+
     def observe(self, output, content_type, sent):
+        try:
+            self.observe_verified(output, content_type, sent)
+        except Exception:
+            self.block()
+            raise ValueError('unverified provider outcome') from None
+
+    def observe_verified(self, output, content_type, sent):
         """Bind stateless opaque replay to this broker's actually received bytes.
 
         Every item conservatively costs the entire previously reserved output
         cap again as input. No usage claim, remote ID lookup, caller-supplied
         hash or copied budget file authenticates opaque content.
         """
-        maximum = json.loads(sent)['max_output_tokens']
-        if 'text/event-stream' in content_type:
-            messages = []
+        reservation = self.value['requests'][-1]
+        if reservation['requestSha256'] != hashlib.sha256(sent).hexdigest():
+            raise ValueError('unreserved provider response')
+        maximum = reservation['maximumOutputTokens']
+        media_type = content_type.split(';', 1)[0].strip().lower()
+        if media_type == 'text/event-stream':
+            terminal = []
             for line in output.splitlines():
                 if line.startswith(b'data:'):
                     data = line[5:].strip()
                     if data and data != b'[DONE]':
-                        messages.append(json.loads(data))
+                        event = json.loads(data)
+                        if not isinstance(event, dict) or event.get('type') == 'error':
+                            raise ValueError('invalid provider event')
+                        if event.get('type') in ('response.completed', 'response.incomplete', 'response.failed'):
+                            response = event.get('response')
+                            if (not isinstance(response, dict)
+                                    or event['type'] != 'response.' + str(response.get('status'))):
+                                raise ValueError('terminal event mismatch')
+                            terminal.append(response)
+            if len(terminal) != 1:
+                raise ValueError('one terminal response required')
+            response = terminal[0]
+        elif media_type == 'application/json':
+            response = json.loads(output)
         else:
-            messages = [json.loads(output)]
-        nodes = messages
+            raise ValueError('unsupported provider content type')
+        if (not isinstance(response, dict) or response.get('object') != 'response'
+                or response.get('model') != 'gpt-5.6-sol'
+                or response.get('service_tier') != 'default'
+                or response.get('status') not in ('completed', 'incomplete')):
+            raise ValueError('provider identity or outcome mismatch')
+        usage = response.get('usage')
+        if not isinstance(usage, dict):
+            raise ValueError('provider usage unavailable')
+        def tokens(name, source=usage):
+            value = source.get(name)
+            if type(value) is not int or value < 0:
+                raise ValueError('invalid provider token accounting')
+            return value
+        used_input, used_output, total = tokens('input_tokens'), tokens('output_tokens'), tokens('total_tokens')
+        details = usage.get('input_tokens_details')
+        if not isinstance(details, dict):
+            raise ValueError('provider input accounting unavailable')
+        cached = tokens('cached_tokens', details)
+        written = tokens('cache_write_tokens', {'cache_write_tokens': details.get('cache_write_tokens', 0)})
+        if (used_input > reservation['inputTokenUpperBound'] or used_output > maximum
+                or total != used_input + used_output or cached + written > used_input):
+            raise ValueError('provider usage exceeds reservation')
+        # Cache reads and writes are already covered by the reviewed worst-case
+        # input tariff. Do not refund reservations or claim a measured bill.
+        nodes = [response]
         count = 0
         while nodes:
             item = nodes.pop()
@@ -193,7 +250,11 @@ def serve(socket_path, reservations, upstream=provider_request):
                 if self.path != '/v1/responses' or not 0 <= size <= 1_048_576 or self.headers.get('Transfer-Encoding'):
                     raise ValueError('unsupported request')
                 body = reservations.reserve(self.rfile.read(size))
-                output, content_type = upstream(body)  # Exactly one attempt.
+                try:
+                    output, content_type = upstream(body)  # Exactly one attempt.
+                except Exception:
+                    reservations.block()
+                    raise
                 reservations.observe(output, content_type, body)
                 self.send_response(200)
                 self.send_header('Content-Type', content_type)

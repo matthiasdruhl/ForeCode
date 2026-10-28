@@ -1,6 +1,6 @@
 # Explicit disposable runtime controls
 
-These scripts are excluded from normal test discovery and are never installed by the runtime bundle. They execute harmless fixed code only. They do not use Codex credentials, run a model, grant admission or operate the existing owner sandboxes. Ordinary Vitest runs `supervisor-unit.py` through `agent-supervision.test.ts`; those20 Python subcases require no Docker/network.
+These scripts are excluded from normal test discovery and are never installed by the runtime bundle. They execute harmless fixed code only. They do not use Codex credentials, run a model, grant admission or operate the existing owner sandboxes. Ordinary Vitest runs `supervisor-unit.py` through `agent-supervision.test.ts`; those23 Python subcases require no Docker or external network. The broker tests bind a temporary local Unix socket; a desktop sandbox must permit that local capability.
 
 Use an explicitly test-owned Linux Docker environment. Match the operational **two-vCPU** topology; Docker Desktop's larger CPU inventory causes unchanged Next builds to spawn too many workers for the fixed64-PID grader limit. Do not raise that limit, change fixture configuration or weaken checks. The observed follow-up used a fresh mountless shell sbx guest,2CPUs/4GiB, deny-all networking, skills off and no provider session. Existing `forecode-experiments` and `forecode-grader` stayed untouched. Creating/provisioning that test guest requires the task's disposable-environment authority; this is not a way to bypass operational admission.
 

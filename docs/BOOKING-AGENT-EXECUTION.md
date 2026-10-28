@@ -2,6 +2,8 @@
 
 October 28, 2026 follow-up to PR #14: the concrete adapter now implements admission, fixture preparation, fixed Codex invocation, supervised finalization, sealed transfer and protected grading. Execution is conditional on independent admission. **No actual coding agent or paid provider call was run.** The existing operator VMs/installations were left untouched. Disposable no-inference process/grader controls are described below; they do not admit the operational environment.
 
+The [future team-task preparation](BOOKING-FUTURE-EVALUATION.md) does not change this runtime's fixed task, five-check guest protocol or execution authority. A future task descriptor cannot enable it. New implementation source pins require fresh independent review; future guest bridge/private oracle work remains separate.
+
 ## Trusted boundary
 
 The agent no longer executes in the outer sbx guest namespace. That namespace contains a root-owned Python supervisor, a per-run budget broker and the nested Docker daemon. Only those trusted components control lifecycle and export. The coding agent runs as UID1000 in a separate network-none worker: read-only root/fixture, only `src/` writable, capability drop ALL, no-new-privileges, CPU1, memory/swap768MiB, PIDs128, finite tmpfs and no Docker/host/SSH/credential socket. Docker inspect readback must match the policy. Dependencies, evaluator, task record, supervisor and original evidence are outside its writable/reachable scope. The immutable worker image must be independently reviewed and credential-free.

@@ -12,4 +12,6 @@ Current unit tests pass the newly authored, reviewed baseline to those factories
 
 The hosted app has no evaluator, runner, receipt-upload or allowlist-registration endpoint. Do not add one to make this preparation appear live. See the parent `docs/BOOKING-EVALUATION.md` for remaining integration gates.
 
+`future.ts` adds public-safe future task/oracle descriptors, data-only exact-candidate requests and a synthetic receipt wrapper over the same assembler/store. It contains no private behavioral assertions or candidate execution. The future policy preserves the baseline checks and adds three separately identified team checks; the installed guest does not support them yet. [Future custody, staged commitments and blocked provisioning](../../../docs/BOOKING-FUTURE-EVALUATION.md).
+
 The disabled-by-default integration is documented in [the operator runbook](../../../docs/BOOKING-RUNNER.md). `guest.ts` runs in the protected offline microVM; `oracle-driver.ts` observes check process exits there. `remote-oracles.ts` keeps assertions outside the candidate's resource-limited worker; `worker.mjs`/`client.mjs` carry only behavior RPC, with no oracle or publication authority. The toolchain recipe has not been installed or executed in a sandbox by this slice. The existing private infrastructure grader is not automatically replaced.

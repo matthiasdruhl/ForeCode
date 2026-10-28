@@ -16,6 +16,8 @@ export async function freezeBooking(
     "src/lib/contracts",
     "src/lib/report",
     "src/lib/verify",
+    "src/lib/experiment",
+    "benchmarks/booking-team-permissions",
     "src/server/artifacts",
     "scripts/experiments",
   ];

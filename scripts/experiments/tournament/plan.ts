@@ -17,7 +17,7 @@ import {
 } from "../../../src/lib/contracts/validation";
 import { jsonDigest } from "../../../src/lib/report/digests";
 
-const OracleSchema = z.strictObject({
+export const OracleSchema = z.strictObject({
   evaluatorSha256: Sha256Schema,
   testSuiteSha256: Sha256Schema,
   requiredPolicySha256: Sha256Schema,

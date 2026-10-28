@@ -61,3 +61,7 @@ The workspace and this history link to `/certificates`. Both production catalogs
 ## Owner-authorized historical onboarding
 
 The [bounded original-source review](RECORDED-EVIDENCE-ONBOARDING.md) freshly authenticated all four fixed Workstream A bundles and twenty required checks. A private local production preview uses the existing code-owned catalog with those recordings and `run:null`; both failures remain visible and all run metrics/completion stay unknown. The public/default catalog remains empty. Original acceptance records did not emit ExperimentRunV1, so the certificate view and frozen `/api/demo` remain empty. No private raw evidence or host configuration was committed, no subject was executed and no inference occurred.
+
+## Prospective run capture
+
+Future fixed offline attempts can retain exact source runs using the [new developer-local producer](BOOKING-OFFLINE-ACCEPTANCE.md#prospective-source-run-capture--october-27). It declares all cases A-family with an explicit no-agent profile, captures case receipt/run intervals, and links only authenticated evidence after cleanup/freshness. Failed, cancelled, timed-out or blocked attempts retain honest unlinked dispositions when source context exists. No public loader, catalog or web execution capability changes. Historical `run:null` records stay unchanged; synthetic producer validation supplies no genuine execution or production registration.

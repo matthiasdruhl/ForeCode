@@ -164,3 +164,7 @@ The one approved attempt is consumed. Hypothesize/challenge are **NOT_RUN live**
 ## Historical source onboarding follow-up
 
 The separately owner-authorized [recording onboarding review](RECORDED-EVIDENCE-ONBOARDING.md) now has actual authenticated fixed infrastructure checks in a private local preview. They do not bind to the current intent/worksheet, and their source set contains no genuine ExperimentRunV1 for certificate export. The current modeled comparison still has no linked measured experiment; no new Meta call or interpretation was added.
+
+## Prospective product review remains separate from Foresight
+
+The [new private recorded-product review](RECORDED-PRODUCT-REVIEW.md) now has genuine complete prospective runs and a byte-validated certificate download. These are fixed A-family infrastructure checks, separate from current intent/worksheet and live Meta output. The modeled comparison still has no linked measured experiment. No inference or interpretation occurred in this product review; live hypothesis/challenge validation and any Meta incremental-benefit study remain separate. The historical preview's absent source runs were not backfilled, and the default public catalog is still empty.

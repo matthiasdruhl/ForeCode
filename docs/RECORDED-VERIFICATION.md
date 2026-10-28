@@ -65,3 +65,7 @@ The [bounded original-source review](RECORDED-EVIDENCE-ONBOARDING.md) freshly au
 ## Prospective run capture
 
 Future fixed offline attempts can retain exact source runs using the [new developer-local producer](BOOKING-OFFLINE-ACCEPTANCE.md#prospective-source-run-capture--october-27). It declares all cases A-family with an explicit no-agent profile, captures case receipt/run intervals, and links only authenticated evidence after cleanup/freshness. Failed, cancelled, timed-out or blocked attempts retain honest unlinked dispositions when source context exists. No public loader, catalog or web execution capability changes. Historical `run:null` records stay unchanged; synthetic producer validation supplies no genuine execution or production registration.
+
+## October 28 — Concrete private product review
+
+The [recorded-product review](RECORDED-PRODUCT-REVIEW.md) now exercises the new genuine four-run/twenty-check source set through actual private production pages, frozen API and browser certificate download. All four completed runs and both expected rejected outcomes remain visible; metrics stay Unknown. A concrete private code-owned catalog patch and review package are ready, with fresh source authentication and independent synthetic tamper/disappearance controls. The main/default catalog remains empty/NOT_PROVISIONED; no public registration, hosting or source transfer was performed. Historical preview records remain unchanged.

@@ -331,6 +331,7 @@ class Mechanics(unittest.TestCase):
         self.assertIn('--cap-drop=ALL', args)
         self.assertIn('--restart=no', args)
         self.assertEqual(args[args.index('--user')+1], '1000:1000')
+        self.assertIn('/home/agent/.codex:rw,nosuid,nodev,size=16m,uid=1000,gid=1000', args)
         self.assertIn('type=bind,src='+str(self.root/run_id/'source')+',dst=/workspace,readonly', args)
         self.assertIn('type=bind,src='+str(self.root/run_id/'source/src')+',dst=/workspace/src', args)
         self.assertFalse(any('docker.sock' in a or 'supervisor.py' in a or 'budget.py' in a for a in args))

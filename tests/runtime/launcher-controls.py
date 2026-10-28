@@ -35,6 +35,10 @@ assert.ok(args.includes('model_providers.forecode_budget.stream_max_retries=0'))
 assert.equal(args.at(-1), 'HARMLESS LAUNCHER CONTROL');
 for (const key of Object.keys(process.env)) assert.ok(['PATH','HOME','CODEX_HOME','LANG'].includes(key));
 assert.equal(process.env.CODEX_HOME, '/home/agent/.codex');
+const fs = require('node:fs');
+fs.mkdirSync(process.env.CODEX_HOME + '/startup-control');
+fs.writeFileSync(process.env.CODEX_HOME + '/startup-control/state', 'inert');
+assert.throws(() => fs.writeFileSync(process.env.CODEX_HOME + '/config.toml', 'denied'));
 http.get('http://127.0.0.1:8787/v1/responses', res => {
  assert.equal(res.statusCode, 403); // No provider POST or credentials.
  console.log('HARMLESS_LAUNCHER_ASSERTIONS_PASSED');

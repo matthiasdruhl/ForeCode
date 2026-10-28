@@ -12,6 +12,10 @@ import threading
 import time
 import unittest
 
+# These imports inspect trusted source. Never create bytecode beside it: that
+# changes the source commitment while other tests authenticate producer records.
+sys.dont_write_bytecode = True
+
 project = pathlib.Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('booking_supervisor_unit', project / 'scripts/experiments/agent/supervisor.py')
 m = importlib.util.module_from_spec(spec)

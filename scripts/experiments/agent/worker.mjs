@@ -61,7 +61,10 @@ server.listen(8787, "127.0.0.1", () => {
     "--model",
     input.model,
     "--sandbox",
-    "workspace-write",
+    // Docker enforces UID1000, network-none, read-only root and src-only writes.
+    // Its cap/seccomp policy intentionally prevents a second bwrap namespace.
+    // This flag applies only INSIDE that independently supervised worker.
+    "danger-full-access",
     "-C",
     "/workspace",
     "-c",
@@ -85,7 +88,7 @@ server.listen(8787, "127.0.0.1", () => {
     "-c",
     'web_search="disabled"',
     "-c",
-    // Above this runner's entire 100k-token reservation ceiling: no hidden
+    // Above the largest reviewed 500k-token reservation ceiling: no hidden
     // compact/history request outside the finite stateless Responses protocol.
     "model_auto_compact_token_limit=1000000",
     input.prompt,
@@ -96,8 +99,6 @@ server.listen(8787, "127.0.0.1", () => {
       0,
       "-c",
       "model_context_window=1048576",
-      "-c",
-      "model_supports_reasoning_summaries=true",
       "-c",
       'model_reasoning_effort="high"',
       "-c",

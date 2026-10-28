@@ -145,6 +145,21 @@ class Mechanics(unittest.TestCase):
         with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3'))
         self.assertEqual(b.value['requests'],[])
 
+    def test_meta_multiple_explicit_context_turns_keep_full_reservations_and_same_spend_cap(self):
+        b=self.budget(model='muse-spark-1.3',tokenLimit=500000,spendMicroUsd=900000,
+                      provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,
+                                'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5})
+        for _ in range(4):
+            sent=b.reserve(self.raw(model='muse-spark-1.3',input='x'*30259))
+            reserved=b.value['reservedMicroUsd']
+            response=self.response(model='muse-spark-1.3',service_tier='auto',usage={'input_tokens':5000,'output_tokens':100,'total_tokens':5100})
+            b.observe(json.dumps(response).encode(),'application/json',sent)
+            self.assertEqual(b.value['reservedMicroUsd'],reserved)
+        self.assertEqual(len(b.value['requests']),4)
+        self.assertGreater(b.value['reservedTokens'],100000)
+        self.assertLessEqual(b.value['reservedTokens'],500000)
+        self.assertLessEqual(b.value['reservedMicroUsd'],900000)
+
     def test_each_provider_uses_only_its_fixed_endpoint_and_host_proxy_sentinel(self):
         calls=[]
         class Reply:

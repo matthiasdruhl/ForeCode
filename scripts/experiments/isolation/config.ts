@@ -70,12 +70,20 @@ export const OperatorConfigSchema = z
     reviewSha256: Sha256Schema,
     maxSeconds: z.number().int().min(1).max(600),
     maxOutputBytes: z.number().int().min(1024).max(8_000_000),
-    tokenLimit: z.number().int().min(1).max(100_000),
+    tokenLimit: z.number().int().min(1).max(500_000),
     spendUsd: z.number().positive().max(10),
     authorizedModel: BookingModelSchema,
     supervision: SupervisionConfigSchema.optional(),
   })
   .superRefine((config, context) => {
+    // Meta has no long-context premium. Preserve the historical OpenAI ceiling
+    // below its higher-priced context band; the independent spend cap remains.
+    if (config.authorizedModel === "gpt-5.6-sol" && config.tokenLimit > 100_000)
+      context.addIssue({
+        code: "custom",
+        message: "OpenAI token reservations are limited to 100000.",
+        path: ["tokenLimit"],
+      });
     const endpoint =
       config.authorizedModel === "muse-spark-1.3"
         ? "https://api.meta.ai/v1/responses"

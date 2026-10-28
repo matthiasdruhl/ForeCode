@@ -70,7 +70,7 @@ describe("concrete agent supervision private mechanics", () => {
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({
         classification: "UNIT_NO_RUNTIME_OR_INFERENCE",
-        tests: 27,
+        tests: 28,
         failures: 0,
         errors: 0,
       });
@@ -91,10 +91,24 @@ describe("concrete agent supervision private mechanics", () => {
     expect(OperatorConfigSchema.parse(meta).authorizedModel).toBe(
       "muse-spark-1.3",
     );
+    expect(OperatorConfigSchema.parse(meta).tokenLimit).toBe(500000);
     for (const bad of [
       { ...meta, authorizedModel: "muse-spark-1.3-contributor" },
       { ...meta, authorizedModel: "gpt-5.6-sol" },
       { ...meta, supervision: undefined },
+      { ...meta, tokenLimit: 500001 },
+      {
+        ...meta,
+        authorizedModel: "gpt-5.6-sol",
+        tokenLimit: 100001,
+        supervision: {
+          ...meta.supervision,
+          provider: {
+            ...meta.supervision.provider,
+            endpoint: "https://api.openai.com/v1/responses",
+          },
+        },
+      },
       {
         ...meta,
         supervision: {

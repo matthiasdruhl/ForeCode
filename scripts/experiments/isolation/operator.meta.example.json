@@ -18,7 +18,7 @@
   "reviewSha256": "0000000000000000000000000000000000000000000000000000000000000000",
   "maxSeconds": 600,
   "maxOutputBytes": 1048576,
-  "tokenLimit": 100000,
+  "tokenLimit": 500000,
   "spendUsd": 1,
   "authorizedModel": "muse-spark-1.3",
   "coordinationRoot": "/absolute/private/shared-booking-coordination",

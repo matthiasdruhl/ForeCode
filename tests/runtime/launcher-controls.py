@@ -26,7 +26,7 @@ const args = process.argv.slice(2);
 assert.equal(args[0], 'exec');
 assert.ok(args.includes('--ephemeral') && args.includes('--ignore-rules'));
 assert.equal(args[args.indexOf('--model')+1], 'gpt-5.6-sol');
-assert.equal(args[args.indexOf('--sandbox')+1], 'workspace-write');
+assert.equal(args[args.indexOf('--sandbox')+1], 'danger-full-access');
 assert.equal(args[args.indexOf('-C')+1], '/workspace');
 assert.ok(args.includes('approval_policy="never"'));
 assert.ok(args.includes('model_auto_compact_token_limit=1000000'));

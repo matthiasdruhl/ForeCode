@@ -57,3 +57,7 @@ Fresh temporary synthetic artifacts exercise the real protected store and projec
 ## Scoped certificate follow-up
 
 The workspace and this history link to `/certificates`. Both production catalogs stay empty/unconfigured. `GET /api/demo` is now the existing frozen `DemoResponse`, not the internal check-detail view; it returns empty runs/certificates by default. Complete-run disclosure approval and genuine run records are required for any certificate, so a recording with `run:null` can still show scoped checks here but cannot be expanded into a certificate. The certificate service authenticates original store objects and reloads evidence itself; it never treats this sanitized projection as evidence authority. See [the full certificate guide and operator boundary](RECORDED-CERTIFICATES.md).
+
+## Owner-authorized historical onboarding
+
+The [bounded original-source review](RECORDED-EVIDENCE-ONBOARDING.md) freshly authenticated all four fixed Workstream A bundles and twenty required checks. A private local production preview uses the existing code-owned catalog with those recordings and `run:null`; both failures remain visible and all run metrics/completion stay unknown. The public/default catalog remains empty. Original acceptance records did not emit ExperimentRunV1, so the certificate view and frozen `/api/demo` remain empty. No private raw evidence or host configuration was committed, no subject was executed and no inference occurred.

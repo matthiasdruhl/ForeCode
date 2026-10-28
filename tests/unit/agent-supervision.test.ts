@@ -70,7 +70,7 @@ describe("concrete agent supervision private mechanics", () => {
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({
         classification: "UNIT_NO_RUNTIME_OR_INFERENCE",
-        tests: 26,
+        tests: 27,
         failures: 0,
         errors: 0,
       });

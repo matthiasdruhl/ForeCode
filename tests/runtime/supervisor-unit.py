@@ -109,11 +109,29 @@ class Mechanics(unittest.TestCase):
         b = self.budget(model='muse-spark-1.3', provider=provider)
         sent = b.reserve(self.raw(model='muse-spark-1.3'))
         self.assertEqual(json.loads(sent)['model'], 'muse-spark-1.3')
-        response=self.response(model='muse-spark-1.3',usage={'input_tokens':100,'output_tokens':20,'total_tokens':120})
+        self.assertEqual(json.loads(sent)['service_tier'], 'auto')
+        response=self.response(model='muse-spark-1.3',service_tier='auto',usage={'input_tokens':100,'output_tokens':20,'total_tokens':120})
         b.observe(json.dumps(response).encode(), 'application/json', sent)
+        disk=json.loads((self.root/'budget.json').read_text())
+        self.assertEqual(disk['requests'][0]['observedUsage'],{'inputTokens':100,'outputTokens':20,'totalTokens':120,'cachedTokens':0})
+        self.assertEqual(disk['requests'][0]['serviceTier'],'auto')
         with self.assertRaises(ValueError):
             b.reserve(self.raw(model='gpt-5.6-sol'))
         self.assertLessEqual(b.value['reservedMicroUsd'],1000000)
+
+    def test_meta_rejects_unreviewed_service_tiers_without_refunding_or_more_calls(self):
+        for index,tier in enumerate(['default','priority','flex','scale',None]):
+            with self.subTest(tier=tier):
+                directory=self.root/str(index);directory.mkdir()
+                request=self.budget_request(model='muse-spark-1.3',provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':256,'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5})
+                b=m.budget.Reservations(directory,request)
+                sent=b.reserve(self.raw(model='muse-spark-1.3'))
+                reserved=b.value['reservedMicroUsd']
+                response=self.response(model='muse-spark-1.3',service_tier=tier)
+                with self.assertRaises(ValueError):b.observe(json.dumps(response).encode(),'application/json',sent)
+                with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3'))
+                self.assertEqual(b.value['reservedMicroUsd'],reserved)
+                self.assertNotIn('observedUsage',b.value['requests'][0])
 
     def test_model_endpoint_substitution_and_meta_subminimum_output_are_denied(self):
         for model, endpoint in [('muse-spark-1.3','https://api.openai.com/v1/responses'),

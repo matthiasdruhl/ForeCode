@@ -15,9 +15,9 @@ import urllib.request
 
 PROFILES = {
     'gpt-5.6-sol': {'endpoint': 'https://api.openai.com/v1/responses',
-                    'sentinel': 'sk-sandbox', 'minimumOutputTokens': 1},
+                    'sentinel': 'sk-sandbox', 'minimumOutputTokens': 1, 'serviceTier': 'default'},
     'muse-spark-1.3': {'endpoint': 'https://api.meta.ai/v1/responses',
-                       'sentinel': 'forecode-meta-sandbox', 'minimumOutputTokens': 16},
+                       'sentinel': 'forecode-meta-sandbox', 'minimumOutputTokens': 16, 'serviceTier': 'auto'},
 }
 
 
@@ -120,7 +120,7 @@ class Reservations:
             raise ValueError('hosted tools forbidden')
         provider = r['provider']
         body['store'] = False
-        body['service_tier'] = 'default'
+        body['service_tier'] = self.profile['serviceTier']
         # Deliberately conservative: all UTF-8 request bytes plus a fixed
         # framing allowance. No cached-input discount, hidden context or refund.
         input_upper = len(canonical(body)) + count * 32 + 16384 + opaque_upper
@@ -192,7 +192,7 @@ class Reservations:
             raise ValueError('unsupported provider content type')
         if (not isinstance(response, dict) or response.get('object') != 'response'
                 or response.get('model') != self.request['model']
-                or response.get('service_tier') != 'default'
+                or response.get('service_tier') != self.profile['serviceTier']
                 or response.get('status') not in ('completed', 'incomplete')):
             raise ValueError('provider identity or outcome mismatch')
         usage = response.get('usage')
@@ -233,7 +233,11 @@ class Reservations:
                 nodes.extend(item.values())
             elif isinstance(item, list):
                 nodes.extend(item)
-        atomic(self.file, self.value)  # Retain binding before exposing a response.
+        reservation['observedUsage'] = {'inputTokens': used_input, 'outputTokens': used_output,
+                                        'totalTokens': total, 'cachedTokens': cached}
+        reservation['responseStatus'] = response['status']
+        reservation['serviceTier'] = response['service_tier']
+        atomic(self.file, self.value)  # Retain validated usage/binding before exposing a response.
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):

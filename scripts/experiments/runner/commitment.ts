@@ -41,7 +41,9 @@ export function bookingExecutionCommitment(
       ["package.json", "package-lock.json"].includes(file.path),
     ),
     configurationSha256: configurationDigest(config),
-    proposedIsolationReviewSha256: config.reviewSha256,
+    // The later independent review binds this commitment, not vice versa.
+    // Including its hash here would make preparation/approval circular.
+    proposedIsolationReviewSha256: null,
     implementationSha256: pins.evaluatorSha256,
     evaluator: {
       workerImage: config.workerImage,
@@ -56,15 +58,22 @@ export function bookingExecutionCommitment(
       model: config.authorizedModel,
       binarySha256: config.codexBinarySha256,
       configurationSha256: config.agentConfigSha256,
-      tools: "guest shell; command mediation NOT_REVIEWED",
+      tools: config.supervision
+        ? "nested UID1000 network-none guest shell; no outer-VM or Docker socket access; independent admission required"
+        : "guest shell; command mediation NOT_REVIEWED",
       writablePaths: ["src/"],
-      pathEnforcement: "post-export rejection; guest enforcement NOT_REVIEWED",
-      exactGuestWorkspace: null,
+      pathEnforcement: config.supervision
+        ? "read-only fixture with src-only writable mount; sealed post-export rejection; independent admission required"
+        : "post-export rejection; guest enforcement NOT_REVIEWED",
+      exactGuestWorkspace: config.supervision ? "/workspace" : null,
       maximumSeconds: config.maxSeconds,
       maximumOutputBytes: config.maxOutputBytes,
       tokenLimit: config.tokenLimit,
       spendUsd: config.spendUsd,
-      providerHardLimitEnforcement: "NOT_REVIEWED",
+      providerHardLimitEnforcement: config.supervision
+        ? "serial trusted broker reservations and output cap; exact protocol/tariff/account enforcement must be independently reviewed"
+        : "NOT_REVIEWED",
+      proposedSupervision: config.supervision ?? null,
     },
     expectedRuntime: {
       agentSandbox: config.agentSandbox,

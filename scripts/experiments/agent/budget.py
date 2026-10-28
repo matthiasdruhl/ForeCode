@@ -1,0 +1,222 @@
+"""Per-run, outside-worker Responses broker. No credentials are stored here.
+
+The independent review must establish the Docker credential-injection proxy,
+account/model access and conservative tariff ceilings. This implements request
+reservation, not authority or a guarantee about an unknown provider tariff.
+"""
+import hashlib
+import http.server
+import json
+import os
+import socketserver
+import time
+import urllib.request
+
+
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
+
+
+def atomic(file, value):
+    temp = str(file) + '.next'
+    fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    try:
+        with os.fdopen(fd, 'wb') as out:
+            out.write(canonical(value))
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(temp, file)
+        parent = os.open(os.path.dirname(str(file)), os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+
+
+class Reservations:
+    """Serial server: reserve worst-case tokens/microUSD durably, never refund."""
+    def __init__(self, directory, request):
+        self.file = directory / 'budget.json'
+        self.request = request
+        self.value = {'requests': [], 'reservedTokens': 0, 'reservedMicroUsd': 0, 'opaqueInputs': {}}
+        if self.file.exists():
+            # A broker is never resumed: its previous paid request might still
+            # be executing. Recovery can only clean up the original attempt.
+            raise ValueError('broker reuse forbidden')
+        atomic(self.file, self.value)
+
+    def reserve(self, raw):
+        r = self.request
+        if time.time() >= r['deadline'] or len(raw) > 1_048_576:
+            raise ValueError('budget deadline or request limit')
+        body = json.loads(raw)
+        if not isinstance(body, dict) or body.get('model') != 'gpt-5.6-sol':
+            raise ValueError('unapproved model')
+        # Stateless, text-only requests. Hidden server-side history, remote
+        # files/media and separately billed hosted tools defeat byte accounting.
+        if set(body) - {'model', 'input', 'instructions', 'tools', 'tool_choice',
+                        'parallel_tool_calls', 'reasoning', 'text', 'stream',
+                        'store', 'include', 'max_output_tokens', 'service_tier',
+                        'prompt_cache_key', 'client_metadata', 'stream_options'}:
+            raise ValueError('unsupported provider field')
+        if not isinstance(body.get('input'), (list, str)):
+            raise ValueError('explicit input required')
+        # Codex's delivery/cache metadata is not source context or authority.
+        # Do not pass opaque client metadata or cache hints to the provider.
+        for key in ['prompt_cache_key', 'client_metadata', 'stream_options']:
+            body.pop(key, None)
+        include = body.get('include', [])
+        if not isinstance(include, list) or any(v != 'reasoning.encrypted_content' for v in include):
+            raise ValueError('unsupported response expansion')
+        body['include'] = include
+        nodes = [body]
+        count = 0
+        opaque_upper = 0
+        while nodes:
+            item = nodes.pop()
+            count += 1
+            if count > 4096:
+                raise ValueError('input depth/size')
+            if isinstance(item, dict):
+                if 'encrypted_content' in item:
+                    content = item['encrypted_content']
+                    if item.get('type') != 'reasoning' or not isinstance(content, str):
+                        raise ValueError('unapproved opaque context')
+                    bound = self.value['opaqueInputs'].get(hashlib.sha256(content.encode()).hexdigest())
+                    if bound is None:
+                        raise ValueError('opaque context not from this reserved attempt')
+                    opaque_upper += bound
+                if any(k in item for k in ['image_url', 'file_id', 'file_url', 'file_data', 'audio', 'video']):
+                    raise ValueError('text-only broker')
+                if item.get('type') in ['input_image', 'input_file', 'input_audio', 'item_reference']:
+                    raise ValueError('text-only broker')
+                nodes.extend(item.values())
+            elif isinstance(item, list):
+                nodes.extend(item)
+        if any(t.get('type') not in ['function', 'custom'] for t in body.get('tools', [])):
+            raise ValueError('hosted tools forbidden')
+        provider = r['provider']
+        body['store'] = False
+        body['service_tier'] = 'default'
+        # Deliberately conservative: all UTF-8 request bytes plus a fixed
+        # framing allowance. No cached-input discount, hidden context or refund.
+        input_upper = len(canonical(body)) + count * 32 + 16384 + opaque_upper
+        output = min(provider['maxOutputTokens'],
+                     r['tokenLimit'] - self.value['reservedTokens'] - input_upper)
+        micro_left = r['spendMicroUsd'] - self.value['reservedMicroUsd']
+        output = min(output, (micro_left - input_upper * provider['inputMicroUsdPerToken'])
+                     // provider['outputMicroUsdPerToken'])
+        if output < 1:
+            raise ValueError('hard reservation exhausted')
+        body['max_output_tokens'] = output
+        reserved = input_upper * provider['inputMicroUsdPerToken'] + output * provider['outputMicroUsdPerToken']
+        self.value['reservedTokens'] += input_upper + output
+        self.value['reservedMicroUsd'] += reserved
+        self.value['requests'].append({'requestSha256': hashlib.sha256(canonical(body)).hexdigest(),
+                                      'inputTokenUpperBound': input_upper,
+                                      'maximumOutputTokens': output,
+                                      'reservedMicroUsd': reserved})
+        atomic(self.file, self.value)  # Before any upstream request, even failures.
+        return canonical(body)
+
+
+    def observe(self, output, content_type, sent):
+        """Bind stateless opaque replay to this broker's actually received bytes.
+
+        Every item conservatively costs the entire previously reserved output
+        cap again as input. No usage claim, remote ID lookup, caller-supplied
+        hash or copied budget file authenticates opaque content.
+        """
+        maximum = json.loads(sent)['max_output_tokens']
+        if 'text/event-stream' in content_type:
+            messages = []
+            for line in output.splitlines():
+                if line.startswith(b'data:'):
+                    data = line[5:].strip()
+                    if data and data != b'[DONE]':
+                        messages.append(json.loads(data))
+        else:
+            messages = [json.loads(output)]
+        nodes = messages
+        count = 0
+        while nodes:
+            item = nodes.pop()
+            count += 1
+            if count > 50000:
+                raise ValueError('bounded provider response structure')
+            if isinstance(item, dict):
+                content = item.get('encrypted_content')
+                if content is not None:
+                    if item.get('type') != 'reasoning' or not isinstance(content, str):
+                        raise ValueError('unsupported opaque provider output')
+                    identity = hashlib.sha256(content.encode()).hexdigest()
+                    self.value['opaqueInputs'][identity] = max(maximum, self.value['opaqueInputs'].get(identity, 0))
+                nodes.extend(item.values())
+            elif isinstance(item, list):
+                nodes.extend(item)
+        atomic(self.file, self.value)  # Retain binding before exposing a response.
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise ValueError('provider redirects forbidden')
+
+
+def provider_request(body):
+    # Existing host-managed Docker proxy injects real credentials. A reviewed
+    # sentinel is not a real API key; no auth.json/key/home is copied to a guest.
+    proxy = os.environ.get('HTTPS_PROXY', os.environ.get('https_proxy', ''))
+    if not proxy.startswith('http://'):
+        raise ValueError('reviewed credential proxy unavailable')
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({'https': proxy}), NoRedirect())
+    request = urllib.request.Request('https://api.openai.com/v1/responses', data=body,
+                                     headers={'Content-Type': 'application/json',
+                                              'Authorization': 'Bearer sk-sandbox'})
+    with opener.open(request, timeout=30) as response:
+        data = response.read(8_000_001)
+        if len(data) > 8_000_000 or response.status != 200:
+            raise ValueError('bounded provider response unavailable')
+        return data, response.headers.get('Content-Type', 'application/json')
+
+
+def serve(socket_path, reservations, upstream=provider_request):
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass  # Never log headers, provider content, auth or private text.
+
+        def do_POST(self):
+            try:
+                size = int(self.headers.get('Content-Length', '-1'))
+                if self.path != '/v1/responses' or not 0 <= size <= 1_048_576 or self.headers.get('Transfer-Encoding'):
+                    raise ValueError('unsupported request')
+                body = reservations.reserve(self.rfile.read(size))
+                output, content_type = upstream(body)  # Exactly one attempt.
+                reservations.observe(output, content_type, body)
+                self.send_response(200)
+                self.send_header('Content-Type', content_type)
+            except Exception:
+                output = b'{"error":{"message":"Bounded provider request unavailable"}}'
+                self.send_response(403)
+                self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(output)))
+            self.send_header('Connection', 'close')
+            self.end_headers()
+            self.wfile.write(output)
+
+    # Bind relative to the owned directory: AF_UNIX addresses are limited to
+    # ~108 bytes even when the filesystem supports longer private test roots.
+    server = socketserver.UnixStreamServer(socket_path.name, Handler, bind_and_activate=False)
+    previous = os.open('.', os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.chdir(socket_path.parent)
+        server.server_bind()
+        server.server_activate()
+    finally:
+        os.fchdir(previous)
+        os.close(previous)
+    server.timeout = .1
+    os.chmod(socket_path, 0o666)  # Parent mounted read-only; only this socket is exposed.
+    return server

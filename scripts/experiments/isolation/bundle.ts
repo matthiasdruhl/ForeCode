@@ -9,6 +9,10 @@ import { protectedRead, disjoint } from "../artifacts/files";
 import { sha256, jsonDigest } from "../../../src/lib/report/digests";
 const project = fileURLToPath(new URL("../../../", import.meta.url));
 export const runtimeBundleInputs = [
+  ...["supervisor.py", "budget.py", "worker.mjs", "Dockerfile"].map((name) => ({
+    source: `scripts/experiments/agent/${name}`,
+    target: `agent/${name}`,
+  })),
   ...controllerFiles.map((name) => ({
     source: `scripts/evaluator/booking-v1/${name}`,
     target: `controller/${name}`,

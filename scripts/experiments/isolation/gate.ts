@@ -57,6 +57,15 @@ export async function reviewIsolation(
         `Missing or changed isolation evidence: ${evidence.obligation}.`,
       );
   }
+  if (review.execution) {
+    if (
+      sha256(await protectedRead(review.execution.revocationFile)) !==
+      review.execution.revocationSha256
+    )
+      throw new Error(
+        "Independent admission revoked or revocation observation changed.",
+      );
+  }
   return review;
 }
 

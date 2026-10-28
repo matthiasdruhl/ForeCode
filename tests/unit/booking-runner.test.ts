@@ -30,6 +30,7 @@ import {
   freezeCandidate,
 } from "../../scripts/experiments/artifacts/files";
 import { runBookingExperiment } from "../../scripts/experiments/runner/controller";
+import { prepareBookingExecutionCommitment } from "../../scripts/experiments/runner/commitment";
 import {
   boundedProcess,
   type ProcessResult,
@@ -309,6 +310,87 @@ async function run(mode?: string) {
 }
 
 describe("controlled booking pipeline — SYNTHETIC DEVELOPMENT evidence only", () => {
+  it("writes durable stage observations and a canonical original run; a commitment cannot be retried", async () => {
+    const data = await setup(),
+      bridge = synthetic(data.config, { mode: "pass" });
+    const { commitment, commitmentSha256 } =
+      await prepareBookingExecutionCommitment(data.config, "b".repeat(40));
+    const proposal = { commitment, commitmentSha256 };
+    const result = await runBookingExperiment(
+      data.config,
+      bridge.adapter,
+      new AbortController().signal,
+      "b".repeat(40),
+      proposal,
+    );
+    expect(result.run.status).toBe("completed");
+    const directory = path.join(data.config.protectedRoot, result.run.id);
+    const files = await readdir(directory);
+    const stages = await Promise.all(
+      files
+        .filter((f) => /^attempt-\d{4}\.json$/.test(f))
+        .sort()
+        .map(
+          async (f) =>
+            JSON.parse(await readFile(path.join(directory, f), "utf8")).stage,
+        ),
+    );
+    expect(stages).toEqual([
+      "lease",
+      "admission",
+      "preparation",
+      "agent",
+      "candidate-export",
+      "grading",
+      "report-validation",
+      "cleanup-and-freshness",
+      "publication",
+      "finished",
+    ]);
+    expect(
+      JSON.parse(
+        await readFile(path.join(directory, "experiment-run.json"), "utf8"),
+      ),
+    ).toEqual(result.run);
+    expect(
+      JSON.parse(
+        await readFile(path.join(directory, "verification.json"), "utf8"),
+      ).origin,
+    ).toBe("trusted_evaluator");
+    const prior = await readFile(path.join(directory, "run.json"));
+    await expect(
+      runBookingExperiment(
+        data.config,
+        bridge.adapter,
+        new AbortController().signal,
+        "b".repeat(40),
+        proposal,
+      ),
+    ).rejects.toThrow();
+    expect(await readFile(path.join(directory, "run.json"))).toEqual(prior);
+    expect(bridge.observations().cleanups).toBe(1);
+  });
+  it("rejects plain finalization flags even when an adapter labels itself sbx", async () => {
+    const data = await setup(),
+      bridge = synthetic(data.config, { mode: "pass" });
+    const { commitment, commitmentSha256 } =
+      await prepareBookingExecutionCommitment(data.config, "b".repeat(40));
+    const proposal = { commitment, commitmentSha256 };
+    bridge.adapter.kind = "sbx";
+    const graded = vi.spyOn(bridge.adapter, "grade");
+    const result = await runBookingExperiment(
+      data.config,
+      bridge.adapter,
+      new AbortController().signal,
+      "b".repeat(40),
+      proposal,
+    );
+    expect(result.run.status).toBe("failed");
+    expect(result.entry).toBeNull();
+    expect(result.run.evidenceOrigin).toBe("none");
+    expect(result.run.isolationAttestationId).toBeNull();
+    expect(graded).not.toHaveBeenCalled();
+  });
   it("routes the exact changed candidate through independent assertions, publication and trusted loading", async () => {
     const data = await run();
     expect(data.result.run.evidenceOrigin).toBe("none");
@@ -471,6 +553,10 @@ describe("controlled booking pipeline — SYNTHETIC DEVELOPMENT evidence only", 
       expect(result.entry).toBeNull();
       expect(result.run.receiptId).toBeNull();
       expect(result.cleanupConfirmed).toBe(false);
+      for (const name of ["evaluation.json", "allowlist-entry.json"])
+        await expect(
+          readFile(path.join(data.config.protectedRoot, result.run.id, name)),
+        ).rejects.toThrow();
       expect(
         await readFile(
           path.join(data.config.protectedRoot, result.run.id, "run.json"),
@@ -542,18 +628,18 @@ describe("runtime admission", () => {
       OperatorConfigSchema.parse({ ...config, arbitraryCommand: "echo pass" }),
     ).toThrow();
   });
-  it("keeps real agent entrypoints disabled even if operator config enables them", async () => {
+  it("requires actual commitment/admission even if operator config enables execution", async () => {
     const { config } = await setup();
     config.enabled = true;
     const adapter = createSbxAdapter(config);
     await expect(adapter.admit(hash)).rejects.toThrow(
-      "Real agent execution disabled",
+      "Exact pre-run commitment",
     );
     await expect(
       adapter.agent(randomUUID(), new AbortController().signal),
-    ).rejects.toThrow("disabled");
+    ).rejects.toThrow("Wrong or stale run");
     await expect(adapter.finalizeAgent(randomUUID())).rejects.toThrow(
-      "Supervised",
+      "Wrong or stale run",
     );
   });
   it("requires current reviewed bytes bound to implementation/config/inventory and all observations", async () => {

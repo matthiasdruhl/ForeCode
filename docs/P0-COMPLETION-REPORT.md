@@ -2,6 +2,8 @@
 
 This assignment advanced all five software lanes but did **not** complete the gated real experiments. No new paid inference, sandbox operation, genuine coding-agent run, post-agent receipt or A/B study occurred. The local browser workflow works with explicit templates and unavailable-evidence states. Public/default recording catalogs remain empty.
 
+Git delivery: pushed `codex/p0-agent-study-integration` and opened [draft PR #14](https://github.com/matthiasdruhl/ForeCode/pull/14) against main. It remains unmerged. The working tree was clean after delivery; no force-push or deployment occurred. Local validation is reported below; no remote CI success is inferred.
+
 Base main was `43a0e612575fddc19656bb1e617e7b30db6d7543`. Final validated code is `135db3e5311f0bb4d21c90b1e73741110fe2e920`, on `codex/p0-agent-study-integration`. Later delivery documentation does not change that implementation. Planning guidance was read from external `origin/main` at `053a3d6`; the normative contract revision stays `695e68a40b5f5009c9b06b83a1181e18cd6d0223`. No planning code, fixture, schema or history was copied.
 
 ## Five-workstream disposition

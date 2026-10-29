@@ -49,7 +49,7 @@ export const PreparationRecordSchema = z.strictObject({
   finishedAt: UtcTimestampSchema,
   metrics: MetricsSchema,
 });
-const ExecutionConditionsSchema = z.strictObject({
+export const ExecutionConditionsSchema = z.strictObject({
   variant: z.enum(["A", "B"]),
   agentId: IdSchema,
   modelId: IdSchema,
@@ -129,11 +129,11 @@ export function validateFutureStudy(input: unknown): FutureStudyDraft {
 // Freeze this projection BEFORE selection: prepared trees, observed preparation
 // metrics and the later pair freeze cannot be known then. The complete draft
 // commitment is separate and must be held before downstream attempts.
-export function futureProtocolCommitment(input: unknown): string {
+export function futureProtocolDocument(input: unknown) {
   const draft = validateFutureStudy(input);
   const plan = draft.plan;
-  return jsonDigest({
-    schemaVersion: "booking-future-protocol-commitment.local.v1",
+  return {
+    schemaVersion: "booking-future-protocol-commitment.local.v1" as const,
     task: draft.task,
     futureOracle: draft.futureOracle,
     conditions: plan.conditions,
@@ -145,7 +145,11 @@ export function futureProtocolCommitment(input: unknown): string {
     studyId: plan.manifest.id,
     fixtureSha256: plan.manifest.fixtureSha256,
     arms: plan.manifest.arms.map(({ variant, runId }) => ({ variant, runId })),
-  });
+  };
+}
+
+export function futureProtocolCommitment(input: unknown): string {
+  return jsonDigest(futureProtocolDocument(input));
 }
 
 export function requireFutureStudyCommitments(

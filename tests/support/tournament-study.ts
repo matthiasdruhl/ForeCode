@@ -27,7 +27,10 @@ import { hash } from "./research-data";
 import { teamEvaluatorIdentity } from "../../scripts/evaluator/booking-v1/grade-profile";
 
 export async function studyFixture(
-  options: { order?: "A_then_B" | "B_then_A" } = {},
+  options: {
+    order?: "A_then_B" | "B_then_A";
+    preparationMetrics?: import("../../src/lib/experiment/metrics").ExperimentMetrics;
+  } = {},
 ) {
   const parent = await realpath(
     await mkdtemp(path.join(tmpdir(), "forecode-tournament-unit-")),
@@ -99,6 +102,8 @@ export async function studyFixture(
   const lockSha = sha256("{}");
   const draft = futureStudyData();
   if (options.order) draft.plan.trialPolicy.order = options.order;
+  if (options.preparationMetrics)
+    draft.plan.manifest.arms[1]!.upfrontMetrics = options.preparationMetrics;
   const composite = teamEvaluatorIdentity(
     draft.plan.baselineOracle.evaluatorSha256,
     draft.plan.futureOracle.testSuiteSha256,
@@ -240,7 +245,25 @@ export async function studyFixture(
     subjectSha256: preparedSubject(definition, draft, evidence),
     predecessorSha256: protocol.sha256,
   }))!;
+  const preparationTelemetry = Object.values(evidence.record.metrics).some(
+    (x) => x !== null,
+  )
+    ? await hold({
+        id: "preparation-telemetry",
+        studyId,
+        kind: "telemetry",
+        heldAt: "2026-10-28T12:04:00.000Z",
+        subjectSha256: jsonDigest({
+          phase: "preparation",
+          recordSha256: sha256(canonicalJson(evidence.record)),
+          metrics: evidence.record.metrics,
+          changedFiles: ["src/policy.ts", "src/service.ts"],
+        }),
+        predecessorSha256: protocol.sha256,
+      })
+    : null;
   const input = {
+    preparationTelemetry,
     definition,
     draft,
     evidence,

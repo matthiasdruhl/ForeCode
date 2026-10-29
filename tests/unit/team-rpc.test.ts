@@ -84,6 +84,32 @@ describe("bounded public behavior RPC", () => {
       { ownerId: "forged" },
     );
   });
+  it("preserves unsupported wire method dispatch, bytes and trusted identity on a genuine Request", async () => {
+    const data = fixture();
+    await data.send({ op: "team-new" });
+    for (const method of ["TRACE", "CONNECT", "TRACK", "PATCH"]) {
+      data.http.mockImplementationOnce(async (request, viewer) => {
+        expect(request).toBeInstanceOf(Request);
+        expect(request.method).toBe(method);
+        expect(request.headers.get("x-role")).toBe("owner");
+        expect(await request.text()).toBe("malformed ignored body");
+        expect(viewer).toBeNull();
+        return new Response(null, { status: 405 });
+      });
+      const reply = await data.send({
+        op: "team-http",
+        subject: "1",
+        viewer: null,
+        request: {
+          url: "http://booking-fixture.test/api/organizations",
+          method,
+          headers: [["x-role", "owner"]],
+          body: "malformed ignored body",
+        },
+      });
+      expect((reply.result as { status: number }).status).toBe(405);
+    }
+  });
   it("supports invalid UTF-8 body bytes without decoding them in the transport", async () => {
     const data = fixture();
     await data.send({ op: "team-new" });

@@ -1,3 +1,5 @@
+October 29 update: the owner has now explicitly authorized private provisioning and protected behavioral controls under the existing delegated AI technical review. Exact task/common-protocol decisions and reviewer-independence limits are in [the scoped acceptance record](BOOKING-TEAM-ORACLE-ACCEPTANCE.md). Historical October28 status below describes that assignment; current measured outcomes are appended to IMPLEMENTATION-LOG.
+
 # Restricted team-permissions grader bridge
 
 October 28, 2026: public bridge source is implemented and synthetically tested. **Private oracle provisioning BLOCKED; protected behavioral validation NOT_RUN; operational admission BLOCKED; paired execution NO.** No private development workspace/custodian or guest-execution window was explicitly authorized. No private suite, compliant implementation, defective permission control, agent or sandbox was executed or installed by this assignment.
@@ -44,7 +46,7 @@ The adapter delegates to whichever internal architecture the candidate chooses. 
 
 Domain actions return the matching HTTP payload from the task: `organizations` → `{organizations}`, `resources` → `{resources}`, `memberships` → `{memberships}`, `bookings` → `{bookings}`, `create-booking`/`booking`/`cancel-booking` → `{booking}`, `revoke-membership` → `{membership}`. Failures throw an error with the task's code. Viewer identity is supplied out of band; body/header identities remain untrusted. HTTP must cover both existing personal and proposed team endpoints in the same subject. Preserve the existing baseline service/HTTP exports for unchanged regression checks.
 
-Known interface limit for owner review: local Node24 Fetch Request construction refuses TRACE, CONNECT and TRACK. The task's generic “unsupported methods return405” wording does not specify whether these wire-level methods are part of acceptance. This Fetch-based bridge cannot exercise them; it can exercise representable unsupported methods such as PATCH. Do not silently count those three as covered or change the task to exclude them. Resolve the interpretation before freeze; if required, add a separately reviewed wire-HTTP adapter. No approved semantics were changed here.
+October29 protocol review: unsupported-method 405 dispatch includes TRACE, CONNECT and TRACK. The bridge preserves a genuine Request URL/headers/body and overrides only its method for these Fetch-forbidden constructors. This exercises handler dispatch without a wire server; production proxy behavior remains outside this adapter. The task digest is unchanged.
 
 Only these extra RPC operations exist:
 

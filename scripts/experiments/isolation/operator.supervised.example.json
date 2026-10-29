@@ -31,8 +31,8 @@
     "vmPids": 4096,
     "provider": {
       "endpoint": "https://api.openai.com/v1/responses",
-      "inputMicroUsdPerToken": 1,
-      "outputMicroUsdPerToken": 2,
+      "inputMicroUsdPerToken": 5,
+      "outputMicroUsdPerToken": 20,
       "maxOutputTokens": 4096
     }
   }

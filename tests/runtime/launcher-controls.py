@@ -26,15 +26,20 @@ const args = process.argv.slice(2);
 assert.equal(args[0], 'exec');
 assert.ok(args.includes('--ephemeral') && args.includes('--ignore-rules'));
 assert.equal(args[args.indexOf('--model')+1], 'gpt-5.6-sol');
-assert.equal(args[args.indexOf('--sandbox')+1], 'workspace-write');
+assert.equal(args[args.indexOf('--sandbox')+1], 'danger-full-access');
 assert.equal(args[args.indexOf('-C')+1], '/workspace');
 assert.ok(args.includes('approval_policy="never"'));
-assert.ok(args.includes('model_auto_compact_token_limit=1000000'));
+assert.ok(args.includes('model_auto_compact_token_limit=2000000'));
+assert.ok(args.includes('features.rollout_budget={enabled=true,limit_tokens=100000,reminder_at_remaining_tokens=[],sampling_token_weight=1.0,prefill_token_weight=1.0}'));
 assert.ok(args.includes('model_providers.forecode_budget.request_max_retries=0'));
 assert.ok(args.includes('model_providers.forecode_budget.stream_max_retries=0'));
 assert.equal(args.at(-1), 'HARMLESS LAUNCHER CONTROL');
 for (const key of Object.keys(process.env)) assert.ok(['PATH','HOME','CODEX_HOME','LANG'].includes(key));
 assert.equal(process.env.CODEX_HOME, '/home/agent/.codex');
+const fs = require('node:fs');
+fs.mkdirSync(process.env.CODEX_HOME + '/startup-control');
+fs.writeFileSync(process.env.CODEX_HOME + '/startup-control/state', 'inert');
+assert.throws(() => fs.writeFileSync(process.env.CODEX_HOME + '/config.toml', 'denied'));
 http.get('http://127.0.0.1:8787/v1/responses', res => {
  assert.equal(res.statusCode, 403); // No provider POST or credentials.
  console.log('HARMLESS_LAUNCHER_ASSERTIONS_PASSED');
@@ -61,8 +66,8 @@ for changed in [False, True]:
         'workerImage':image,'prompt':'HARMLESS LAUNCHER CONTROL',
         'codexBinarySha256': 'a'*64 if changed else hashlib.sha256(stand_in).hexdigest(),
         'agentConfigSha256': hashlib.sha256(config).hexdigest(), 'workerNodeSha256':node_hash,
-        'maxSeconds':10,'maxOutputBytes':4096,'tokenLimit':100000,'spendMicroUsd':1000000,
-        'provider':{'maxOutputTokens':32,'inputMicroUsdPerToken':1,'outputMicroUsdPerToken':1}}
+        'maxSeconds':10,'maxOutputBytes':4096,'model':'gpt-5.6-sol','tokenLimit':100000,'spendMicroUsd':1000000,
+        'provider':{'endpoint':'https://api.openai.com/v1/responses','maxOutputTokens':32,'inputMicroUsdPerToken':1,'outputMicroUsdPerToken':1}}
     s.prepare(request)
     p=s.directory(run_id)
     (p/'codex').write_bytes(stand_in); (p/'codex').chmod(0o555)

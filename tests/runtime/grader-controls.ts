@@ -90,9 +90,11 @@ for (const mode of ["booking-pass", "booking-reject"]) {
     agentConfigSha256: "b".repeat(64),
     maxSeconds: 10,
     maxOutputBytes: 4096,
+    model: "gpt-5.6-sol",
     tokenLimit: 100000,
     spendMicroUsd: 1000000,
     provider: {
+      endpoint: "https://api.openai.com/v1/responses",
       maxOutputTokens: 32,
       inputMicroUsdPerToken: 1,
       outputMicroUsdPerToken: 1,

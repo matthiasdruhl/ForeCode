@@ -55,8 +55,8 @@ def setup(mode, seconds=8):
         {'path': 'src/main.ts', 'base64': base64.b64encode(b'export const value = 1;').decode()}]},
         'workerImage': image, 'prompt': 'HARMLESS TEST ONLY', 'codexBinarySha256': 'a'*64,
         'agentConfigSha256': 'b'*64, 'maxSeconds': seconds, 'maxOutputBytes': 4096,
-        'tokenLimit': 100000, 'spendMicroUsd': 1000000,
-        'provider': {'maxOutputTokens': 32, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1}}
+        'model': 'gpt-5.6-sol', 'tokenLimit': 100000, 'spendMicroUsd': 1000000,
+        'provider': {'endpoint': 'https://api.openai.com/v1/responses', 'maxOutputTokens': 32, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1}}
     supervisor.prepare(request)
     if mode == 'root-detached':
         # Test-only UID0 in the same capability-dropped PID namespace. Give it

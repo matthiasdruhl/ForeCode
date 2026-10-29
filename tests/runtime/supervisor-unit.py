@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 
 # These imports inspect trusted source. Never create bytecode beside it: that
 # changes the source commitment while other tests authenticate producer records.
@@ -32,16 +33,188 @@ class Mechanics(unittest.TestCase):
             os.chmod(parent, 0o700)
         self.temp.cleanup()
 
-    def budget(self, **changes):
-        request = {'deadline': time.time() + 60, 'tokenLimit': 100000, 'spendMicroUsd': 1000000,
-                   'provider': {'maxOutputTokens': 4096, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 2}}
+    def budget_request(self, **changes):
+        request = {'model': 'gpt-5.6-sol', 'deadline': time.time() + 60, 'tokenLimit': 100000, 'spendMicroUsd': 1000000,
+                   'provider': {'endpoint': 'https://api.openai.com/v1/responses', 'maxOutputTokens': 4096, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 2}}
         request.update(changes)
-        return m.budget.Reservations(self.root, request)
+        return request
+
+    def budget(self, **changes):
+        return m.budget.Reservations(self.root, self.budget_request(**changes))
 
     def raw(self, **changes):
         value = {'model': 'gpt-5.6-sol', 'input': 'Harmless synthetic text.'}
         value.update(changes)
         return json.dumps(value).encode()
+
+    def response(self, **changes):
+        value = {'object': 'response', 'model': 'gpt-5.6-sol', 'service_tier': 'default',
+                 'status': 'completed', 'output': [],
+                 'usage': {'input_tokens': 100, 'output_tokens': 20, 'total_tokens': 120,
+                           'input_tokens_details': {'cached_tokens': 0, 'cache_write_tokens': 0}}}
+        value.update(changes)
+        return value
+
+    def test_provider_response_mismatch_stops_further_paid_attempts(self):
+        cases = [self.response(model='another-model'), self.response(service_tier='priority'),
+                 self.response(usage=None), self.response(status='in_progress'),
+                 self.response(usage={'input_tokens': 100001, 'output_tokens': 20, 'total_tokens': 100021}),
+                 self.response(usage={'input_tokens': 100, 'output_tokens': 4097, 'total_tokens': 4197}),
+                 self.response(usage={'input_tokens': 100, 'output_tokens': 20, 'total_tokens': 119}),
+                 self.response(usage={'input_tokens': True, 'output_tokens': 20, 'total_tokens': 21}),
+                 self.response(usage={'input_tokens': 100, 'output_tokens': 20, 'total_tokens': 120,
+                                     'input_tokens_details': {'cached_tokens': 90, 'cache_write_tokens': 20}})]
+        for index, response in enumerate(cases):
+            with self.subTest(index=index):
+                directory = self.root / str(index)
+                directory.mkdir()
+                b = m.budget.Reservations(directory, self.budget_request())
+                sent = b.reserve(self.raw())
+                reserved = b.value['reservedMicroUsd']
+                with self.assertRaises(ValueError):
+                    b.observe(json.dumps(response).encode(), 'application/json', sent)
+                with self.assertRaises(ValueError):
+                    b.reserve(self.raw())
+                disk = json.loads((directory/'budget.json').read_text())
+                self.assertEqual(disk['reservedMicroUsd'], reserved)
+                self.assertEqual(disk['blockedReason'], 'provider-outcome-unverified')
+
+    def test_stream_requires_one_complete_matching_terminal_response(self):
+        complete = b'data: '+json.dumps({'type':'response.completed', 'response': self.response()}).encode()+b'\n\n'
+        cases = [b'data: {"type":"response.created"}\n\ndata: [DONE]\n',
+                 complete + complete, b'data: {"type":"error"}\n\n' + complete,
+                 b'data: '+json.dumps({'type':'response.completed', 'response': self.response(status='incomplete')}).encode()+b'\n\n']
+        for index, output in enumerate(cases):
+            with self.subTest(index=index):
+                directory = self.root / str(index)
+                directory.mkdir()
+                b = m.budget.Reservations(directory, self.budget_request())
+                sent = b.reserve(self.raw(stream=True))
+                with self.assertRaises(ValueError):
+                    b.observe(output, 'text/event-stream', sent)
+                with self.assertRaises(ValueError):
+                    b.reserve(self.raw())
+
+    def test_verified_incomplete_output_retains_full_reservation_and_can_continue(self):
+        b = self.budget()
+        sent = b.reserve(self.raw())
+        reserved = b.value['reservedMicroUsd']
+        b.observe(json.dumps(self.response(status='incomplete')).encode(), 'application/json', sent)
+        self.assertEqual(b.value['reservedMicroUsd'], reserved)
+        b.reserve(self.raw())
+
+    def test_meta_reserves_exact_pair_and_accepts_bounded_usage_without_optional_cache_details(self):
+        provider = {'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,
+                    'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5}
+        b = self.budget(model='muse-spark-1.3-contributor', provider=provider)
+        sent = b.reserve(self.raw(model='muse-spark-1.3-contributor'))
+        self.assertEqual(json.loads(sent)['model'], 'muse-spark-1.3-contributor')
+        self.assertEqual(json.loads(sent)['service_tier'], 'auto')
+        response=self.response(model='muse-spark-1.3-contributor',service_tier='auto',usage={'input_tokens':100,'output_tokens':20,'total_tokens':120})
+        b.observe(json.dumps(response).encode(), 'application/json', sent)
+        disk=json.loads((self.root/'budget.json').read_text())
+        self.assertEqual(disk['requests'][0]['observedUsage'],{'inputTokens':100,'outputTokens':20,'totalTokens':120,'cachedTokens':0})
+        self.assertEqual(disk['requests'][0]['serviceTier'],'auto')
+        with self.assertRaises(ValueError):
+            b.reserve(self.raw(model='gpt-5.6-sol'))
+        self.assertLessEqual(b.value['reservedMicroUsd'],1000000)
+
+    def test_meta_rejects_unreviewed_service_tiers_without_refunding_or_more_calls(self):
+        for index,tier in enumerate(['default','priority','flex','scale',None]):
+            with self.subTest(tier=tier):
+                directory=self.root/str(index);directory.mkdir()
+                request=self.budget_request(model='muse-spark-1.3-contributor',provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':256,'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5})
+                b=m.budget.Reservations(directory,request)
+                sent=b.reserve(self.raw(model='muse-spark-1.3-contributor'))
+                reserved=b.value['reservedMicroUsd']
+                response=self.response(model='muse-spark-1.3-contributor',service_tier=tier)
+                with self.assertRaises(ValueError):b.observe(json.dumps(response).encode(),'application/json',sent)
+                with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3-contributor'))
+                self.assertEqual(b.value['reservedMicroUsd'],reserved)
+                self.assertNotIn('observedUsage',b.value['requests'][0])
+
+    def test_model_endpoint_substitution_and_meta_subminimum_output_are_denied(self):
+        for model, endpoint in [('muse-spark-1.3','https://api.openai.com/v1/responses'),
+                                ('gpt-5.6-sol','https://api.meta.ai/v1/responses'),
+                                ('muse-spark-1.3-unknown','https://api.meta.ai/v1/responses')]:
+            with self.subTest(model=model), self.assertRaises(ValueError):
+                m.budget.reviewed_profile({'model':model,'provider':{'endpoint':endpoint}})
+        provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':15,
+                  'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5}
+        b=self.budget(model='muse-spark-1.3-contributor',provider=provider)
+        with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3-contributor'))
+        self.assertEqual(b.value['requests'],[])
+
+    def test_meta_multiple_explicit_context_turns_keep_full_reservations_and_same_spend_cap(self):
+        b=self.budget(model='muse-spark-1.3-contributor',tokenLimit=500000,spendMicroUsd=900000,
+                      provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,
+                                'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5})
+        for _ in range(4):
+            sent=b.reserve(self.raw(model='muse-spark-1.3-contributor',input='x'*30259))
+            reserved=b.value['reservedMicroUsd']
+            response=self.response(model='muse-spark-1.3-contributor',service_tier='auto',usage={'input_tokens':5000,'output_tokens':100,'total_tokens':5100})
+            b.observe(json.dumps(response).encode(),'application/json',sent)
+            self.assertEqual(b.value['reservedMicroUsd'],reserved)
+        self.assertEqual(len(b.value['requests']),4)
+        self.assertGreater(b.value['reservedTokens'],100000)
+        self.assertLessEqual(b.value['reservedTokens'],500000)
+        self.assertLessEqual(b.value['reservedMicroUsd'],900000)
+
+    def test_meta_binds_both_verified_stream_cipher_variants_for_the_same_reasoning_item(self):
+        provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5}
+        b=self.budget(model='muse-spark-1.3-contributor',tokenLimit=500000,provider=provider)
+        sent=b.reserve(self.raw(model='muse-spark-1.3-contributor',stream=True))
+        done={'type':'reasoning','id':'rs_synthetic','summary':[],'encrypted_content':'item-done-cipher'}
+        final={**done,'encrypted_content':'terminal-cipher'}
+        response=self.response(model='muse-spark-1.3-contributor',service_tier='auto',output=[final])
+        events=[{'type':'response.output_item.done','output_index':0,'item':done},
+                {'type':'response.completed','response':response}]
+        stream=b''.join(b'data: '+json.dumps(e).encode()+b'\n\n' for e in events)
+        b.observe(stream,'text/event-stream',sent)
+        for item in [done,final]:
+            b.reserve(self.raw(model='muse-spark-1.3-contributor',input=[item]))
+        with self.assertRaises(ValueError):
+            b.reserve(self.raw(model='muse-spark-1.3-contributor',input=[{**done,'encrypted_content':'never-received-cipher'}]))
+        self.assertEqual(set(b.value['opaqueInputs']),{hashlib.sha256(i['encrypted_content'].encode()).hexdigest() for i in [done,final]})
+
+    def test_meta_stream_cipher_variants_require_unique_exact_terminal_item_binding(self):
+        done={'type':'reasoning','id':'rs_synthetic','summary':[],'encrypted_content':'item-done-cipher'}
+        final={**done,'encrypted_content':'terminal-cipher'}
+        for number,changes in enumerate([{'id':'rs_other'},{'summary':[{'type':'summary_text','text':'different'}]}, {'index':1}, {'duplicate':True}]):
+            with self.subTest(changes=changes):
+                p=self.root/str(number);p.mkdir()
+                request=self.budget_request(model='muse-spark-1.3-contributor',tokenLimit=500000,provider={'endpoint':'https://api.meta.ai/v1/responses','maxOutputTokens':4096,'inputMicroUsdPerToken':2,'outputMicroUsdPerToken':5})
+                b=m.budget.Reservations(p,request);sent=b.reserve(self.raw(model='muse-spark-1.3-contributor',stream=True))
+                item={**done,**{k:v for k,v in changes.items() if k not in ['index','duplicate']}}
+                event={'type':'response.output_item.done','output_index':changes.get('index',0),'item':item}
+                response=self.response(model='muse-spark-1.3-contributor',service_tier='auto',output=[final])
+                events=[event,event] if changes.get('duplicate') else [event]
+                events.append({'type':'response.completed','response':response})
+                stream=b''.join(b'data: '+json.dumps(e).encode()+b'\n\n' for e in events)
+                with self.assertRaises(ValueError):b.observe(stream,'text/event-stream',sent)
+                with self.assertRaises(ValueError):b.reserve(self.raw(model='muse-spark-1.3-contributor',input=[item]))
+                self.assertEqual(b.value['opaqueInputs'],{})
+
+    def test_each_provider_uses_only_its_fixed_endpoint_and_host_proxy_sentinel(self):
+        calls=[]
+        class Reply:
+            status=200
+            headers={'Content-Type':'application/json'}
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def read(self,limit):return b'{}'
+        class Opener:
+            def open(self,request,timeout):
+                calls.append((request.full_url,request.get_header('Authorization')))
+                return Reply()
+        with mock.patch.dict(m.budget.os.environ,{'HTTPS_PROXY':'http://proxy.invalid:3128'}), \
+             mock.patch.object(m.budget.urllib.request,'build_opener',return_value=Opener()):
+            for model in ['gpt-5.6-sol','muse-spark-1.3','muse-spark-1.3-contributor']:
+                m.budget.provider_request(self.raw(model=model))
+            with self.assertRaises(ValueError):m.budget.provider_request(self.raw(model='unapproved'))
+        self.assertEqual(calls,[('https://api.openai.com/v1/responses','Bearer sk-sandbox'),
+                                ('https://api.meta.ai/v1/responses','Bearer forecode-meta-sandbox'),
+                                ('https://api.meta.ai/v1/responses','Bearer forecode-meta-sandbox')])
 
     def test_reserves_before_forwarding_and_preserves_integer_ceilings(self):
         b = self.budget()
@@ -125,6 +298,9 @@ class Mechanics(unittest.TestCase):
             self.assertEqual(len(called), 1)
             self.assertNotIn(b'PRIVATE_HEADER', called[0])
             self.assertGreater(b.value['reservedMicroUsd'], 0)
+            self.assertEqual(b.value['blockedReason'], 'provider-outcome-unverified')
+            with self.assertRaises(ValueError):
+                b.reserve(self.raw())
             client.close()
         finally:
             os.chdir(previous)
@@ -135,7 +311,7 @@ class Mechanics(unittest.TestCase):
         b = self.budget()
         sent = b.reserve(self.raw(include=['reasoning.encrypted_content']))
         opaque = {'type': 'reasoning', 'encrypted_content': 'SYNTHETIC_NOT_REAL_ENCRYPTION'}
-        b.observe(b'data: '+json.dumps({'type':'response.output_item.done','item':opaque}).encode()+b'\n\ndata: [DONE]\n', 'text/event-stream', sent)
+        b.observe(b'data: '+json.dumps({'type':'response.completed','response':self.response(output=[opaque])}).encode()+b'\n\ndata: [DONE]\n', 'text/event-stream', sent)
         before = b.value['reservedTokens']
         repeated = self.raw(input=[opaque, opaque])
         b.reserve(repeated)
@@ -206,6 +382,7 @@ class Mechanics(unittest.TestCase):
         self.assertIn('--cap-drop=ALL', args)
         self.assertIn('--restart=no', args)
         self.assertEqual(args[args.index('--user')+1], '1000:1000')
+        self.assertIn('/home/agent/.codex:rw,nosuid,nodev,size=16m,uid=1000,gid=1000', args)
         self.assertIn('type=bind,src='+str(self.root/run_id/'source')+',dst=/workspace,readonly', args)
         self.assertIn('type=bind,src='+str(self.root/run_id/'source/src')+',dst=/workspace/src', args)
         self.assertFalse(any('docker.sock' in a or 'supervisor.py' in a or 'budget.py' in a for a in args))

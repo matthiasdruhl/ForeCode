@@ -6,6 +6,11 @@ import {
 } from "../../../src/lib/contracts/common";
 
 const absolute = z.string().refine((value) => path.isAbsolute(value));
+export const BookingModelSchema = z.enum([
+  "gpt-5.6-sol",
+  "muse-spark-1.3",
+  "muse-spark-1.3-contributor",
+]);
 const digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 // Private runtime inputs, not additions to the frozen application contracts.
 export const SupervisionConfigSchema = z.strictObject({
@@ -20,7 +25,10 @@ export const SupervisionConfigSchema = z.strictObject({
     .max(64 * 1024 ** 3),
   vmPids: z.number().int().min(128).max(4096),
   provider: z.strictObject({
-    endpoint: z.literal("https://api.openai.com/v1/responses"),
+    endpoint: z.enum([
+      "https://api.openai.com/v1/responses",
+      "https://api.meta.ai/v1/responses",
+    ]),
     // Independently approved conservative tariff ceilings. The trusted broker
     // reserves these BEFORE sending a request; failed requests are not refunded.
     inputMicroUsdPerToken: z.number().int().min(1).max(1000),
@@ -42,34 +50,74 @@ export const obligations = [
   "patched-image-trust-store",
   "provider-hard-budget",
 ] as const;
-export const OperatorConfigSchema = z.strictObject({
-  schemaVersion: z.literal("booking-operator.v1"),
-  enabled: z.boolean().default(false),
-  sbx: z.literal("/opt/homebrew/bin/sbx"),
-  agentSandbox: z.literal("forecode-experiments"),
-  graderSandbox: z.literal("forecode-grader"),
-  agentImage: digest,
-  graderImage: digest,
-  agentConfigSha256: Sha256Schema,
-  codexBinarySha256: Sha256Schema,
-  graderNodeSha256: Sha256Schema,
-  graderLockSha256: Sha256Schema,
-  graderModulesSha256: Sha256Schema,
-  workerImage: z
-    .string()
-    .regex(/^(?:forecode-booking-toolchain@)?sha256:[a-f0-9]{64}$/),
-  coordinationRoot: absolute,
-  protectedRoot: absolute,
-  scratchRoot: absolute,
-  reviewFile: absolute,
-  reviewSha256: Sha256Schema,
-  maxSeconds: z.number().int().min(1).max(600),
-  maxOutputBytes: z.number().int().min(1024).max(8_000_000),
-  tokenLimit: z.number().int().min(1).max(100_000),
-  spendUsd: z.number().positive().max(10),
-  authorizedModel: z.literal("gpt-5.6-sol"),
-  supervision: SupervisionConfigSchema.optional(),
-});
+export const OperatorConfigSchema = z
+  .strictObject({
+    schemaVersion: z.literal("booking-operator.v1"),
+    enabled: z.boolean().default(false),
+    sbx: z.literal("/opt/homebrew/bin/sbx"),
+    agentSandbox: z.literal("forecode-experiments"),
+    graderSandbox: z.literal("forecode-grader"),
+    agentImage: digest,
+    graderImage: digest,
+    agentConfigSha256: Sha256Schema,
+    codexBinarySha256: Sha256Schema,
+    graderNodeSha256: Sha256Schema,
+    graderLockSha256: Sha256Schema,
+    graderModulesSha256: Sha256Schema,
+    workerImage: z
+      .string()
+      .regex(/^(?:forecode-booking-toolchain@)?sha256:[a-f0-9]{64}$/),
+    coordinationRoot: absolute,
+    protectedRoot: absolute,
+    scratchRoot: absolute,
+    reviewFile: absolute,
+    reviewSha256: Sha256Schema,
+    maxSeconds: z.number().int().min(1).max(600),
+    maxOutputBytes: z.number().int().min(1024).max(8_000_000),
+    tokenLimit: z.number().int().min(1).max(1_000_000),
+    spendUsd: z.number().positive().max(10),
+    authorizedModel: BookingModelSchema,
+    supervision: SupervisionConfigSchema.optional(),
+  })
+  .superRefine((config, context) => {
+    // Meta has no long-context premium. Preserve the historical OpenAI ceiling
+    // below its higher-priced context band; the independent spend cap remains.
+    if (config.authorizedModel === "gpt-5.6-sol" && config.tokenLimit > 100_000)
+      context.addIssue({
+        code: "custom",
+        message: "OpenAI token reservations are limited to 100000.",
+        path: ["tokenLimit"],
+      });
+    const endpoint = ["muse-spark-1.3", "muse-spark-1.3-contributor"].includes(
+      config.authorizedModel,
+    )
+      ? "https://api.meta.ai/v1/responses"
+      : "https://api.openai.com/v1/responses";
+    if (
+      (["muse-spark-1.3", "muse-spark-1.3-contributor"].includes(
+        config.authorizedModel,
+      ) &&
+        !config.supervision) ||
+      (config.supervision && config.supervision.provider.endpoint !== endpoint)
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Model and fixed provider endpoint must match.",
+        path: ["supervision", "provider", "endpoint"],
+      });
+    if (
+      ["muse-spark-1.3", "muse-spark-1.3-contributor"].includes(
+        config.authorizedModel,
+      ) &&
+      config.supervision &&
+      config.supervision.provider.maxOutputTokens < 16
+    )
+      context.addIssue({
+        code: "custom",
+        message: "Meta requires at least 16 output tokens.",
+        path: ["supervision", "provider", "maxOutputTokens"],
+      });
+  });
 export type OperatorConfig = z.infer<typeof OperatorConfigSchema>;
 // This is a private, operator-reviewed record, NOT an infrastructure PASS field.
 export const IsolationReviewSchema = z.strictObject({
@@ -80,7 +128,7 @@ export const IsolationReviewSchema = z.strictObject({
   inventorySha256: Sha256Schema,
   implementationSha256: Sha256Schema,
   authorizedTask: z.literal("booking-ownership-refactor-v1"),
-  authorizedModel: z.literal("gpt-5.6-sol"),
+  authorizedModel: BookingModelSchema,
   maxSpendUsd: z.number().positive().max(10),
   execution: z
     .strictObject({

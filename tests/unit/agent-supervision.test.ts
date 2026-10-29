@@ -5,12 +5,16 @@ import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
 import { snapshotTree } from "../../scripts/evaluator/booking-v1/snapshot";
-import { SupervisionConfigSchema } from "../../scripts/experiments/isolation/config";
+import {
+  SupervisionConfigSchema,
+  OperatorConfigSchema,
+} from "../../scripts/experiments/isolation/config";
 
 describe("concrete agent supervision private mechanics", () => {
   it("loads CLI help and validates the disabled example without a server-only import failure or sandbox operation", async () => {
     for (const args of [
       ["--help"],
+      ["--config", "scripts/experiments/isolation/operator.meta.example.json"],
       [
         "--config",
         "scripts/experiments/isolation/operator.supervised.example.json",
@@ -66,7 +70,7 @@ describe("concrete agent supervision private mechanics", () => {
       expect(result.exitCode).toBe(0);
       expect(JSON.parse(result.stdout)).toEqual({
         classification: "UNIT_NO_RUNTIME_OR_INFERENCE",
-        tests: 20,
+        tests: 30,
         failures: 0,
         errors: 0,
       });
@@ -75,6 +79,58 @@ describe("concrete agent supervision private mechanics", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
     }
+  });
+  it("admits only a matching Meta model/endpoint pair and a valid minimum cap in disabled configuration", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const meta = JSON.parse(
+      await readFile(
+        "scripts/experiments/isolation/operator.meta.example.json",
+        "utf8",
+      ),
+    );
+    expect(OperatorConfigSchema.parse(meta).authorizedModel).toBe(
+      "muse-spark-1.3-contributor",
+    );
+    expect(OperatorConfigSchema.parse(meta).tokenLimit).toBe(500000);
+    expect(
+      OperatorConfigSchema.parse({ ...meta, tokenLimit: 1000000 }).tokenLimit,
+    ).toBe(1000000);
+    for (const bad of [
+      { ...meta, authorizedModel: "muse-spark-1.3-unknown" },
+      { ...meta, authorizedModel: "gpt-5.6-sol" },
+      { ...meta, supervision: undefined },
+      { ...meta, tokenLimit: 1000001 },
+      {
+        ...meta,
+        authorizedModel: "gpt-5.6-sol",
+        tokenLimit: 100001,
+        supervision: {
+          ...meta.supervision,
+          provider: {
+            ...meta.supervision.provider,
+            endpoint: "https://api.openai.com/v1/responses",
+          },
+        },
+      },
+      {
+        ...meta,
+        supervision: {
+          ...meta.supervision,
+          provider: {
+            ...meta.supervision.provider,
+            endpoint: "https://api.openai.com/v1/responses",
+          },
+        },
+      },
+      {
+        ...meta,
+        supervision: {
+          ...meta.supervision,
+          provider: { ...meta.supervision.provider, maxOutputTokens: 15 },
+        },
+      },
+    ])
+      expect(() => OperatorConfigSchema.parse(bad)).toThrow();
   });
   it("plain, cloned or serialized termination flags never authenticate finalization", () => {
     const forged = {

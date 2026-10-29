@@ -13,6 +13,24 @@ import time
 import urllib.request
 
 
+PROFILES = {
+    'gpt-5.6-sol': {'endpoint': 'https://api.openai.com/v1/responses',
+                    'sentinel': 'sk-sandbox', 'minimumOutputTokens': 1, 'serviceTier': 'default'},
+    'muse-spark-1.3': {'endpoint': 'https://api.meta.ai/v1/responses',
+                       'sentinel': 'forecode-meta-sandbox', 'minimumOutputTokens': 16, 'serviceTier': 'auto'},
+    'muse-spark-1.3-contributor': {'endpoint': 'https://api.meta.ai/v1/responses',
+                       'sentinel': 'forecode-meta-sandbox', 'minimumOutputTokens': 16, 'serviceTier': 'auto'},
+}
+
+
+def reviewed_profile(request):
+    model = request.get('model')
+    if (model not in PROFILES
+            or request.get('provider', {}).get('endpoint') != PROFILES[model]['endpoint']):
+        raise ValueError('model and fixed provider endpoint mismatch')
+    return PROFILES[model]
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()
 
@@ -41,7 +59,9 @@ class Reservations:
     def __init__(self, directory, request):
         self.file = directory / 'budget.json'
         self.request = request
-        self.value = {'requests': [], 'reservedTokens': 0, 'reservedMicroUsd': 0, 'opaqueInputs': {}}
+        self.profile = reviewed_profile(request)
+        self.value = {'requests': [], 'reservedTokens': 0, 'reservedMicroUsd': 0,
+                      'opaqueInputs': {}, 'blockedReason': None}
         if self.file.exists():
             # A broker is never resumed: its previous paid request might still
             # be executing. Recovery can only clean up the original attempt.
@@ -50,10 +70,12 @@ class Reservations:
 
     def reserve(self, raw):
         r = self.request
+        if self.value['blockedReason'] is not None:
+            raise ValueError('provider outcome requires owner review')
         if time.time() >= r['deadline'] or len(raw) > 1_048_576:
             raise ValueError('budget deadline or request limit')
         body = json.loads(raw)
-        if not isinstance(body, dict) or body.get('model') != 'gpt-5.6-sol':
+        if not isinstance(body, dict) or body.get('model') != r['model']:
             raise ValueError('unapproved model')
         # Stateless, text-only requests. Hidden server-side history, remote
         # files/media and separately billed hosted tools defeat byte accounting.
@@ -100,7 +122,7 @@ class Reservations:
             raise ValueError('hosted tools forbidden')
         provider = r['provider']
         body['store'] = False
-        body['service_tier'] = 'default'
+        body['service_tier'] = self.profile['serviceTier']
         # Deliberately conservative: all UTF-8 request bytes plus a fixed
         # framing allowance. No cached-input discount, hidden context or refund.
         input_upper = len(canonical(body)) + count * 32 + 16384 + opaque_upper
@@ -109,7 +131,7 @@ class Reservations:
         micro_left = r['spendMicroUsd'] - self.value['reservedMicroUsd']
         output = min(output, (micro_left - input_upper * provider['inputMicroUsdPerToken'])
                      // provider['outputMicroUsdPerToken'])
-        if output < 1:
+        if output < self.profile['minimumOutputTokens']:
             raise ValueError('hard reservation exhausted')
         body['max_output_tokens'] = output
         reserved = input_upper * provider['inputMicroUsdPerToken'] + output * provider['outputMicroUsdPerToken']
@@ -123,24 +145,104 @@ class Reservations:
         return canonical(body)
 
 
+    def block(self):
+        # Preserve the entire reservation, with no provider text or diagnostics.
+        # A failed or unverified upstream outcome cannot trigger another call.
+        self.value['blockedReason'] = 'provider-outcome-unverified'
+        atomic(self.file, self.value)
+
     def observe(self, output, content_type, sent):
+        try:
+            self.observe_verified(output, content_type, sent)
+        except Exception:
+            self.block()
+            raise ValueError('unverified provider outcome') from None
+
+    def observe_verified(self, output, content_type, sent):
         """Bind stateless opaque replay to this broker's actually received bytes.
 
         Every item conservatively costs the entire previously reserved output
         cap again as input. No usage claim, remote ID lookup, caller-supplied
         hash or copied budget file authenticates opaque content.
         """
-        maximum = json.loads(sent)['max_output_tokens']
-        if 'text/event-stream' in content_type:
-            messages = []
+        reservation = self.value['requests'][-1]
+        if reservation['requestSha256'] != hashlib.sha256(sent).hexdigest():
+            raise ValueError('unreserved provider response')
+        maximum = reservation['maximumOutputTokens']
+        media_type = content_type.split(';', 1)[0].strip().lower()
+        streamed_reasoning = []
+        if media_type == 'text/event-stream':
+            terminal = []
             for line in output.splitlines():
                 if line.startswith(b'data:'):
                     data = line[5:].strip()
                     if data and data != b'[DONE]':
-                        messages.append(json.loads(data))
+                        event = json.loads(data)
+                        if not isinstance(event, dict) or event.get('type') == 'error':
+                            raise ValueError('invalid provider event')
+                        item = event.get('item')
+                        if (self.request['model'] in ('muse-spark-1.3', 'muse-spark-1.3-contributor')
+                                and event.get('type') == 'response.output_item.done'
+                                and isinstance(item, dict) and item.get('type') == 'reasoning'):
+                            streamed_reasoning.append((event.get('output_index'), item))
+                        if event.get('type') in ('response.completed', 'response.incomplete', 'response.failed'):
+                            response = event.get('response')
+                            if (not isinstance(response, dict)
+                                    or event['type'] != 'response.' + str(response.get('status'))):
+                                raise ValueError('terminal event mismatch')
+                            terminal.append(response)
+            if len(terminal) != 1:
+                raise ValueError('one terminal response required')
+            response = terminal[0]
+        elif media_type == 'application/json':
+            response = json.loads(output)
         else:
-            messages = [json.loads(output)]
-        nodes = messages
+            raise ValueError('unsupported provider content type')
+        if (not isinstance(response, dict) or response.get('object') != 'response'
+                or response.get('model') != self.request['model']
+                or response.get('service_tier') != self.profile['serviceTier']
+                or response.get('status') not in ('completed', 'incomplete')):
+            raise ValueError('provider identity or outcome mismatch')
+        usage = response.get('usage')
+        if not isinstance(usage, dict):
+            raise ValueError('provider usage unavailable')
+        def tokens(name, source=usage):
+            value = source.get(name)
+            if type(value) is not int or value < 0:
+                raise ValueError('invalid provider token accounting')
+            return value
+        used_input, used_output, total = tokens('input_tokens'), tokens('output_tokens'), tokens('total_tokens')
+        meta = self.request['model'] in ('muse-spark-1.3', 'muse-spark-1.3-contributor')
+        details = usage.get('input_tokens_details', {} if meta else None)
+        if not isinstance(details, dict):
+            raise ValueError('provider input accounting unavailable')
+        cached = tokens('cached_tokens', {'cached_tokens': details.get('cached_tokens', 0)} if meta else details)
+        written = tokens('cache_write_tokens', {'cache_write_tokens': details.get('cache_write_tokens', 0)})
+        if (used_input > reservation['inputTokenUpperBound'] or used_output > maximum
+                or total != used_input + used_output or cached + written > used_input
+                or (meta and written != 0)):
+            raise ValueError('provider usage exceeds reservation')
+        # Cache reads and writes are already covered by the reviewed worst-case
+        # input tariff. Do not refund reservations or claim a measured bill.
+        # Meta can encrypt the SAME finalized reasoning item separately in its
+        # item.done and terminal events. Codex replays item.done. Authenticate
+        # both variants from these received bytes, only after terminal/usage
+        # validation and exact item identity/content matching (except cipher).
+        nodes = [response]
+        indices = set()
+        for index, item in streamed_reasoning:
+            outputs = response.get('output')
+            if (type(index) is not int or index < 0 or index in indices
+                    or not isinstance(outputs, list) or index >= len(outputs)):
+                raise ValueError('ambiguous streamed reasoning identity')
+            indices.add(index)
+            final = outputs[index]
+            if (not isinstance(final, dict) or not isinstance(item.get('id'), str)
+                    or not item['id'] or final.get('id') != item['id']
+                    or canonical({k: v for k, v in final.items() if k != 'encrypted_content'})
+                    != canonical({k: v for k, v in item.items() if k != 'encrypted_content'})):
+                raise ValueError('streamed reasoning differs from terminal item')
+            nodes.append(item)
         count = 0
         while nodes:
             item = nodes.pop()
@@ -157,7 +259,11 @@ class Reservations:
                 nodes.extend(item.values())
             elif isinstance(item, list):
                 nodes.extend(item)
-        atomic(self.file, self.value)  # Retain binding before exposing a response.
+        reservation['observedUsage'] = {'inputTokens': used_input, 'outputTokens': used_output,
+                                        'totalTokens': total, 'cachedTokens': cached}
+        reservation['responseStatus'] = response['status']
+        reservation['serviceTier'] = response['service_tier']
+        atomic(self.file, self.value)  # Retain validated usage/binding before exposing a response.
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -172,9 +278,13 @@ def provider_request(body):
     if not proxy.startswith('http://'):
         raise ValueError('reviewed credential proxy unavailable')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({'https': proxy}), NoRedirect())
-    request = urllib.request.Request('https://api.openai.com/v1/responses', data=body,
+    model = json.loads(body).get('model')
+    if model not in PROFILES:
+        raise ValueError('unapproved provider model')
+    profile = PROFILES[model]
+    request = urllib.request.Request(profile['endpoint'], data=body,
                                      headers={'Content-Type': 'application/json',
-                                              'Authorization': 'Bearer sk-sandbox'})
+                                              'Authorization': 'Bearer ' + profile['sentinel']})
     with opener.open(request, timeout=30) as response:
         data = response.read(8_000_001)
         if len(data) > 8_000_000 or response.status != 200:
@@ -193,7 +303,11 @@ def serve(socket_path, reservations, upstream=provider_request):
                 if self.path != '/v1/responses' or not 0 <= size <= 1_048_576 or self.headers.get('Transfer-Encoding'):
                     raise ValueError('unsupported request')
                 body = reservations.reserve(self.rfile.read(size))
-                output, content_type = upstream(body)  # Exactly one attempt.
+                try:
+                    output, content_type = upstream(body)  # Exactly one attempt.
+                except Exception:
+                    reservations.block()
+                    raise
                 reservations.observe(output, content_type, body)
                 self.send_response(200)
                 self.send_header('Content-Type', content_type)

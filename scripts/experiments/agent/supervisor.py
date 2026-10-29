@@ -157,6 +157,7 @@ class Supervisor:
         return ids
 
     def prepare(self, request):
+        budget.reviewed_profile(request)
         run_id = request['runId']
         p = self.directory(run_id)
         if self.owned(run_id):
@@ -195,7 +196,8 @@ class Supervisor:
                 os.chmod(pathlib.Path(parent) / name, 0o600)
         gateway = p / 'gateway'
         gateway.mkdir(mode=0o755)
-        task = {'prompt': request['prompt'], 'codexBinarySha256': request['codexBinarySha256'],
+        task = {'prompt': request['prompt'], 'model': request['model'], 'tokenLimit': request['tokenLimit'],
+                'codexBinarySha256': request['codexBinarySha256'],
                 'agentConfigSha256': request['agentConfigSha256'], 'workerNodeSha256': request.get('workerNodeSha256')}
         (p / 'task.json').write_bytes(budget.canonical(task))
         os.chmod(p / 'task.json', 0o444)
@@ -214,6 +216,10 @@ class Supervisor:
                 '--pids-limit', '128', '--ulimit', 'nofile=256:256', '--log-driver=none',
                 '--tmpfs', '/tmp:rw,nosuid,nodev,size=32m,mode=1777',
                 '--tmpfs', '/home/agent:rw,nosuid,nodev,size=32m,uid=1000,gid=1000',
+                # Docker creates bind-mount parents as root. Give CODEX_HOME
+                # its own owned tmpfs so app-server state/aliases are writable,
+                # while the exact reviewed config stays a read-only file bind.
+                '--tmpfs', '/home/agent/.codex:rw,nosuid,nodev,size=16m,uid=1000,gid=1000',
                 '--mount', 'type=bind,src=' + str(p / 'source') + ',dst=/workspace,readonly',
                 '--mount', 'type=bind,src=' + str(p / 'source/src') + ',dst=/workspace/src',
                 '--mount', 'type=bind,src=' + str(p / 'gateway') + ',dst=/run/forecode-gateway,readonly',
@@ -238,7 +244,7 @@ class Supervisor:
         if any(v.get('Type') not in ('bind', 'tmpfs') for v in info['Mounts']):
             raise ValueError('unreviewed worker volume')
         for mount in info['Mounts']:
-            if mount.get('RW') and mount.get('Destination') not in ('/workspace/src', '/tmp', '/home/agent'):
+            if mount.get('RW') and mount.get('Destination') not in ('/workspace/src', '/tmp', '/home/agent', '/home/agent/.codex'):
                 raise ValueError('unexpected writable mount')
 
     def start(self, run_id, nonce):

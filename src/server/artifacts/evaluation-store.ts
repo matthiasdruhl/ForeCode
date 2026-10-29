@@ -1,5 +1,12 @@
 import "server-only";
 import { constants } from "node:fs";
+import { createPublicKey, verify } from "node:crypto";
+import {
+  PublicationArtifactSchema,
+  DisclosureEnvelopeSchema,
+  disclosureSubject,
+} from "@/lib/experiment/tournament-publication";
+import { canonicalJson } from "@/lib/report/canonical";
 import { lstat, open, realpath } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -236,6 +243,194 @@ export async function createProtectedEvaluationStore(config: {
       } catch {
         return null;
       } // No raw paths, private test diagnostics or parse errors escape.
+    },
+  });
+}
+
+// Fixed read-only publication custody inside the sole reviewed filesystem
+// boundary. No arbitrary file names, uploads, discovery, runner or public API.
+export type TournamentPublicationEntry = {
+  directory: string;
+  publicationSha256: string;
+  disclosureId: string;
+  disclosureSha256: string;
+};
+type PublicationArtifact = ReturnType<typeof PublicationArtifactSchema.parse>;
+export type TrustedTournamentPublication = Readonly<{
+  artifact: PublicationArtifact;
+  disclosureId: string;
+}>;
+const authenticatedPublications = new WeakSet<object>();
+export function isTrustedTournamentPublication(
+  value: unknown,
+): value is TrustedTournamentPublication {
+  return (
+    !!value && typeof value === "object" && authenticatedPublications.has(value)
+  );
+}
+export async function createProtectedTournamentPublicationStore(config: {
+  root: string;
+  authorityRoot: string;
+  agentWorkspaceRoots: readonly string[];
+  authorityPublicKeyPem: string;
+  authorityPublicKeySha256: string;
+  revocationSha256: string;
+  entries: ReadonlyMap<string, TournamentPublicationEntry>;
+}) {
+  async function privateRoot(input: string) {
+    const root = await realpath(input),
+      stat = await lstat(root);
+    invariant(
+      root === path.resolve(input) &&
+        stat.isDirectory() &&
+        stat.uid === process.getuid?.() &&
+        (stat.mode & 0o077) === 0,
+      "Invalid private publication custody.",
+    );
+    return root;
+  }
+  const root = await privateRoot(config.root),
+    authorityRoot = await privateRoot(config.authorityRoot);
+  const separate = (a: string, b: string) =>
+    invariant(
+      !within(a, b) && !within(b, a),
+      "Overlapping publication custody.",
+    );
+  separate(root, authorityRoot);
+  // Used only for disjointness comparisons, never as a filesystem read root.
+  const repository = process.cwd();
+  for (const directory of [root, authorityRoot]) {
+    separate(directory, repository);
+    separate(directory, path.resolve(repository, "../AgentHarness-Planning"));
+  }
+  async function publicationRead(base: string, relative: string) {
+    const filename = path.join(base, relative),
+      before = await lstat(filename);
+    invariant(
+      before.isFile() &&
+        before.nlink === 1 &&
+        before.uid === process.getuid?.() &&
+        (before.mode & 0o222) === 0,
+      "Publication original custody invalid.",
+    );
+    const bytes = await boundedRead(base, relative),
+      after = await lstat(filename);
+    invariant(
+      before.ino === after.ino &&
+        before.dev === after.dev &&
+        before.size === after.size &&
+        before.mtimeMs === after.mtimeMs &&
+        before.ctimeMs === after.ctimeMs,
+      "Publication original changed during read.",
+    );
+    return bytes;
+  }
+  invariant(
+    config.agentWorkspaceRoots.length > 0,
+    "Complete workspace inventory required.",
+  );
+  for (const input of config.agentWorkspaceRoots) {
+    const workspace = await realpath(input);
+    separate(root, workspace);
+    separate(authorityRoot, workspace);
+  }
+  const authorityPem = config.authorityPublicKeyPem,
+    revocationSha256 = Sha256Schema.parse(config.revocationSha256);
+  invariant(
+    sha256(authorityPem) ===
+      Sha256Schema.parse(config.authorityPublicKeySha256),
+    "Authority changed.",
+  );
+  const key = createPublicKey(authorityPem);
+  invariant(
+    key.asymmetricKeyType === "ed25519",
+    "Exact publication authority required.",
+  );
+  const entries = new Map<string, TournamentPublicationEntry>();
+  const originals = new Set<string>();
+  for (const [id, value] of config.entries) {
+    IdSchema.parse(id);
+    IdSchema.parse(value.directory);
+    IdSchema.parse(value.disclosureId);
+    Sha256Schema.parse(value.publicationSha256);
+    Sha256Schema.parse(value.disclosureSha256);
+    invariant(
+      !originals.has(value.disclosureId),
+      "Reused disclosure original.",
+    );
+    originals.add(value.disclosureId);
+    entries.set(id, deepFreeze({ ...value }));
+  }
+  return Object.freeze({
+    async load(
+      id: string,
+      now = Date.now(),
+    ): Promise<TrustedTournamentPublication | null> {
+      const entry = entries.get(id);
+      if (!entry) return null;
+      try {
+        await privateRoot(root);
+        await privateRoot(authorityRoot);
+        const bytes = await publicationRead(
+          root,
+          `${entry.directory}/tournament-publication.json`,
+        );
+        invariant(
+          sha256(bytes) === entry.publicationSha256,
+          "Publication changed.",
+        );
+        const artifact = PublicationArtifactSchema.parse(
+          JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+        );
+        const original = await publicationRead(
+          authorityRoot,
+          `${entry.disclosureId}/disclosure-original.json`,
+        );
+        invariant(
+          sha256(original) === entry.disclosureSha256,
+          "Disclosure original changed.",
+        );
+        const { record, signature } = DisclosureEnvelopeSchema.parse(
+          JSON.parse(original.toString("utf8")),
+        );
+        const revocations = await publicationRead(
+          authorityRoot,
+          "revocations.json",
+        );
+        invariant(
+          sha256(revocations) === revocationSha256,
+          "Disclosure revocation state changed.",
+        );
+        const revoked = z
+          .strictObject({ revokedIds: z.array(IdSchema).max(10000) })
+          .parse(JSON.parse(revocations.toString("utf8")));
+        invariant(
+          !revoked.revokedIds.includes(record.id) &&
+            record.id === entry.disclosureId &&
+            record.studyId === artifact.projection.studyId &&
+            record.studyId === id &&
+            record.predecessorSha256 ===
+              artifact.projection.preparedOriginalSha256 &&
+            record.subjectSha256 === disclosureSubject(artifact) &&
+            Date.parse(record.heldAt) <= now &&
+            now < Date.parse(record.expiresAt),
+          "Disclosure stale, revoked or mismatched.",
+        );
+        invariant(
+          verify(
+            null,
+            Buffer.from(canonicalJson(record)),
+            key,
+            Buffer.from(signature, "base64"),
+          ),
+          "Unauthenticated disclosure.",
+        );
+        const loaded = deepFreeze({ artifact, disclosureId: record.id });
+        authenticatedPublications.add(loaded);
+        return loaded;
+      } catch {
+        return null;
+      }
     },
   });
 }

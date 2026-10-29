@@ -85,6 +85,8 @@ export const PublicTournamentSchema = z.strictObject({
     "BOTH_REJECTED",
   ]),
   baselineEvaluatorSha256: Sha256Schema,
+  baselineSuiteSha256: Sha256Schema,
+  baselinePolicySha256: Sha256Schema,
   futureEvaluatorSha256: Sha256Schema,
   futureSuiteSha256: Sha256Schema,
   futurePolicySha256: Sha256Schema,
@@ -99,6 +101,23 @@ export const PublicTournamentSchema = z.strictObject({
     )
     .max(100)
     .nullable(),
+  attempts: z
+    .array(
+      z.strictObject({
+        id: IdSchema,
+        variant: z.enum(["A", "B", "C"]),
+        status: z.enum([
+          "completed",
+          "failed",
+          "cancelled",
+          "timed_out",
+          "blocked",
+        ]),
+        startedAt: UtcTimestampSchema,
+        endedAt: UtcTimestampSchema,
+      }),
+    )
+    .max(100),
   preparationAttempts: z
     .array(
       z.strictObject({
@@ -143,3 +162,14 @@ export function disclosureSubject(
 ) {
   return jsonDigest(PublicationArtifactSchema.parse(artifact));
 }
+
+export const tournamentRequiredChecks = [
+  "typecheck",
+  "build",
+  "baseline-domain",
+  "http-integration",
+  "boundary",
+  "team-permissions-domain",
+  "team-permissions-http",
+  "team-permissions-adversarial",
+] as const;

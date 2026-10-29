@@ -55,3 +55,7 @@ On October 28, 2026, focused new tournament tests exercise exact task/intent bin
 ## Study custody follow-up — October 29
 
 The [operator workflow](TOURNAMENT-OPERATOR.md) adds a preselection definition that requires no B source, independently pinned signed-original custody, chronological preparation authority and final commitment, source-only diffs, complete preparation history and authenticated non-null telemetry. The old report remains a proposal-only assessment; its static blockers are not a current inventory of PR #19 acceptance. New operator readiness freshly loads exact external originals. The production authority catalog is empty, no B was fabricated, and execution remains disabled.
+
+## Authenticated reporting and read-only walkthrough
+
+The later private original-intake path can authenticate exact execution/history/telemetry originals and derive scoped correctness with preparation overhead. Its report/disclosure catalogs remain empty; the proposal-only functions above keep their original conservative behavior. The [operator handoff](TOURNAMENT-OPERATOR.md) documents both boundaries and the blocked live team transport precisely. `/experiments` now reloads only code-owned, independently disclosure-approved projections and protected receipts through the existing bounded store. No real tournament recording is configured. The six-step empty walkthrough never supplies synthetic success, B source or a winner.

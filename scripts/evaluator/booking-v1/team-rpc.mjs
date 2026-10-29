@@ -235,9 +235,15 @@ export function createBehaviorDispatcher({
     requireThat(stored?.kind === kind);
     return stored.value;
   };
-  const toRequest = (input) =>
-    new Request(input.url, {
-      method: input.method,
+  const toRequest = (input) => {
+    // Fetch forbids these wire method names at construction. Preserve a genuine
+    // Request's URL/headers/body and expose the exact method to the candidate's
+    // handler, so its unsupported-method dispatch is observable without a wire
+    // server or any new network authority. This does not test a production proxy.
+    const method = input.method.toUpperCase();
+    const forbidden = ["TRACE", "CONNECT", "TRACK"].includes(method);
+    const value = new Request(input.url, {
+      method: forbidden ? "POST" : input.method,
       headers: input.headers,
       ...(input.bodyBase64 !== undefined
         ? { body: Buffer.from(input.bodyBase64, "base64") }
@@ -245,6 +251,9 @@ export function createBehaviorDispatcher({
           ? {}
           : { body: input.body }),
     });
+    if (forbidden) Object.defineProperty(value, "method", { value: method });
+    return value;
+  };
   const responseData = async (response) => {
     requireThat(response instanceof Response);
     const reader = response.body?.getReader();

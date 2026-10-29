@@ -1,3 +1,5 @@
+October29 update: exact task/common-adapter approval, private provisioning and actual compliant/defective guest acceptance are complete under the owner-authorized AI review exception. See [the scoped acceptance record](BOOKING-TEAM-ORACLE-ACCEPTANCE.md) for measured outcomes and same-context reviewer limits. Historical October28 blockers below describe the earlier assignment. Independent preregistration, B preparation/baseline evidence and exact study/runtime/spending admission remain separate; study execution is still disabled.
+
 # Future booking evaluation and preparation
 
 October 28, 2026: **public preparation implemented; operational study BLOCKED**. The proposed [team task and matrix](../benchmarks/booking-team-permissions/README.md) require independent owner review. No protected future test package has been provisioned. No candidate/agent/provider/guest was executed by this work. Synthetic integrity tests are not behavioral validation of a team implementation or real experimental evidence.

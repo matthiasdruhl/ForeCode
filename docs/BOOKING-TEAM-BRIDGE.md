@@ -1,4 +1,4 @@
-October 29 update: the owner has now explicitly authorized private provisioning and protected behavioral controls under the existing delegated AI technical review. Exact task/common-protocol decisions and reviewer-independence limits are in [the scoped acceptance record](BOOKING-TEAM-ORACLE-ACCEPTANCE.md). Historical October28 status below describes that assignment; current measured outcomes are appended to IMPLEMENTATION-LOG.
+October 29 update: the owner has now explicitly authorized private provisioning and protected behavioral controls under the existing delegated AI technical review. Exact task/common-protocol decisions and reviewer-independence limits are in [the scoped acceptance record](BOOKING-TEAM-ORACLE-ACCEPTANCE.md). The private reference passed all eight checks, all seven deliberate defects were rejected, and five custody controls passed with freshly authenticated original receipts. Historical October28 status below describes that assignment; current measured outcomes are appended to IMPLEMENTATION-LOG.
 
 # Restricted team-permissions grader bridge
 

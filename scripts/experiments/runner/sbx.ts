@@ -572,6 +572,10 @@ export function createSbxAdapter(
       return output;
     },
     async grade(input, abort) {
+      requireThat(
+        input.evaluationProfile === undefined,
+        "Fixed booking smoke cannot select a future grading profile.",
+      );
       sameRun(input.runId);
       signal = abort;
       requireThat(

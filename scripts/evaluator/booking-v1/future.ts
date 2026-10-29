@@ -11,8 +11,15 @@ import {
   isTrustedEvaluation,
 } from "../../../src/server/artifacts/evaluation-store";
 import { OracleSchema } from "../../experiments/tournament/plan";
-import { bookingPolicy } from "./freeze";
+import { bookingPolicy, freezeBooking } from "./freeze";
 import { assembleEvaluatorReceipt } from "./receipt";
+import {
+  validateGradeInput,
+  validateGradeReport,
+  type GradeInput,
+  type TeamGradeProfile,
+} from "./grade-profile";
+import type { CandidateEnvelope } from "../../experiments/artifacts/files";
 
 export const futureCheckIds = [
   ...bookingPolicy.requiredCheckIds,
@@ -160,4 +167,114 @@ export function futureEvaluationVerdict(
   )
     return "INSUFFICIENT_EVIDENCE" as const;
   return evidence.verification.verdict;
+}
+
+// Operator-local data preparation only. No guest/agent lifecycle or publication.
+// Baseline runtime adapters explicitly refuse this profile.
+export async function prepareTeamGradeInput(input: {
+  descriptor: unknown;
+  task: unknown;
+  request: FutureEvaluationRequest;
+  candidate: CandidateEnvelope;
+  workerImage: string;
+}): Promise<GradeInput> {
+  const descriptor = validateFutureOracle(input.descriptor, input.task);
+  const pins = await freezeBooking();
+  const baseline = {
+    evaluatorSha256: pins.evaluatorSha256,
+    testSuiteSha256: pins.testSuiteSha256,
+    requiredPolicySha256: pins.requiredPolicySha256,
+    requiredCheckIds: [...bookingPolicy.requiredCheckIds],
+  };
+  invariant(
+    jsonDigest(baseline) === jsonDigest(descriptor.baselineOracle),
+    "Stale public evaluator dependencies.",
+  );
+  const request = prepareFutureEvaluation({
+    descriptor,
+    task: input.task,
+    ...input.request.identity,
+  });
+  invariant(
+    jsonDigest(request) === jsonDigest(input.request) &&
+      request.identity.fixtureSha256 === pins.fixtureSha256,
+    "Future request or fixture mismatch.",
+  );
+  const lock = pins.fixtureManifest.find(
+    (file) => file.path === "package-lock.json",
+  );
+  invariant(lock, "Baseline dependency lock absent.");
+  const profile: TeamGradeProfile = {
+    kind: "booking-team-permissions.v1",
+    taskId: "booking-team-permissions-v1",
+    taskDefinitionSha256:
+      descriptor.taskDefinitionSha256 as TeamGradeProfile["taskDefinitionSha256"],
+    descriptorSha256: jsonDigest(descriptor),
+    fixtureSha256: pins.fixtureSha256,
+    dependencyLockSha256: lock.sha256,
+    baselineEvaluatorSha256: pins.evaluatorSha256,
+    evaluatorSha256: descriptor.oracle.evaluatorSha256,
+    testSuiteSha256: descriptor.oracle.testSuiteSha256,
+    requiredPolicySha256: descriptor.oracle.requiredPolicySha256,
+  };
+  const {
+    runId,
+    evaluatedTreeSha256,
+    evaluatorSha256,
+    testSuiteSha256,
+    requiredPolicySha256,
+  } = request.identity;
+  return validateGradeInput({
+    runId,
+    evaluatedTreeSha256,
+    evaluatorSha256,
+    testSuiteSha256,
+    requiredPolicySha256,
+    candidate: input.candidate,
+    workerImage: input.workerImage,
+    evaluationProfile: profile,
+  });
+}
+
+export function validateTeamGradeObservation(
+  raw: unknown,
+  input: GradeInput,
+  request: FutureEvaluationRequest,
+) {
+  const checked = validateGradeInput(input);
+  invariant(
+    checked.evaluationProfile &&
+      checked.runId === request.identity.runId &&
+      checked.evaluatedTreeSha256 === request.identity.evaluatedTreeSha256 &&
+      checked.evaluationProfile.fixtureSha256 ===
+        request.identity.fixtureSha256 &&
+      checked.evaluationProfile.descriptorSha256 === request.descriptorSha256 &&
+      checked.evaluationProfile.taskDefinitionSha256 ===
+        request.taskDefinitionSha256,
+    "Future observation request mismatch.",
+  );
+  for (const key of [
+    "evaluatorSha256",
+    "testSuiteSha256",
+    "requiredPolicySha256",
+  ] as const)
+    invariant(
+      checked[key] === request.identity[key],
+      "Future request policy mismatch.",
+    );
+  invariant(
+    sameIds(request.identity.requiredCheckIds, futureCheckIds),
+    "Future request required checks mismatch.",
+  );
+  return validateGradeReport(
+    raw,
+    {
+      runId: checked.runId,
+      evaluatedTreeSha256: checked.evaluatedTreeSha256,
+      evaluatorSha256: checked.evaluatorSha256,
+      testSuiteSha256: checked.testSuiteSha256,
+      requiredPolicySha256: checked.requiredPolicySha256,
+    },
+    checked.evaluationProfile,
+  );
 }

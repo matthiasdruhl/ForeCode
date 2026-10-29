@@ -1,6 +1,9 @@
 // Exact files admitted and provisioned into the protected grader; no app source.
 export const controllerFiles = [
   "guest.ts",
+  "grade-profile.ts",
+  "team-installation.ts",
+  "team-rpc.mjs",
   "installed-smoke.mjs",
   "installed-sample.ts",
   "worker-policy.mjs",

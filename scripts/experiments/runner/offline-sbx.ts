@@ -110,6 +110,10 @@ export function createOfflineSbxAdapter(config: OfflineConfig): OfflineAdapter {
       );
     },
     async grade(input, signal) {
+      if (input.evaluationProfile !== undefined)
+        throw new Error(
+          "Fixed offline acceptance cannot select a future grading profile.",
+        );
       await current(signal);
       return boundedProcess(
         config.sbx,

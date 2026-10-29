@@ -28,7 +28,7 @@ export function workerArguments({
     throw new Error("Invalid fixed worker operation");
   if (
     (script === "worker.mjs" &&
-      !["rpc", "typecheck", "build", "isolation"].includes(mode)) ||
+      !["rpc", "rpc-team", "typecheck", "build", "isolation"].includes(mode)) ||
     (script === "lifecycle-worker.mjs" &&
       !["complete", "fail", "hang", "flood", "detached"].includes(mode))
   )

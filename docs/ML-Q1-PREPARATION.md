@@ -1,6 +1,6 @@
 # Glimmer SFT preparation — not trained or authorized
 
-The inert qloraPreparation() metadata and validateDemonstrations() validator are implemented in scripts/learning/qlora.ts. There is no trainer, downloader, model request, cloud job or inference server. No corpus or weights are committed. All configuration choices were freshly authored here from public documentation; no planning files were copied.
+The inert qloraPreparation() metadata and validateDemonstrations() validator are implemented in scripts/learning/qlora.ts. That module has no trainer, downloader, model request, cloud job or inference server. A separate [manually gated Colab research notebook](../research/qlora/README.md) now prepares model acquisition, a fixed local trainer and held-out generation; importing its helpers performs none of those operations. Colab is the selected compute route. No corpus or weights are committed, and no GPU training or model download has been performed. All configuration choices were freshly authored here from public documentation; no planning files were copied.
 
 Verified October 30: Meta's [post-training documentation](https://dev.meta.ai/docs/muse-glimmer/post-training) identifies the base revision a4e59da52a7bc87ae7251dd5545c0dd437c44b68, Axolotl 0.19.0, Python 3.12, PyTorch 2.12.1/torchvision 0.27.1, CUDA 13.0 and flash-attn 2.8.3. It documents one-H100 feasibility and requires a two-step checkpoint test and proper bf16 adapter reload. These are published reference results, not ForeCode measurements.
 

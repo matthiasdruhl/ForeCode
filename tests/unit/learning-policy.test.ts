@@ -21,6 +21,7 @@ import {
 } from "../../scripts/learning/dataset";
 import { openLearningRegistry } from "../../scripts/learning/registry";
 import { extractFeatures } from "../../src/lib/learning/features";
+import { jsonDigest } from "../../src/lib/report/digests";
 import {
   learningContext,
   learningFixture,
@@ -104,6 +105,11 @@ describe("actual LinUCB updates and local persistence — SYNTHETIC implementati
       trainPolicy(syntheticPolicy(), snapshotOf([o], ["validation"])),
     ).toThrow();
     expect(() => parsePolicy({ ...a, sha256: h("wrong") })).toThrow("digest");
+    const forged = structuredClone(a.policy);
+    forged.actions.KEEP.correctness.b[0] = 99;
+    expect(() =>
+      parsePolicy({ policy: forged, sha256: jsonDigest(forged) }),
+    ).toThrow("replay");
     expect(() =>
       parsePolicy({ ...a, policy: { ...a.policy, featureVersion: "v2" } }),
     ).toThrow();
@@ -159,6 +165,9 @@ describe("actual LinUCB updates and local persistence — SYNTHETIC implementati
     expect(() =>
       createSnapshot({ ...s.manifest, frozenAt: t(0) }, [o]),
     ).toThrow("freeze");
+    expect(() =>
+      createSnapshot({ ...s.manifest, frozenAt: t(10) }, [o]),
+    ).toThrow("Approval after");
     const row = s.manifest.rows[0]!;
     expect(() =>
       createSnapshot(
@@ -240,23 +249,29 @@ describe("actual LinUCB updates and local persistence — SYNTHETIC implementati
       snapshotOf(observations),
     );
     const advice = recommend(p, learningContext(), "SYNTHETIC");
-    expect(advice.action).toBe("KEEP");
-    expect(advice.ranking.map((r) => r.action).sort()).toEqual([
+    expect(advice.reason).toBe("POLICY_POSTDATES_CONTEXT");
+    const query = { ...learningContext(), frozenAt: t(21) };
+    const futureAdvice = recommend(p, query, "SYNTHETIC");
+    expect(futureAdvice.action).toBe("KEEP");
+    expect(futureAdvice.ranking.map((r) => r.action).sort()).toEqual([
       "BOUNDARY",
       "KEEP",
     ]);
     const unsupported = learningContext();
+    unsupported.frozenAt = t(21);
     unsupported.actions.eligible.push("ADAPTER");
     expect(recommend(p, unsupported, "SYNTHETIC").reason).toBe(
       "INSUFFICIENT_INDEPENDENT_SUPPORT",
     );
     const ood = learningContext();
+    ood.frozenAt = t(21);
     ood.facts.repositoryFiles = 10000;
     ood.facts.moduleCount = 2000;
     ood.facts.meanFanOut = 20;
     ood.facts.estimatedChangedModules = 64;
     expect(recommend(p, ood, "SYNTHETIC").reason).toBe("OUT_OF_DISTRIBUTION");
     const missing = learningContext();
+    missing.frozenAt = t(21);
     missing.facts.repositoryFiles = null;
     missing.facts.moduleCount = null;
     missing.facts.meanFanOut = null;

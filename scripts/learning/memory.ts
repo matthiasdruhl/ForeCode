@@ -19,6 +19,10 @@ export function retrieveEvidence(
   invariant(snapshot.manifest.origin === mode, "Synthetic evidence isolation.");
   const c = ContextSchema.parse(input),
     f = extractFeatures(c);
+  invariant(
+    Date.parse(snapshot.manifest.frozenAt) < Date.parse(c.frozenAt),
+    "Evidence postdates decision context.",
+  );
   const matches = snapshot.observations
     .flatMap((o) => {
       const row = snapshot.manifest.rows.find(

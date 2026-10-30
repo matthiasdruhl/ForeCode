@@ -112,6 +112,7 @@ export const EvidenceReferenceSchema = z.strictObject({
   studyId: IdSchema,
   projectionSha256: Sha256Schema,
   approvalId: IdSchema,
+  approvalHeldAt: UtcTimestampSchema,
   protocolOriginalSha256: Sha256Schema,
   receiptIds: z.array(IdSchema).min(2).max(6),
 });

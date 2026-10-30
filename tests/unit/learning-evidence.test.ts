@@ -160,7 +160,11 @@ describe("learning intake through actual custody and protected-store boundaries 
     const f = await learningFixture(cleanup, { failures: ["BOUNDARY"] }),
       o = await f.admit(),
       snapshot = snapshotOf([o]);
-    const memory = retrieveEvidence(snapshot, o.projection.context, {
+    const query = { ...o.projection.context, frozenAt: t(21) };
+    expect(() =>
+      retrieveEvidence(snapshot, o.projection.context, { mode: "SYNTHETIC" }),
+    ).toThrow("postdates");
+    const memory = retrieveEvidence(snapshot, query, {
       mode: "SYNTHETIC",
     });
     expect(memory.status).toBe("ABSTAIN");
@@ -178,7 +182,7 @@ describe("learning intake through actual custody and protected-store boundaries 
       retrieveEvidence(
         snapshot,
         {
-          ...o.projection.context,
+          ...query,
           facts: { ...o.projection.context.facts, requirement: "dependency" },
         },
         { mode: "SYNTHETIC" },

@@ -69,6 +69,10 @@ export function createSnapshot(
       Date.parse(o.projection.observedAt) <= Date.parse(d.frozenAt),
       "Outcome after dataset freeze.",
     );
+    invariant(
+      Date.parse(o.evidence.approvalHeldAt) <= Date.parse(d.frozenAt),
+      "Approval after dataset freeze.",
+    );
     return o;
   });
   const result = immutable({

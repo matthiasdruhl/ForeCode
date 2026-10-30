@@ -102,10 +102,12 @@ export async function learningFixture(
     failures?: string[];
     missing?: string[];
     baselineFailure?: boolean;
+    offset?: number;
     mutate?: (p: Projection) => void;
   } = {},
 ) {
   const id = options.id ?? "unit";
+  const at = (minute: number) => t(minute + (options.offset ?? 0));
   const parent = await realpath(
     await mkdtemp(path.join(tmpdir(), "forecode-learning-unit-")),
   );
@@ -154,7 +156,7 @@ export async function learningFixture(
     studyId: id + "-study",
     subjectSha256: h("protocol-subject"),
     predecessorSha256: null,
-    heldAt: t(0),
+    heldAt: at(0),
     expiresAt: "2026-10-29T12:00:00.000Z",
   }))!;
   const evalEntries = new Map<string, EvaluationAllowlistEntry>();
@@ -208,8 +210,8 @@ export async function learningFixture(
       id: "receipt-" + runId,
       ...identity,
       checkArtifactSha256: checkArtifactDigest(checks),
-      startedAt: t(phase === "baseline" ? 2 : 5),
-      finishedAt: t(phase === "baseline" ? 2 : 6),
+      startedAt: at(phase === "baseline" ? 2 : 5),
+      finishedAt: at(phase === "baseline" ? 2 : 6),
       issuer: "trusted-local-evaluator",
       integrity: {
         kind: "trusted-local-artifact",
@@ -233,6 +235,7 @@ export async function learningFixture(
     };
   }
   const c = options.context ?? learningContext();
+  if (!options.context) c.frozenAt = at(1);
   const arms = [];
   for (const action of c.actions.eligible)
     arms.push({
@@ -250,8 +253,8 @@ export async function learningFixture(
     protocolSubjectSha256: protocol.record.subjectSha256,
     protocolOriginalSha256: protocol.sha256,
     context: c,
-    decisionAt: t(2),
-    observedAt: t(10),
+    decisionAt: at(2),
+    observedAt: at(10),
     decision: {
       selected: "KEEP",
       selector: "roadmap-fixed.v1",
@@ -271,8 +274,8 @@ export async function learningFixture(
       id: a.future.runId,
       action: a.action,
       status: "completed",
-      startedAt: t(3),
-      endedAt: t(4),
+      startedAt: at(3),
+      endedAt: at(4),
     })),
     arms,
   });
@@ -284,7 +287,7 @@ export async function learningFixture(
     studyId: projection.studyId,
     subjectSha256: jsonDigest(projection),
     predecessorSha256: protocol.sha256,
-    heldAt: t(11),
+    heldAt: at(11),
     expiresAt: "2026-10-29T12:00:00.000Z",
   }))!;
   const loadEvaluation = async (name: string) =>
@@ -299,7 +302,7 @@ export async function learningFixture(
     projection,
     approvalId: approval.record.id,
     protocolId: protocol.record.id,
-    assessmentAt: t(30),
+    assessmentAt: at(30),
     loadRecord,
     loadEvaluation,
   };

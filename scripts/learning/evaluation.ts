@@ -57,6 +57,11 @@ export function evaluateAblation(input: {
   );
   const policy = parsePolicy(input.policy);
   invariant(
+    policy.policy.trainedThrough !== null &&
+      Date.parse(policy.policy.trainedThrough) < Date.parse(protocol.frozenAt),
+    "Evaluation protocol predates trained policy.",
+  );
+  invariant(
     protocol.learnedPolicySha256 === policy.sha256 &&
       policy.policy.origin === mode &&
       policy.policy.snapshots.includes(input.training.sha256),
@@ -169,6 +174,9 @@ export function evaluateAblation(input: {
     for (const s of samples) {
       if (s.selected === "ABSTAIN") {
         abstained++;
+        // A model still consumed inference resources when declining advice.
+        cost.push(s.observation.projection.inference.costUsd);
+        latency.push(s.observation.projection.inference.latencyMs);
         continue;
       }
       const rewards = assessReward(s.observation, mode),

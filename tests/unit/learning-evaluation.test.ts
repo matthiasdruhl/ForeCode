@@ -34,12 +34,13 @@ async function evaluationFixture(
   );
   const c = learningContext();
   c.id = "held-context";
+  c.frozenAt = t(22);
   c.repositoryFamily = h("held-repo");
   c.taskFamily = h("held-task");
   const protocol = AblationProtocolSchema.parse({
     schemaVersion: "glimmer-selector-ablation.v1",
     id: "ablation",
-    frozenAt: t(0),
+    frozenAt: t(21),
     baseModel: "meta-models/Muse-Glimmer-30B",
     baseRevision: "a".repeat(40),
     tokenizerRevision: "a".repeat(40),
@@ -58,7 +59,7 @@ async function evaluationFixture(
     studyId: protocol.id,
     subjectSha256: jsonDigest(protocol),
     predecessorSha256: null,
-    heldAt: t(0),
+    heldAt: t(21),
     expiresAt: "2026-10-29T12:00:00.000Z",
   });
   const cases: EvaluationCase[] = [];
@@ -66,6 +67,7 @@ async function evaluationFixture(
     const f = await learningFixture(cleanup, {
       id: condition,
       context: c,
+      offset: 21,
       failures: options.failures,
       mutate: (p) => {
         p.decision.proposal = glimmerProposal(
@@ -176,6 +178,12 @@ describe("offline 2×2 matched evaluation scaffolding — synthetic only", () =>
       evaluateAblation({ ...input, cases: [...input.cases, input.cases[0]!] }),
     ).toThrow("Repeated");
     expect(() => evaluateAblation({ ...input, mode: "AUTHENTIC" })).toThrow();
+    expect(() =>
+      evaluateAblation({
+        ...input,
+        protocol: { ...input.protocol, frozenAt: t(0) },
+      }),
+    ).toThrow("predates");
     expect(() =>
       evaluateAblation({
         ...input,

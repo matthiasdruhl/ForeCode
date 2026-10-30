@@ -267,6 +267,7 @@ export async function admitObservation(input: {
       studyId: p.studyId,
       projectionSha256: digest,
       approvalId: approval.record.id,
+      approvalHeldAt: approval.record.heldAt,
       protocolOriginalSha256: protocol.sha256,
       receiptIds,
     }),

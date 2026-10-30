@@ -88,6 +88,24 @@ export async function openLearningRegistry(directory: string) {
             jsonDigest(a.policy.config) === jsonDigest(parent.policy.config),
           "Policy ancestry mismatch.",
         );
+        for (const key of [
+          "updates",
+          "support",
+          "snapshots",
+          "studies",
+          "partitions",
+        ] as const)
+          invariant(
+            jsonDigest(a.policy[key].slice(0, parent.policy[key].length)) ===
+              jsonDigest(parent.policy[key]),
+            "Policy history was discarded.",
+          );
+        invariant(
+          parent.policy.evidenceIds.every((id) =>
+            a.policy.evidenceIds.includes(id),
+          ),
+          "Evidence history was discarded.",
+        );
       }
       return write("policy", a.sha256, a);
     },

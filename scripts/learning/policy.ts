@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { Sha256Schema } from "../../src/lib/contracts/common";
+import {
+  Sha256Schema,
+  UtcTimestampSchema,
+} from "../../src/lib/contracts/common";
 import {
   ContextSchema,
   strategies,
@@ -58,6 +61,7 @@ export const PolicySchema = z.strictObject({
     maximumMissing: z.number().int().min(0).max(8),
   }),
   snapshots: z.array(Sha256Schema).max(10000),
+  trainedThrough: UtcTimestampSchema.nullable(),
   evidenceIds: z.array(z.string().min(1).max(128)).max(6000),
   studies: z.array(z.string().min(1).max(128)).max(1000),
   partitions: z
@@ -134,6 +138,7 @@ export function createPolicy(input: {
     seed: input.seed ?? 0,
     config,
     snapshots: [],
+    trainedThrough: null,
     evidenceIds: [],
     studies: [],
     partitions: [],
@@ -204,6 +209,7 @@ function sealPolicy(input: unknown): PolicyArtifact {
     "Repeated update.",
   );
   invariant(p.support.length === p.updates.length, "Missing update support.");
+  invariant(p.version === p.snapshots.length, "Snapshot/version mismatch.");
   invariant(
     (p.version === 0) === (p.parentSha256 === null),
     "Version ancestry mismatch.",
@@ -212,9 +218,24 @@ function sealPolicy(input: unknown): PolicyArtifact {
     p.status === (p.updates.length ? "SHADOW" : "NOT_TRAINED"),
     "Policy status mismatch.",
   );
+  invariant(
+    (p.trainedThrough === null) === (p.updates.length === 0),
+    "Training chronology missing.",
+  );
   for (const action of strategies)
     for (const name of ["correctness", "efficiency"] as const) {
       const c = p.actions[action][name];
+      const expected = initialChannel(p.config.lambda);
+      p.updates.forEach((u, index) => {
+        const support = p.support[index]!;
+        invariant(support.action === u.action, "Update support mismatch.");
+        if (u.action === action && u[name] !== null)
+          update(expected, support.values, u[name]!);
+      });
+      invariant(
+        jsonDigest(c) === jsonDigest(expected),
+        "Parameters do not replay from update history.",
+      );
       invariant(
         c.samples ===
           p.updates.filter((u) => u.action === action && u[name] !== null)
@@ -313,6 +334,11 @@ export function trainPolicy(
   p.parentSha256 = old.sha256;
   p.status = "SHADOW";
   p.snapshots.push(snapshot.sha256);
+  p.trainedThrough =
+    p.trainedThrough !== null &&
+    Date.parse(p.trainedThrough) > Date.parse(snapshot.manifest.frozenAt)
+      ? p.trainedThrough
+      : snapshot.manifest.frozenAt;
   return sealPolicy(p);
 }
 export function policyWeights(
@@ -363,7 +389,7 @@ export function recommend(
     })
     .sort(
       (a, b) =>
-        b.correctness.lower - a.correctness.lower ||
+        b.correctness.upper - a.correctness.upper ||
         strategies.indexOf(a.action) - strategies.indexOf(b.action),
     );
   const base = {
@@ -381,6 +407,8 @@ export function recommend(
   });
   if (p.origin !== mode) return abstain("SYNTHETIC_POLICY_ISOLATED");
   if (!p.updates.length) return abstain("NOT_TRAINED");
+  if (Date.parse(c.frozenAt) <= Date.parse(p.trainedThrough!))
+    return abstain("POLICY_POSTDATES_CONTEXT");
   if (
     f.missingCount > p.config.maximumMissing ||
     c.facts.requirement === "unknown"
@@ -410,7 +438,7 @@ export function recommend(
   let selected = safe.find((r) => r.action === "KEEP") ?? safe[0]!;
   if (safe.every((r) => r.efficiency !== null)) {
     const best = [...safe].sort(
-      (a, b) => b.efficiency!.lower - a.efficiency!.lower,
+      (a, b) => b.efficiency!.upper - a.efficiency!.upper,
     )[0]!;
     if (
       safe.every(

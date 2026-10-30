@@ -358,7 +358,7 @@ describe("dedicated supervised team contract, no inference", () => {
   });
   it("has a fail-closed production entry with no injection or self-registration", async () => {
     const f = await fixture();
-    const transport = createSupervisedTeamTransport(f.study);
+    const transport = await createSupervisedTeamTransport(f.study);
     expect(isAdmittedSupervisedTeamTransport(transport)).toBe(false);
     const out = await runPairedTournament({ ...f.input, transport });
     expect(out.execution).toBe("BLOCKED");

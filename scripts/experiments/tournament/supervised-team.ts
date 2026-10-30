@@ -1,5 +1,11 @@
-// Developer-local lifecycle contract. No installed production composition exists.
-// The only injectable controls are permanently synthetic and cannot self-admit.
+// Developer-local supervised team lifecycle. Live controls come only from the
+// code-owned registration; injectable controls remain permanently synthetic.
+import path from "node:path";
+import { configuredTeamRuntimes } from "./team-config";
+import {
+  createInstalledTeamControls,
+  type InstalledTeamControls,
+} from "./team-sbx";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { invariant, sameIds } from "../../../src/lib/contracts/validation";
@@ -53,13 +59,55 @@ const finalizationSchema = identitySchema.extend({
   exportWithoutGuestExecution: z.literal(true),
 });
 export const teamCompositionBlockers = [
-  "TEAM_PRODUCTION_COMPOSITION_NOT_INDEPENDENTLY_REVIEWED",
+  "TEAM_PRODUCTION_COMPOSITION_NOT_CONFIGURED",
   "TEAM_INSTALLATION_INVENTORY_AND_INERT_CONTROLS_REQUIRED",
 ] as const;
 
 // No registration API, structural flag, serialized record, or synthetic factory
-// can populate this set. A future reviewed composition must be a source change.
+// can populate this set. Only the fixed registered production constructor below
+// can add its own transport after loading source-pinned composition data.
 const live = new WeakSet<object>();
+const productionControls = new WeakMap<object, InstalledTeamControls>();
+const teamFinalizations = new WeakSet<object>();
+export function isTrustedSupervisedTeamFinalization(value: unknown) {
+  return !!value && typeof value === "object" && teamFinalizations.has(value);
+}
+export function assertSupervisedControllerInputs(
+  transport: object,
+  input: {
+    study: PreparedStudy;
+    protectedRoot: string;
+    coordinationRoot: string;
+    sources: Record<Variant, string>;
+  },
+) {
+  const installed = productionControls.get(transport);
+  invariant(
+    installed &&
+      installed.config.protectedRoot === path.resolve(input.protectedRoot) &&
+      installed.config.coordinationRoot ===
+        path.resolve(input.coordinationRoot) &&
+      jsonDigest(installed.config.sources) === jsonDigest(input.sources) &&
+      jsonDigest(installed.lifecycleInput.study) === jsonDigest(input.study),
+    "Controller roots or study differ from the code-owned composition.",
+  );
+}
+export async function recordSupervisedTeamOutcome(
+  transport: object,
+  outcome: {
+    studyId: string;
+    attempts: import("./paired").PairedAttempt[];
+    cleanupConfirmed: boolean;
+    leaseReleased: boolean;
+  },
+) {
+  const installed = productionControls.get(transport);
+  invariant(
+    installed && live.has(transport),
+    "Concrete production composition required.",
+  );
+  return installed.recordOriginals(outcome);
+}
 export function isAdmittedSupervisedTeamTransport(value: object) {
   return live.has(value);
 }
@@ -70,6 +118,7 @@ export function supervisedTeamRuntimeSubject(input: {
   implementationSha256: string;
   inventorySha256: string;
   pairedAuthorizationSha256: string;
+  compositionSha256?: string;
   provider: { inputMicroUsdPerToken: number; outputMicroUsdPerToken: number };
 }) {
   return jsonDigest({
@@ -83,6 +132,9 @@ export function supervisedTeamRuntimeSubject(input: {
     inventorySha256: hash.parse(input.inventorySha256),
     enforcementSha256: jsonDigest(teamEnforcementPlan(input.study.definition)),
     provider: providerSchema.parse(input.provider),
+    ...(input.compositionSha256
+      ? { compositionSha256: hash.parse(input.compositionSha256) }
+      : {}),
   });
 }
 const providerSchema = z.strictObject({
@@ -111,6 +163,7 @@ export const TeamInventorySchema = z.strictObject({
   sandboxCliSha256: hash,
   protectedInstallationSha256: hash,
   isolationObservationSha256: hash,
+  enforcementObservationSha256: hash.optional(),
   provider: providerSchema,
   vm: z.strictObject({
     cpus: z.literal(2),
@@ -159,11 +212,40 @@ export type NoInferenceTeamControls = {
 
 // Production entry deliberately has no injectable controls. Even independently
 // signed study/runtime JSON is insufficient without an installed composition.
-export function createSupervisedTeamTransport(
+export async function createSupervisedTeamTransport(
   study: PreparedStudy,
-): PairedTransport {
+): Promise<PairedTransport> {
   invariant(isPreparedStudy(study), "Authenticated prepared study required.");
   teamEnforcementPlan(study.definition);
+  if (configuredTeamRuntimes.has(study.definition.protocol.studyId)) {
+    const installed = await createInstalledTeamControls(study);
+    const lifecycle = createTeamLifecycle(
+      installed.lifecycleInput,
+      installed.compositionSha256,
+    );
+    const transport: PairedTransport = Object.freeze({
+      ...lifecycle,
+      kind: "supervised-team" as const,
+      preflight: installed.preflight,
+      async finalizeAgent(runId, signal) {
+        const result = await lifecycle.finalizeAgent(runId, signal);
+        invariant(
+          installed.actualState(runId),
+          "Concrete terminated worker observation required.",
+        );
+        teamFinalizations.add(result);
+        return result;
+      },
+      async cleanup(runId) {
+        if (runId === "baseline-A" || runId === "baseline-B")
+          await installed.cleanupBaseline(runId === "baseline-A" ? "A" : "B");
+        else await lifecycle.cleanup(runId);
+      },
+    });
+    productionControls.set(transport, installed);
+    live.add(transport);
+    return transport;
+  }
   const refuse = async (): Promise<never> => {
     throw new Error(teamCompositionBlockers.join(";"));
   };
@@ -181,7 +263,8 @@ export function createSupervisedTeamTransport(
 
 // Executable contract for no-inference controls only. This factory cannot create
 // a production transport, trusted finalization or measured observation.
-export function createNoInferenceTeamTransport(input: {
+type TeamLifecycleInput = {
+  compositionSha256?: string;
   study: PreparedStudy;
   implementationSha256: string;
   inventorySha256: string;
@@ -191,7 +274,16 @@ export function createNoInferenceTeamTransport(input: {
   implementationIdentity(): Promise<string>;
   reloadRuntimeAuthorization(variant: Variant): Promise<unknown>;
   reloadTeamAuthorization(variant: Variant): Promise<unknown>;
-}): PairedTransport {
+};
+export function createNoInferenceTeamTransport(
+  input: TeamLifecycleInput,
+): PairedTransport {
+  return createTeamLifecycle(input, input.compositionSha256);
+}
+function createTeamLifecycle(
+  input: TeamLifecycleInput,
+  compositionSha256?: string,
+): PairedTransport {
   invariant(
     isPreparedStudy(input.study),
     "Authenticated prepared study required.",
@@ -281,6 +373,7 @@ export function createNoInferenceTeamTransport(input: {
           inventorySha256: inventoryPin,
           pairedAuthorizationSha256: paired.sha256,
           provider: inventory.provider,
+          ...(compositionSha256 ? { compositionSha256 } : {}),
         }),
         predecessorSha256: paired.sha256,
         at: now(),

@@ -1,5 +1,5 @@
 // Private sequential controller. Never imported by web code; no production
-// transport is admitted. Synthetic transports cannot create measured evidence.
+// transport is configured by default. Synthetic transports cannot create actual evidence.
 import { mkdir, open } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -40,6 +40,9 @@ import { requireHeldRecord, immutable } from "./custody";
 import {
   isAdmittedSupervisedTeamTransport,
   teamCompositionBlockers,
+  isTrustedSupervisedTeamFinalization,
+  assertSupervisedControllerInputs,
+  recordSupervisedTeamOutcome,
 } from "./supervised-team";
 
 import {
@@ -55,6 +58,10 @@ export {
 
 export type PairedTransport = {
   kind: "synthetic-development" | "supervised-team";
+  preflight?(
+    ownership: { assertOwned(): Promise<void> },
+    signal: AbortSignal,
+  ): Promise<void>;
   baseline(
     variant: Variant,
     treeSha256: string,
@@ -109,9 +116,12 @@ export type PairedAttempt = {
   failure: string | null;
 };
 export type PairedOutcome = {
-  kind: "synthetic_no_inference_paired_lifecycle" | "blocked_paired_execution";
+  kind:
+    | "synthetic_no_inference_paired_lifecycle"
+    | "blocked_paired_execution"
+    | "supervised_team_paired_lifecycle";
   studyId: string;
-  execution: "NOT_RUN" | "BLOCKED";
+  execution: "NOT_RUN" | "BLOCKED" | "OBSERVED" | "INCOMPLETE";
   attempts: PairedAttempt[];
   cleanupConfirmed: boolean;
   leaseReleased: boolean;
@@ -150,6 +160,14 @@ export async function runPairedTournament(input: {
       leaseReleased: false,
       blockers: [...pairedRuntimeBlockers],
     };
+  if (transport.kind === "supervised-team")
+    assertSupervisedControllerInputs(transport, {
+      study,
+      protectedRoot: input.protectedRoot,
+      coordinationRoot: input.coordinationRoot,
+      sources: input.sources,
+    });
+  const synthetic = transport.kind === "synthetic-development";
   const now =
     transport.kind === "synthetic-development" && input.syntheticNow
       ? input.syntheticNow
@@ -219,7 +237,7 @@ export async function runPairedTournament(input: {
       observedAt: now(),
       studyId,
       preparedOriginalSha256: study.prepared.sha256,
-      evidenceOrigin: "synthetic",
+      evidenceOrigin: synthetic ? "synthetic" : "controller_observation",
     });
   }
   const baselines = new Map<Variant, TrustedEvaluation>();
@@ -229,8 +247,8 @@ export async function runPairedTournament(input: {
       draftSha256: jsonDigest(study.draft),
       protocolOriginalSha256: study.protocol.sha256,
       preparedOriginalSha256: study.prepared.sha256,
-      evidenceOrigin: "synthetic",
-      execution: "NOT_RUN",
+      evidenceOrigin: synthetic ? "synthetic" : "controller_observation",
+      execution: synthetic ? "NOT_RUN" : "PENDING_RUNTIME_OBSERVATION",
     });
     await fresh();
     for (const arm of study.draft.plan.manifest.arms) {
@@ -256,6 +274,8 @@ export async function runPairedTournament(input: {
       }
     }
     lease = await acquireBookingLease(coordination, studyId);
+    if (transport.preflight) await transport.preflight(lease, input.signal);
+    else invariant(synthetic, "Owned production preflight required.");
     for (const variant of ["A", "B"] as const) {
       await fresh();
       await transition("baseline", variant);
@@ -353,7 +373,9 @@ export async function runPairedTournament(input: {
         evidenceOrigin: "none",
         presentationMode: "recorded",
         limitations: [
-          "Synthetic no-inference lifecycle; no actual coding-agent or protected experiment evidence.",
+          synthetic
+            ? "Synthetic no-inference lifecycle; no actual coding-agent or protected experiment evidence."
+            : "Protected evidence and independent execution custody remain separate from process completion; usage and charges are unknown.",
         ],
       });
       const attempt: PairedAttempt = {
@@ -427,7 +449,8 @@ export async function runPairedTournament(input: {
         const finalized = await transport.finalizeAgent(runId, signal);
         invariant(
           transport.kind === "synthetic-development" ||
-            isTrustedAgentFinalization(finalized),
+            isTrustedAgentFinalization(finalized) ||
+            isTrustedSupervisedTeamFinalization(finalized),
           "Concrete supervised finalization required.",
         );
         invariant(
@@ -549,17 +572,42 @@ export async function runPairedTournament(input: {
       }
     }
   }
-  // Never publish a protected evaluation from a synthetic transport. Validated
-  // grader observations remain private diagnostics and lose no-inference labels.
+  let originals: { runId: string; sha256: string }[] = [];
+  if (!synthetic) {
+    try {
+      originals = await recordSupervisedTeamOutcome(transport, {
+        studyId,
+        attempts,
+        cleanupConfirmed: safe,
+        leaseReleased: released,
+      });
+    } catch {
+      blockers.push("ACTUAL_RUNTIME_ORIGINALS_INCOMPLETE");
+    }
+  }
+  // Runtime observations are not independent execution/history authority or a
+  // public comparison. Synthetic paths can never produce actual originals.
   const outcome: PairedOutcome = {
-    kind: "synthetic_no_inference_paired_lifecycle",
+    kind: synthetic
+      ? "synthetic_no_inference_paired_lifecycle"
+      : "supervised_team_paired_lifecycle",
     studyId,
-    execution: "NOT_RUN",
+    execution: synthetic
+      ? "NOT_RUN"
+      : originals.length === 2 && safe && released
+        ? "OBSERVED"
+        : "INCOMPLETE",
     attempts,
     cleanupConfirmed: safe,
     leaseReleased: released,
     blockers: [...new Set(blockers)],
   };
+  if (!synthetic)
+    await write("runtime-original-index.json", {
+      originals,
+      independentExecutionHistoryCustody: "REQUIRED",
+      publication: "DISABLED",
+    });
   await write("outcome.json", outcome);
   return immutable(outcome);
 }

@@ -25,6 +25,8 @@ import {
 import { isPreparedStudy, sourceDiff, type PreparedStudy } from "./study";
 import { requireHeldRecord, immutable, type HeldRecord } from "./custody";
 import { pairedRuntimeSubject, sharedFutureTask, type Variant } from "./paired";
+import { supervisedTeamRuntimeSubject } from "./supervised-team";
+import { teamAgentId, teamEnforcementPlan } from "./team-policy";
 import { buildTournamentReport } from "./report";
 
 const ManifestSchema = z
@@ -41,6 +43,18 @@ export const RuntimeObservationSchema = z.strictObject({
   initialManifest: ManifestSchema,
   finalManifest: ManifestSchema.nullable(),
   baselineRunId: IdSchema,
+  installedRuntime: z
+    .strictObject({
+      admissionSha256: Sha256Schema,
+      compositionSha256: Sha256Schema,
+      inventorySha256: Sha256Schema,
+      enforcementSha256: Sha256Schema,
+      provider: z.strictObject({
+        inputMicroUsdPerToken: z.number().int().min(1).max(1000),
+        outputMicroUsdPerToken: z.number().int().min(1).max(10000),
+      }),
+    })
+    .optional(),
   deviations: z
     .array(
       z.enum([
@@ -97,6 +111,7 @@ export async function loadTournamentArm(input: {
   workspaceRoots: readonly string[];
   loadRecord(id: string): Promise<unknown>;
   admissionId: string;
+  installedAdmissionId?: string;
   executionId: string;
   telemetryId?: string;
   loadEvaluation(id: string): Promise<unknown>;
@@ -146,6 +161,41 @@ export async function loadTournamentArm(input: {
         at: run.startedAt,
       },
     );
+    if (
+      original.installedRuntime ||
+      study.definition.protocol.executionConditions[0]!.agentId === teamAgentId
+    ) {
+      const installed = original.installedRuntime;
+      invariant(
+        installed &&
+          input.installedAdmissionId &&
+          installed.enforcementSha256 ===
+            jsonDigest(teamEnforcementPlan(study.definition)),
+        "Installed team admission binding absent.",
+      );
+      const exact = requireHeldRecord(
+        await input.loadRecord(input.installedAdmissionId),
+        {
+          studyId: plan.manifest.id,
+          kind: "runtime",
+          subjectSha256: supervisedTeamRuntimeSubject({
+            study,
+            variant: input.variant,
+            implementationSha256: original.implementationSha256,
+            inventorySha256: installed.inventorySha256,
+            pairedAuthorizationSha256: admission.sha256,
+            provider: installed.provider,
+            compositionSha256: installed.compositionSha256,
+          }),
+          predecessorSha256: admission.sha256,
+          at: run.startedAt,
+        },
+      );
+      invariant(
+        exact.sha256 === installed.admissionSha256,
+        "Installed runtime original substituted.",
+      );
+    }
     const originalRecord = requireHeldRecord(
       await input.loadRecord(input.executionId),
       {

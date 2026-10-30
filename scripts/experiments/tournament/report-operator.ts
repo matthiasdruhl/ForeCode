@@ -11,7 +11,12 @@ export type TournamentReportConfig = {
   evaluations: Parameters<typeof createProtectedEvaluationStore>[0];
   arms: ReadonlyMap<
     Variant,
-    { admissionId: string; executionId: string; telemetryId?: string }
+    {
+      admissionId: string;
+      executionId: string;
+      telemetryId?: string;
+      installedAdmissionId?: string;
+    }
   >;
   historyId: string;
 };

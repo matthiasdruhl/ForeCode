@@ -58,6 +58,27 @@ describe("authenticated private tournament reports — synthetic signed original
       expect(r.execution).toBe("AUTHENTICATED_ORIGINALS");
     },
   );
+  it("authenticates the additional installed team runtime original before reporting", async () => {
+    const f = await fixture({ installedRuntime: true });
+    expect(f.loaded).toHaveLength(2);
+    expect(report(f).comparability).toBe("COMPARABLE");
+    const input = f.armInputs[0]!;
+    expect(
+      await loadTournamentArm({ ...input, installedAdmissionId: undefined }),
+    ).toBeNull();
+    expect(
+      await loadTournamentArm({
+        ...input,
+        installedAdmissionId: input.admissionId,
+      }),
+    ).toBeNull();
+    expect(
+      await loadTournamentArm({
+        ...input,
+        installedAdmissionId: "installed-admission-B",
+      }),
+    ).toBeNull();
+  });
   it("counts preparation and separately authenticated usage, without counting reservations or repeated files twice", async () => {
     const f = await fixture({ telemetry: true }),
       r = report(f);

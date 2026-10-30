@@ -7,6 +7,10 @@ This root helper is not an approval verifier or a public execution entry point.
 """
 import hashlib
 import json
+import os
+import re
+import shutil
+import stat
 import pathlib
 import sys
 import types
@@ -16,6 +20,7 @@ base = types.ModuleType('team_supervisor_base')
 base.__file__ = str(HERE / 'supervisor.py')
 exec(compile((HERE / 'supervisor.py').read_bytes(), base.__file__, 'exec'), base.__dict__)
 ROOT = pathlib.Path('/var/lib/forecode-team-agent')
+POLICY = pathlib.Path('/opt/forecode-agent/team-policy.json')
 base.ROOT = ROOT
 base.LABEL = 'forecode.booking.team.agent'
 TOOLS = {'shell', 'exec_command', 'write_stdin', 'apply_patch'}
@@ -115,6 +120,12 @@ class TeamSupervisor(base.Supervisor):
         transformed['provider'] = {**provider, 'endpoint': 'https://api.meta.ai/v1/responses',
                                    'maxOutputTokens': request['enforcement']['restrictions']['maxOutputTokens']}
         result = super().prepare(transformed)
+        # Persist the reservation directory before any later start can fork.
+        parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
         return {**result, 'nonce': request['nonce'], 'requestSha256': base.digest(request)}
 
     def status(self, run_id, nonce):
@@ -137,15 +148,102 @@ class TeamSupervisor(base.Supervisor):
 
     def cleanup(self, run_id, nonce):
         result = super().cleanup(run_id, nonce)
+        # Only after trusted group termination/removal; retain durable state and
+        # budget/evidence records, but remove all run-owned runtime scratch.
+        with self.lock(run_id):
+            p, state = self.state(run_id, nonce)
+            for name in ['source', 'sealed', 'gateway']:
+                target = p / name
+                if target.is_symlink():
+                    raise ValueError('cleanup scratch alias')
+                if target.exists():
+                    for parent, _, _ in os.walk(target):
+                        os.chmod(parent, 0o700)
+                    shutil.rmtree(target)
+            task = p / 'task.json'
+            if task.exists() or task.is_symlink():
+                if task.is_symlink():
+                    raise ValueError('cleanup task alias')
+                task.unlink()
+            if any((p / name).exists() for name in ['source', 'sealed', 'gateway', 'task.json']):
+                raise ValueError('runtime scratch remains')
+            state['scratchRemoved'] = True
+            base.budget.atomic(p / 'state.json', state)
         return {'runId': result['runId'], 'nonce': nonce, 'absent': result['absent'],
-                'restartAbsenceConfirmed': True}
+                'restartAbsenceConfirmed': True, 'scratchRemoved': True}
+
+
+def load_policy(file=POLICY, owner_uid=0):
+    file = pathlib.Path(file)
+    if file.resolve() != file:
+        raise ValueError('installed policy alias')
+    for parent in [file.parent, file.parent.parent]:
+        info = parent.lstat()
+        if parent.is_symlink() or info.st_uid != owner_uid or info.st_mode & 0o022:
+            raise ValueError('installed policy parent custody')
+    info = file.lstat()
+    if info.st_uid != owner_uid or stat.S_IMODE(info.st_mode) != 0o400:
+        raise ValueError('installed policy custody')
+    policy = json.loads(base.read_regular(file, 1_048_576))
+    if (set(policy) != {'schemaVersion', 'enabled', 'implementationSha256', 'enforcementSha256',
+                       'studyId', 'arms', 'provider'}
+            or policy['schemaVersion'] != 'supervised-team-installed-policy.v1'
+            or policy['enabled'] is not True
+            or not re.fullmatch(r'[a-f0-9]{64}', policy['implementationSha256'])
+            or not re.fullmatch(r'[a-f0-9]{64}', policy['enforcementSha256'])
+            or len(policy['arms']) != 2
+            or {a['variant'] for a in policy['arms']} != {'A', 'B'}
+            or len({a['runId'] for a in policy['arms']}) != 2):
+        raise ValueError('exact installed policy unavailable')
+    if set(policy['provider']) != {'inputMicroUsdPerToken', 'outputMicroUsdPerToken'}:
+        raise ValueError('installed tariff fields')
+    exact_int(policy['provider']['inputMicroUsdPerToken'], 1, 1000)
+    exact_int(policy['provider']['outputMicroUsdPerToken'], 1, 10000)
+    fields = {'variant', 'runId', 'sourceCommit', 'sourceTreeSha256', 'sharedTaskSha256'}
+    for arm in policy['arms']:
+        if (set(arm) != fields
+                or not re.fullmatch(r'[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', arm['runId'])
+                or not re.fullmatch(r'[a-f0-9]{40}', arm['sourceCommit'])
+                or any(not re.fullmatch(r'[a-f0-9]{64}', arm[k]) for k in ['sourceTreeSha256', 'sharedTaskSha256'])):
+            raise ValueError('installed arm identity')
+    return policy
+
+
+def dispatch(request, supervisor, policy):
+    operation = request['operation']
+    if operation == 'prepare':
+        if set(request) != {'operation', 'request'}:
+            raise ValueError('closed preparation command')
+        body = request['request']
+        arm = next((a for a in policy['arms'] if a['runId'] == body['runId']), None)
+        if (arm is None or body['studyId'] != policy['studyId']
+                or base.digest(body['enforcement']) != policy['enforcementSha256']
+                or any(body[k] != arm[k] for k in ['runId', 'variant', 'sourceCommit',
+                                                  'sourceTreeSha256', 'sharedTaskSha256'])):
+            raise ValueError('exact installed study/run/source/conditions mismatch')
+        return supervisor.prepare_team(body, policy['provider'])
+    if (set(request) != {'operation', 'runId', 'nonce'}
+            or operation not in ['start', 'status', 'finalize', 'cleanup']
+            or request['runId'] not in {a['runId'] for a in policy['arms']}):
+        raise ValueError('fixed owned team command required')
+    # Host authority expiry/revocation does not prevent owned cleanup. The
+    # installation/policy must remain the same pinned immutable installation.
+    return getattr(supervisor, operation)(request['runId'], request['nonce'])
 
 
 def main():
-    # No production installation/tariff composition has been independently
-    # reviewed. In particular, stdin must never select a tariff or authority.
-    # Importable mechanics below are for fixed no-inference controls only.
-    raise ValueError('TEAM_PRODUCTION_COMPOSITION_NOT_INDEPENDENTLY_REVIEWED')
+    if sys.platform != 'linux' or os.geteuid() != 0:
+        raise ValueError('trusted Linux root helper required')
+    info = ROOT.lstat()  # Installation only; runtime never provisions its root.
+    if ROOT.is_symlink() or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700:
+        raise ValueError('team supervisor state custody')
+    raw = sys.stdin.buffer.read(12_000_001)
+    if len(raw) > 12_000_000:
+        raise ValueError('bounded team input')
+    request = json.loads(raw)
+    policy = load_policy()
+    result = dispatch(request, TeamSupervisor(), policy)
+    print(json.dumps(result, separators=(',', ':')))
 
 
 if __name__ == '__main__':

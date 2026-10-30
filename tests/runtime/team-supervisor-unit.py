@@ -130,3 +130,73 @@ for name in ['web_search', 'browser', 'mcp', 'read_private_oracle']:
 # No production CLI admission can be manufactured with JSON.
 denied(team.main)
 print('team controls passed: source custody, replay, confinement arguments, request/tool/token/spend limits; no runtime or inference')
+
+# Exercise the production dispatch grammar/custody with test-only policy bytes.
+# No command, provider or worker is launched by this fixed recording stand-in.
+class RecordingSupervisor:
+    def __init__(self):
+        self.calls = []
+    def prepare_team(self, body, provider):
+        self.calls.append((body['runId'], provider))
+        return {'stage': 'prepared'}
+    def cleanup(self, run_id, nonce):
+        self.calls.append((run_id, nonce))
+        return {'absent': True}
+policy = {'schemaVersion': 'supervised-team-installed-policy.v1', 'enabled': True,
+          'implementationSha256': '1'*64, 'enforcementSha256': team.base.digest(request['enforcement']),
+          'studyId': request['studyId'], 'provider': {'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1},
+          'arms': [{key: request[key] for key in ['variant', 'runId', 'sourceCommit', 'sourceTreeSha256', 'sharedTaskSha256']},
+                   {'variant': 'B', 'runId': nonce, 'sourceCommit': '2'*40, 'sourceTreeSha256': '3'*64, 'sharedTaskSha256': '4'*64}]}
+with tempfile.TemporaryDirectory() as temp:
+    directory = pathlib.Path(temp).resolve() / 'installed'
+    directory.mkdir(mode=0o700)
+    file = directory / 'team-policy.json'
+    file.write_bytes(team.base.budget.canonical(policy))
+    file.chmod(0o400)
+    loaded = team.load_policy(file, team.os.getuid())
+    inventory = types.ModuleType('team_inventory_control')
+    inventory_file = ROOT / 'scripts/experiments/isolation/team-runtime-files.py'
+    exec(compile(inventory_file.read_bytes(), str(inventory_file), 'exec'), inventory.__dict__)
+    shared = types.ModuleType('shared_inventory_control')
+    shared_file = ROOT / 'scripts/experiments/isolation/runtime-files.py'
+    exec(compile(shared_file.read_bytes(), str(shared_file), 'exec'), shared.__dict__)
+    digest, body = inventory.read_team_policy(shared, file, team.os.getuid())
+    assert digest == team.hashlib.sha256(file.read_bytes()).hexdigest() and body == policy
+    shared.assert_unchanged()
+    file.chmod(0o444)
+    denied(lambda: inventory.read_team_policy(shared, file, team.os.getuid()))
+    file.chmod(0o400)
+    alias = directory / 'policy-alias.json'
+    alias.symlink_to(file)
+    denied(lambda: inventory.read_team_policy(shared, alias, team.os.getuid()))
+    alias.unlink()
+    team.os.link(file, alias)
+    denied(lambda: inventory.read_team_policy(shared, file, team.os.getuid()))
+    alias.unlink()
+    with patch.object(shared.os, 'read', return_value=b'{}'):
+        denied(lambda: inventory.read_team_policy(shared, file, team.os.getuid()))
+    file.chmod(0o600)
+    file.write_bytes(b'x' * 1_048_577)
+    file.chmod(0o400)
+    denied(lambda: inventory.read_team_policy(shared, file, team.os.getuid()))
+    file.chmod(0o600)
+    file.write_bytes(team.base.budget.canonical(policy))
+    file.chmod(0o400)
+    recorded = RecordingSupervisor()
+    assert team.dispatch({'operation': 'prepare', 'request': request}, recorded, loaded)['stage'] == 'prepared'
+    assert team.dispatch({'operation': 'cleanup', 'runId': run, 'nonce': nonce}, recorded, loaded)['absent']
+    assert len(recorded.calls) == 2
+    for key, value in [('studyId', 'wrong'), ('runId', nonce), ('sourceCommit', '0'*40),
+                       ('sourceTreeSha256', '0'*64), ('sharedTaskSha256', '0'*64)]:
+        changed = json.loads(json.dumps(request)); changed[key] = value
+        denied(lambda: team.dispatch({'operation': 'prepare', 'request': changed}, recorded, loaded))
+    denied(lambda: team.dispatch({'operation': 'shell', 'runId': run, 'nonce': nonce}, recorded, loaded))
+    denied(lambda: team.dispatch({'operation': 'cleanup', 'runId': run, 'nonce': nonce, 'command': 'arbitrary'}, recorded, loaded))
+    assert len(recorded.calls) == 2
+    for mutate in [lambda p: p.update(enabled=False), lambda p: p.update(admitted=True),
+                   lambda p: p['provider'].update(inputMicroUsdPerToken=0),
+                   lambda p: p['arms'][0].update(runId='wrong')]:
+        changed = json.loads(json.dumps(policy)); mutate(changed)
+        file.chmod(0o600); file.write_bytes(team.base.budget.canonical(changed)); file.chmod(0o400)
+        denied(lambda: team.load_policy(file, team.os.getuid()))
+print('team production dispatch grammar/custody passed with inert stand-in only')

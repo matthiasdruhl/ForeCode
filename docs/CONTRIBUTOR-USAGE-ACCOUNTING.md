@@ -1,5 +1,7 @@
 # Contributor usage accounting
 
+**Additional host-control custody:** Fixed sandbox-command failures and agent-lifecycle validation failures now retain bounded immutable private records under `runtimeOriginalRoot/control-failures/` before cleanup. These include stage, command/output hashes, exit/reason metadata, declared command bounds and up to16 recent safe observations. They accept no argument arrays, request inputs, raw outputs, credentials, provider bodies or exception messages. Synthetic records are explicitly marked and never become actual runtime originals. Diagnostic storage failure still throws the original control failure and leaves cleanup/no-retry behavior in force. This does not reconstruct historical missing control errors. Trusted source changed again; consumed registrations remain disabled, and future paid work requires fresh exact admissions for the new bytes.
+
 ## Reservation capacity and private diagnostics (October 30 continuation)
 
 The team implementation now supports up to32,000,000 aggregate conservative reservation tokens and$40/arm, with explicitly selected allowances committed separately for each study. These are supported maxima, not authorization or invoices. The new bounded protocol selects32M tokens and$32/arm,20 upstream requests/iterations,600seconds,32768 output/request and the unchanged stricter1M native rollout guard. Original fixture, task, eight checks, Contributor rate formula, opaque-origin validation and no-refund accounting are unchanged. Raising only money never increases token headroom.

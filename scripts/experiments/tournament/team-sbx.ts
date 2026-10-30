@@ -28,7 +28,7 @@ import {
   protectedRead,
 } from "../artifacts/files";
 import { publishEvaluation } from "../artifacts/publish";
-import { boundedProcess } from "../runner/process";
+import { boundedProcess, type ProcessResult } from "../runner/process";
 import { ensureOfflineVmResources } from "../isolation/vm-resources";
 import { validateRestartObservation } from "../runner/lifecycle-protocol";
 import {
@@ -57,6 +57,7 @@ import {
 } from "./supervised-team";
 import { teamEnforcementPlan } from "./team-policy";
 import { collectTeamInventory, teamInventoryProgram } from "./team-inventory";
+import { retainTeamControlFailure } from "./team-control-diagnostics";
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const uuid = z.string().uuid();
 const processSchema = z.strictObject({
@@ -252,6 +253,49 @@ function buildControls(
       });
     }
   }
+  async function retainFailure(
+    stage: "command" | "agent-lifecycle",
+    error: unknown,
+    runId: string | null,
+    commandSha256: string | null = null,
+    limitMilliseconds: number | null = null,
+    maxBytes: number | null = null,
+  ) {
+    try {
+      await retainTeamControlFailure(config.runtimeOriginalRoot, {
+        schemaVersion: "team-control-failure.local.v1",
+        stage,
+        origin:
+          mode === "production"
+            ? "actual_control_process"
+            : "synthetic_no_inference",
+        studyId: study.definition.protocol.studyId,
+        runId,
+        implementationSha256: implementation,
+        inventorySha256: jsonDigest(expected),
+        compositionSha256,
+        observedAt: now(),
+        errorClass:
+          error === null
+            ? null
+            : error instanceof TypeError
+              ? "TypeError"
+              : error instanceof SyntaxError
+                ? "SyntaxError"
+                : error instanceof RangeError
+                  ? "RangeError"
+                  : error instanceof Error
+                    ? "Error"
+                    : "Unknown",
+        commandSha256,
+        limitMilliseconds,
+        maxBytes,
+        recentObservations: observations.slice(-16),
+      });
+    } catch {
+      /* Storage failure never permits retry or bypasses cleanup. */
+    }
+  }
   async function raw(
     args: string[],
     signal: AbortSignal,
@@ -264,12 +308,25 @@ function buildControls(
         sha256(await deps.cliBytes()) === expected.sandboxCliSha256,
       "CLI changed or operation cancelled.",
     );
-    const result = await deps.run(config.sbx, args, {
-      signal,
-      input,
-      maxBytes,
-      milliseconds,
-    });
+    let result: ProcessResult;
+    try {
+      result = await deps.run(config.sbx, args, {
+        signal,
+        input,
+        maxBytes,
+        milliseconds,
+      });
+    } catch (error) {
+      await retainFailure(
+        "command",
+        error,
+        null,
+        jsonDigest(args),
+        milliseconds,
+        maxBytes,
+      );
+      throw error;
+    }
     observations.push({
       operation: args[0]!,
       commandSha256: jsonDigest(args),
@@ -278,6 +335,19 @@ function buildControls(
       stdoutSha256: sha256(result.stdout),
       stderrSha256: sha256(result.stderr),
     });
+    if (
+      result.reason !== "completed" ||
+      result.exitCode !== 0 ||
+      signal.aborted
+    )
+      await retainFailure(
+        "command",
+        null,
+        null,
+        jsonDigest(args),
+        milliseconds,
+        maxBytes,
+      );
     invariant(
       result.reason === "completed" && result.exitCode === 0 && !signal.aborted,
       "Fixed sandbox command failed.",
@@ -682,46 +752,51 @@ function buildControls(
     },
     async agent(runId, nonce, signal) {
       const s = state(runId, nonce);
-      invariant(
-        !recovering && !s.cancelled && !s.startRequested,
-        "One unfenced worker start required.",
-      );
-      s.startRequested = true;
-      await inspect(signal);
-      await helper("start", s, signal);
-      for (;;) {
-        invariant(!s.cancelled, "Owned worker cancelled for cleanup.");
-        signal.throwIfAborted();
-        const value = status(await helper("status", s, signal), s);
+      try {
         invariant(
-          value.stage !== "failed",
-          "Trusted supervisor failed; cleanup required.",
+          !recovering && !s.cancelled && !s.startRequested,
+          "One unfenced worker start required.",
         );
-        if (value.stage === "terminated") {
+        s.startRequested = true;
+        await inspect(signal);
+        await helper("start", s, signal);
+        for (;;) {
+          invariant(!s.cancelled, "Owned worker cancelled for cleanup.");
+          signal.throwIfAborted();
+          const value = status(await helper("status", s, signal), s);
           invariant(
-            value.agent &&
-              value.containerId &&
-              value.terminationConfirmed &&
-              value.restartAbsenceConfirmed,
-            "Real termination observation incomplete.",
+            value.stage !== "failed",
+            "Trusted supervisor failed; cleanup required.",
           );
-          s.observed = mode === "production";
-          return {
-            runId,
-            nonce,
-            requestSha256: s.digest,
-            bootId: s.bootId,
-            containerId: value.containerId,
-            process: value.agent,
-            terminationConfirmed: true,
-            restartAbsenceConfirmed: true,
-          };
+          if (value.stage === "terminated") {
+            invariant(
+              value.agent &&
+                value.containerId &&
+                value.terminationConfirmed &&
+                value.restartAbsenceConfirmed,
+              "Real termination observation incomplete.",
+            );
+            s.observed = mode === "production";
+            return {
+              runId,
+              nonce,
+              requestSha256: s.digest,
+              bootId: s.bootId,
+              containerId: value.containerId,
+              process: value.agent,
+              terminationConfirmed: true,
+              restartAbsenceConfirmed: true,
+            };
+          }
+          invariant(
+            ["starting", "running"].includes(value.stage),
+            "Unexpected supervisor transition.",
+          );
+          await new Promise((r) => setTimeout(r, 200));
         }
-        invariant(
-          ["starting", "running"].includes(value.stage),
-          "Unexpected supervisor transition.",
-        );
-        await new Promise((r) => setTimeout(r, 200));
+      } catch (error) {
+        await retainFailure("agent-lifecycle", error, runId);
+        throw error;
       }
     },
     async finalize(runId, nonce, signal) {

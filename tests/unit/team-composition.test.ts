@@ -179,6 +179,63 @@ describe(
         expect(f.calls).toEqual([]);
       },
     );
+    it("retains safe command and lifecycle failures before cleanup without retrying a worker", async () => {
+      const f = await fixture(),
+        original = f.deps.run;
+      let started = false,
+        injected = false;
+      vi.spyOn(f.deps, "run").mockImplementation(async (exe, args, options) => {
+        const body = options.input?.startsWith("{")
+          ? JSON.parse(options.input)
+          : null;
+        if (
+          args.includes("/opt/forecode-agent/team-supervisor.py") &&
+          body?.operation === "start"
+        )
+          started = true;
+        if (started && !injected && body?.operation === "status") {
+          injected = true;
+          return {
+            reason: "timed_out",
+            exitCode: null,
+            signal: "SIGKILL",
+            stdout: "SECRET-RAW-OUTPUT",
+            stderr: "SECRET-TRANSPORT-ERROR",
+            elapsedMs: 30001,
+          };
+        }
+        return original(exe, args, options);
+      });
+      const out = await runPairedTournament(f.input);
+      expect(injected).toBe(true);
+      expect(out.attempts[0]).toMatchObject({
+        finalizationConfirmed: false,
+        cleanupConfirmed: true,
+      });
+      expect(out.cleanupConfirmed).toBe(true);
+      expect(out.leaseReleased).toBe(true);
+      const dir = path.join(f.config.runtimeOriginalRoot, "control-failures"),
+        files = await readdir(dir);
+      expect(files.length).toBeGreaterThanOrEqual(2);
+      const diagnostics = await Promise.all(
+        files.map((name) => readFile(path.join(dir, name), "utf8")),
+      );
+      expect(diagnostics.join(" ")).not.toContain("SECRET");
+      expect(diagnostics.map((text) => JSON.parse(text).stage)).toContain(
+        "agent-lifecycle",
+      );
+      expect(
+        diagnostics.some((text) =>
+          JSON.parse(text).recentObservations.some(
+            (o: { reason: string }) => o.reason === "timed_out",
+          ),
+        ),
+      ).toBe(true);
+      const starts = f.calls.filter((c) =>
+        c.input?.includes('"operation":"start"'),
+      );
+      expect(starts).toHaveLength(2); // Exactly one per arm, no restart of A.
+    });
     it("executes the exact fixed inventory/baseline/worker/seal/grader/cleanup sequence while remaining synthetic", async () => {
       const f = await fixture(),
         out = await runPairedTournament(f.input);
@@ -319,7 +376,27 @@ describe(
         expect(out.execution).toBe("NOT_RUN");
         expect(out.attempts.length).toBeGreaterThan(0);
         expect(out.attempts[0]!.failure).not.toBeNull();
-        expect(await readdir(f.config.runtimeOriginalRoot)).toEqual([]);
+        const retained = await readdir(f.config.runtimeOriginalRoot);
+        expect(retained.filter((name) => name !== "control-failures")).toEqual(
+          [],
+        );
+        if (retained.includes("control-failures")) {
+          for (const name of await readdir(
+            path.join(f.config.runtimeOriginalRoot, "control-failures"),
+          )) {
+            const diagnostic = JSON.parse(
+              await readFile(
+                path.join(
+                  f.config.runtimeOriginalRoot,
+                  "control-failures",
+                  name,
+                ),
+                "utf8",
+              ),
+            );
+            expect(diagnostic.origin).toBe("synthetic_no_inference");
+          }
+        }
       },
     );
     it("stops before the second arm after failed cleanup and retains the lease", async () => {

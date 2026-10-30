@@ -1,5 +1,6 @@
 import "server-only";
 import { loadRecordedVerifications } from "./recorded-verification";
+import { loadTournamentRecordings } from "./tournament-recordings";
 import { loadRecordedCertificates } from "./recorded-certificates";
 
 // NOT_PROVISIONED. Nonempty registration and publication require separate
@@ -11,4 +12,8 @@ export function loadApprovedRecordings() {
 
 export function loadApprovedCertificates() {
   return loadRecordedCertificates({ certificates: [], store: null });
+}
+
+export function loadApprovedTournamentRecordings() {
+  return loadTournamentRecordings(null);
 }

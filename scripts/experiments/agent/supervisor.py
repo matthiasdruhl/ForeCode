@@ -157,12 +157,33 @@ class Supervisor:
         return ids
 
     def prepare(self, request):
+        run_id, nonce = request['runId'], request['nonce']
+        # Authenticate the cleanup identity before creating any run-owned path.
+        self.directory(run_id)
+        if str(uuid.UUID(nonce)) != nonce:
+            raise ValueError('invalid run nonce')
+        created = False
+        try:
+            budget.reviewed_profile(request)
+            p = self.directory(run_id)
+            if self.owned(run_id):
+                raise ValueError('run collision')
+            p.mkdir(mode=0o700)
+            created = True
+            state = {'runId': run_id, 'nonce': nonce, 'bootId': self.boot(),
+                     'stage': 'preparing', 'requestSha256': digest(request), 'createdAt': time.time(),
+                     'request': request, 'containerId': None, 'supervisorPid': None, 'supervisorBirth': None}
+            budget.atomic(p / 'state.json', state)
+            return self.prepare_source(request)
+        except BaseException as error:
+            if created:
+                self.record_failure(run_id, nonce, error)
+            raise
+
+    def prepare_source(self, request):
         budget.reviewed_profile(request)
         run_id = request['runId']
         p = self.directory(run_id)
-        if self.owned(run_id):
-            raise ValueError('run collision')
-        p.mkdir(mode=0o700)  # Existing state is never reused after a crash.
         baseline = request['candidate']
         if baseline['runId'] != run_id or len(baseline['files']) > 100:
             raise ValueError('source ownership or bound')

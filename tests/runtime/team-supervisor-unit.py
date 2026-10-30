@@ -319,3 +319,17 @@ for field, value in [('tokenLimit', 32_000_001), ('spendMicroUsd', 40_000_001)]:
     changed = json.loads(json.dumps(request))
     changed['enforcement'][field] = value
     denied(lambda: team.preparation_request(changed))
+
+# Failed source preparation retains cleanup identity before any source writes.
+with tempfile.TemporaryDirectory() as temp:
+    supervisor = team.TeamSupervisor(pathlib.Path(temp), lambda args: b'', lambda: 'synthetic-boot')
+    broken = json.loads(json.dumps(request))
+    broken['candidate']['files'].append({'path':'src/../unsafe.ts', 'base64':encoded('inert')})
+    broken['sourceTreeSha256'] = team.base.digest(sorted([{'path':f['path'],'sha256':team.hashlib.sha256(base64.b64decode(f['base64'])).hexdigest()} for f in broken['candidate']['files']], key=lambda f:f['path']))
+    with patch.object(team.base.os, 'chown'):
+        denied(lambda: supervisor.prepare_team(broken, {'inputMicroUsdPerToken':1,'outputMicroUsdPerToken':1}))
+    p,state = supervisor.state(run, nonce)
+    assert state['stage']=='failed' and state['terminalFailure']=='driver-error.json'
+    assert supervisor.cleanup(run, nonce)['scratchRemoved']
+    denied(lambda: supervisor.prepare_team(broken, {'inputMicroUsdPerToken':1,'outputMicroUsdPerToken':1}))
+print('partial preparation terminal state and cleanup passed; no runtime/inference')

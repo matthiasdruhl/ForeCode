@@ -72,13 +72,16 @@ def main():
     ROOT.parent.mkdir(mode=0o700, exist_ok=True)
     ROOT.mkdir(mode=0o700)  # Exclusive operation: a failed root is never reused.
     rows = []
-    for case in ['normal', 'fail', 'timeout', 'flood', 'detached', 'boundary', 'SIGINT', 'SIGTERM', 'driver-failure', 'finalize-failure']:
+    for case in ['normal', 'fail', 'timeout', 'flood', 'detached', 'boundary', 'SIGINT', 'SIGTERM', 'driver-failure', 'finalize-failure', 'prepare-failure']:
         run_id, nonce = str(uuid.uuid4()), str(uuid.uuid4())
         mode = 'hang' if case in ['timeout', 'SIGINT', 'SIGTERM'] else 'normal' if case == 'finalize-failure' else case
         supervisor = InertTeam(mode)
         files = [{'path': 'package.json', 'base64': base64.b64encode(b'{}').decode()},
                  {'path': 'src/main.ts', 'base64': base64.b64encode(b'export const value = 1;').decode()}]
+        if case == 'prepare-failure':
+            files.append({'path':'src/../unsafe.ts', 'base64':base64.b64encode(b'inert').decode()})
         manifest = [{'path': f['path'], 'sha256': team.hashlib.sha256(base64.b64decode(f['base64'])).hexdigest()} for f in files]
+        manifest.sort(key=lambda f:f['path'])
         enforcement = json.loads(json.dumps(template['enforcement']))
         enforcement['maxSeconds'] = 1 if case == 'timeout' else 12
         request = {'runId': run_id, 'nonce': nonce, 'studyId': 'maintenance-inert-control', 'variant': 'A',
@@ -88,6 +91,18 @@ def main():
         print(json.dumps({'case': case, 'stage': 'STARTING_INERT_CONTROL', 'runId': run_id}), flush=True)
         cleaned = False
         try:
+            if case == 'prepare-failure':
+                try:
+                    supervisor.prepare_team(request, template['provider'])
+                    raise AssertionError('preparation must fail')
+                except ValueError:
+                    pass
+                assert supervisor.state(run_id, nonce)[1]['stage']=='failed'
+                ack=supervisor.cleanup(run_id, nonce)
+                cleaned=bool(ack['absent'] and ack['scratchRemoved'])
+                assert cleaned and not supervisor.owned(run_id)
+                rows.append({'case':case,'runId':run_id,'terminalFailureRetained':True,'cleanupConfirmed':True,'providerRequests':0})
+                continue
             supervisor.prepare_team(request, template['provider'])
             supervisor.start(run_id, nonce)
             if case in ['SIGINT', 'SIGTERM']:

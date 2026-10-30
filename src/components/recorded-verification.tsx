@@ -1,4 +1,5 @@
 import Link from "next/link.js";
+import type { TournamentCatalog } from "@/server/artifacts/tournament-recordings";
 import { TournamentOverview } from "./tournament-overview";
 import type {
   RecordedCatalogView,
@@ -163,8 +164,10 @@ export function Recording({ recording }: { recording: RecordedVerification }) {
 
 export function RecordedVerificationView({
   catalog,
+  tournaments,
 }: {
   catalog: RecordedCatalogView;
+  tournaments?: TournamentCatalog;
 }) {
   const available = catalog.recordings.some(
     (recording) => recording.state === "available",
@@ -198,7 +201,7 @@ export function RecordedVerificationView({
             </p>
           </div>
         </div>
-        <TournamentOverview />
+        <TournamentOverview catalog={tournaments} />
         <section
           className="recording-context"
           aria-labelledby="modeled-context"

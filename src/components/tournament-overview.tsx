@@ -1,7 +1,31 @@
 import Link from "next/link.js";
+import { TournamentStudy } from "./tournament-study";
+import type { TournamentCatalog } from "@/server/artifacts/tournament-recordings";
 import { unprovisionedTournament } from "@/lib/experiment/report";
 
-export function TournamentOverview() {
+export function TournamentOverview({
+  catalog = { state: "empty", studies: [], unavailableCount: 0 },
+}: {
+  catalog?: TournamentCatalog;
+}) {
+  if (catalog.studies.length)
+    return (
+      <section className="study-overview" aria-labelledby="study-heading">
+        <span className="eyebrow accent">
+          Architecture Tournament / disclosure-approved history
+        </span>
+        <h2 id="study-heading">Does preparation pay for itself?</h2>
+        {catalog.studies.map((study) => (
+          <TournamentStudy key={study.studyId} study={study} />
+        ))}
+        {catalog.unavailableCount > 0 && (
+          <p role="status">
+            {catalog.unavailableCount} approved study could not be
+            authenticated; its results are unavailable.
+          </p>
+        )}
+      </section>
+    );
   const study = unprovisionedTournament();
   return (
     <section className="study-overview" aria-labelledby="study-heading">
@@ -9,12 +33,45 @@ export function TournamentOverview() {
         Architecture Tournament / {study.state}
       </span>
       <h2 id="study-heading">Does preparation pay for itself?</h2>
+      <p className="study-unavailable">
+        {catalog.state === "unavailable"
+          ? "Approved tournament evidence could not be authenticated. Results are unavailable."
+          : "No disclosure-approved tournament evidence is available. No genuine paired study is presented."}
+      </p>
+      <ol className="study-route" aria-label="Tournament walkthrough">
+        <li>
+          <strong>01 / Original A</strong>
+          <span>The booking system before preparation.</span>
+        </li>
+        <li>
+          <strong>02 / Reviewed proposal</strong>
+          <span>
+            Team permissions and a falsifiable architecture hypothesis.
+          </span>
+        </li>
+        <li>
+          <strong>03 / Prepared B</strong>
+          <span>Actual source identity and preparation cost required.</span>
+        </li>
+        <li>
+          <strong>04 / Same challenge</strong>
+          <span>Identical task, model and limits for both agents.</span>
+        </li>
+        <li>
+          <strong>05 / Protected checks</strong>
+          <span>Five baseline checks plus three team-permissions checks.</span>
+        </li>
+        <li>
+          <strong>06 / Scoped conclusion</strong>
+          <span>Count preparation; preserve failures and unknowns.</span>
+        </li>
+      </ol>
       <p>
         Proposed future requirement: team accounts with delegated booking
         permissions. Compare ordinary development from A with a narrowly
         prepared architecture B, counting the preparation. Exact permission
-        semantics and protected future-task checks await independent
-        preregistration.
+        semantics and the protected grader have scoped approval. The study still
+        needs independent preregistration and genuine matched attempts.
       </p>
       <p>
         <strong>
@@ -43,8 +100,12 @@ export function TournamentOverview() {
             </tr>
             <tr>
               <th scope="row">Initial / prepared / final source</th>
-              <td>No study snapshots registered</td>
-              <td>No study snapshots registered</td>
+              <td>
+                No study snapshots registered · source comparison unavailable
+              </td>
+              <td>
+                No study snapshots registered · source comparison unavailable
+              </td>
             </tr>
             <tr>
               <th scope="row">Upfront preparation</th>

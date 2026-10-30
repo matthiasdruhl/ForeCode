@@ -24,8 +24,18 @@ import {
   type StudyDefinition,
 } from "../../scripts/experiments/tournament/study";
 import { hash } from "./research-data";
+import { teamEvaluatorIdentity } from "../../scripts/evaluator/booking-v1/grade-profile";
 
-export async function studyFixture() {
+export async function studyFixture(
+  options: {
+    configure?: (
+      definition: StudyDefinition,
+      draft: import("../../scripts/experiments/tournament/future-study").FutureStudyDraft,
+    ) => void;
+    order?: "A_then_B" | "B_then_A";
+    preparationMetrics?: import("../../src/lib/experiment/metrics").ExperimentMetrics;
+  } = {},
+) {
   const parent = await realpath(
     await mkdtemp(path.join(tmpdir(), "forecode-tournament-unit-")),
   );
@@ -74,15 +84,45 @@ export async function studyFixture() {
     entries.set(record.id, { file, sha256: sha256(bytes) });
     return (await createStudyCustodyStore(config)).load(record.id);
   }
+  const sources = {
+    A: path.join(parent, "source-A"),
+    B: path.join(parent, "source-B"),
+  };
+  for (const source of Object.values(sources)) {
+    await mkdir(path.join(source, "src"), { recursive: true, mode: 0o700 });
+    await writeFile(path.join(source, "package-lock.json"), "{}", {
+      mode: 0o400,
+    });
+  }
+  await writeFile(path.join(sources.A, "src/service.ts"), "// inert original", {
+    mode: 0o400,
+  });
+  await writeFile(path.join(sources.B, "src/service.ts"), "// inert prepared", {
+    mode: 0o400,
+  });
+  await writeFile(path.join(sources.B, "src/policy.ts"), "// inert policy", {
+    mode: 0o400,
+  });
+  const lockSha = sha256("{}");
   const draft = futureStudyData();
+  if (options.order) draft.plan.trialPolicy.order = options.order;
+  if (options.preparationMetrics)
+    draft.plan.manifest.arms[1]!.upfrontMetrics = options.preparationMetrics;
+  const composite = teamEvaluatorIdentity(
+    draft.plan.baselineOracle.evaluatorSha256,
+    draft.plan.futureOracle.testSuiteSha256,
+  );
+  draft.plan.futureOracle.evaluatorSha256 = composite;
+  draft.plan.manifest.evaluatorSha256 = composite;
+  draft.futureOracle.oracle.evaluatorSha256 = composite;
   const originalManifest = [
-    { path: "package-lock.json", sha256: hash("6") },
-    { path: "src/service.ts", sha256: hash("1") },
+    { path: "package-lock.json", sha256: lockSha },
+    { path: "src/service.ts", sha256: sha256("// inert original") },
   ];
   const preparedManifest = [
-    { path: "package-lock.json", sha256: hash("6") },
-    { path: "src/policy.ts", sha256: hash("2") },
-    { path: "src/service.ts", sha256: hash("3") },
+    { path: "package-lock.json", sha256: lockSha },
+    { path: "src/policy.ts", sha256: sha256("// inert policy") },
+    { path: "src/service.ts", sha256: sha256("// inert prepared") },
   ];
   const originalTree = jsonDigest(originalManifest),
     preparedTree = jsonDigest(preparedManifest);
@@ -110,6 +150,7 @@ export async function studyFixture() {
   };
   for (const c of draft.plan.conditions) {
     c.originalTreeSha256 = originalTree;
+    c.dependencyLockSha256 = lockSha;
     c.runtimeSha256 = jsonDigest(runtime);
     c.promptTemplateSha256 = sha256("Same bounded future task for both arms.");
     c.toolAllowlistSha256 = jsonDigest(["source-shell"]);
@@ -137,6 +178,7 @@ export async function studyFixture() {
       "trusted_usage_only",
     ],
   } as StudyDefinition;
+  options.configure?.(definition, draft);
   const studyId = draft.plan.manifest.id;
   const protocol = (await hold({
     id: "protocol-original",
@@ -169,12 +211,12 @@ export async function studyFixture() {
       original: {
         commit: draft.plan.conditions[0]!.originalCommit,
         treeSha256: originalTree,
-        dependencyLockSha256: hash("6"),
+        dependencyLockSha256: lockSha,
       },
       prepared: {
         commit: draft.plan.manifest.arms[1]!.initialCommit,
         treeSha256: preparedTree,
-        dependencyLockSha256: hash("6"),
+        dependencyLockSha256: lockSha,
       },
       preparationPromptSha256: sha256(instructions),
       reviewRecordSha256: auth.sha256,
@@ -208,7 +250,25 @@ export async function studyFixture() {
     subjectSha256: preparedSubject(definition, draft, evidence),
     predecessorSha256: protocol.sha256,
   }))!;
+  const preparationTelemetry = Object.values(evidence.record.metrics).some(
+    (x) => x !== null,
+  )
+    ? await hold({
+        id: "preparation-telemetry",
+        studyId,
+        kind: "telemetry",
+        heldAt: "2026-10-28T12:04:00.000Z",
+        subjectSha256: jsonDigest({
+          phase: "preparation",
+          recordSha256: sha256(canonicalJson(evidence.record)),
+          metrics: evidence.record.metrics,
+          changedFiles: ["src/policy.ts", "src/service.ts"],
+        }),
+        predecessorSha256: protocol.sha256,
+      })
+    : null;
   const input = {
+    preparationTelemetry,
     definition,
     draft,
     evidence,
@@ -219,6 +279,7 @@ export async function studyFixture() {
   // Return detached mutable fixtures; validators must never mutate caller data.
   return {
     parent,
+    sources,
     root,
     workspace,
     studyRoot,

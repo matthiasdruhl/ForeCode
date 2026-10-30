@@ -1541,3 +1541,129 @@ dd.ready > span {
     align-items: flex-start;
   }
 }
+
+.study-unavailable {
+  padding: 12px 15px;
+  border-left: 3px solid var(--accent);
+  background: var(--soft-accent);
+  margin: 14px 0;
+  line-height: 1.6;
+}
+.study-route {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--ink);
+  gap: 0 22px;
+}
+.study-route li {
+  border-bottom: 1px solid var(--line);
+  padding: 14px 0;
+}
+.study-route strong,
+.study-route span {
+  display: block;
+}
+.study-route strong {
+  font: 11px/1.6 var(--mono);
+  margin-bottom: 5px;
+}
+.study-route span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.study-record {
+  padding-top: 20px;
+  margin-top: 20px;
+  border-top: 1px solid var(--ink);
+  min-width: 0;
+}
+.study-record h3 {
+  font-size: 20px;
+  margin-top: 6px;
+}
+.study-record h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+.study-record p {
+  line-height: 1.65;
+  margin: 8px 0;
+}
+.study-walkthrough {
+  list-style: none;
+  padding: 0;
+  margin: 20px 0;
+}
+.study-walkthrough > li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 16px;
+  padding: 22px 0;
+  border-bottom: 1px solid var(--line);
+}
+.study-step {
+  font: 12px/1.7 var(--mono);
+  color: var(--accent);
+  padding-top: 1px;
+}
+.study-evidence {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.study-evidence summary,
+.study-record summary {
+  cursor: pointer;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.study-identities {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+  margin: 20px 0;
+}
+.study-identities dt {
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.study-identities dd,
+.study-source-list span {
+  margin: 0;
+  display: block;
+}
+.study-source-list li {
+  padding: 10px 0;
+}
+.study-record .recording-hash,
+.study-evidence dd {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-size: 11px;
+}
+.study-overview .comparison-table-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .study-route {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 16px;
+  }
+  .study-identities {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .study-walkthrough > li {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 8px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

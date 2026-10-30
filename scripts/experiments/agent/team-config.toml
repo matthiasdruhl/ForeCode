@@ -1,0 +1,18 @@
+# Fixed no-UI, no-delegation team worker profile. The study and installed
+# inventory pin these complete bytes; the broker independently enforces tools.
+model_reasoning_effort = "high"
+
+[tools]
+view_image = false
+
+[features]
+multi_agent = false
+goals = false
+view_image = false
+default_mode_request_user_input = false
+sleep_tool = false
+apps = false
+plugins = false
+remote_plugin = false
+workspace_dependencies = false
+skill_search = false

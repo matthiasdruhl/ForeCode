@@ -12,7 +12,13 @@ export async function verifyInstalledGrader(
     Os?: string;
     Architecture?: string;
   }[],
-  config: OfflineConfig,
+  config: Pick<
+    OfflineConfig,
+    | "workerImage"
+    | "graderNodeSha256"
+    | "graderLockSha256"
+    | "graderModulesSha256"
+  >,
 ) {
   for (const key of [
     "runtime_metadata",

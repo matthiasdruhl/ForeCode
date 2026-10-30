@@ -28,6 +28,10 @@ import { teamEvaluatorIdentity } from "../../scripts/evaluator/booking-v1/grade-
 
 export async function studyFixture(
   options: {
+    configure?: (
+      definition: StudyDefinition,
+      draft: import("../../scripts/experiments/tournament/future-study").FutureStudyDraft,
+    ) => void;
     order?: "A_then_B" | "B_then_A";
     preparationMetrics?: import("../../src/lib/experiment/metrics").ExperimentMetrics;
   } = {},
@@ -174,6 +178,7 @@ export async function studyFixture(
       "trusted_usage_only",
     ],
   } as StudyDefinition;
+  options.configure?.(definition, draft);
   const studyId = draft.plan.manifest.id;
   const protocol = (await hold({
     id: "protocol-original",

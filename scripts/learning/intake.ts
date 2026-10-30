@@ -170,6 +170,11 @@ export async function admitObservation(input: {
     "Invalid observed strategies.",
   );
   invariant(
+    new Set(p.regressions.map((r) => r.action)).size === p.regressions.length &&
+      p.regressions.every((r) => actions.includes(r.action)),
+    "Ambiguous regression evidence.",
+  );
+  invariant(
     new Set(p.attempts.map((a) => a.id)).size === p.attempts.length,
     "Duplicate attempt.",
   );

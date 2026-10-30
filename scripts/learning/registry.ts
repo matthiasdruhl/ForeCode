@@ -16,6 +16,11 @@ import {
 import { parsePolicy, type PolicyArtifact } from "./policy";
 import { createSnapshot, isSnapshot, type Snapshot } from "./dataset";
 import type { AdmittedObservation } from "./intake";
+import {
+  ShadowDecisionSchema,
+  ShadowPlanSchema,
+  ShadowReportSchema,
+} from "./shadow-contracts";
 
 // Private deterministic local storage. Caller creates a separate mode-0700
 // directory. No CLI accepts uploads and no web code can reach this module.
@@ -110,6 +115,42 @@ export async function openLearningRegistry(directory: string) {
       return write("policy", a.sha256, a);
     },
     loadPolicy,
+    async saveShadowPlan(input: unknown) {
+      const plan = ShadowPlanSchema.parse(input);
+      return write("shadow-plan", jsonDigest(plan), plan);
+    },
+    async loadShadowPlan(hash: string) {
+      const plan = ShadowPlanSchema.parse(await read("shadow-plan", hash));
+      invariant(jsonDigest(plan) === hash, "Shadow plan identity mismatch.");
+      return plan;
+    },
+    async saveShadowReport(input: unknown) {
+      const report = ShadowReportSchema.parse(input);
+      return write("shadow", jsonDigest(report), report);
+    },
+    async loadShadowReport(hash: string) {
+      const report = ShadowReportSchema.parse(await read("shadow", hash));
+      invariant(
+        jsonDigest(report) === hash,
+        "Shadow report identity mismatch.",
+      );
+      // Historical report bytes do not confer fresh evidence authority.
+      return report;
+    },
+    async saveShadowDecision(input: unknown) {
+      const record = ShadowDecisionSchema.parse(input);
+      return write("shadow-decision", jsonDigest(record), record);
+    },
+    async loadShadowDecision(hash: string) {
+      const record = ShadowDecisionSchema.parse(
+        await read("shadow-decision", hash),
+      );
+      invariant(
+        jsonDigest(record) === hash,
+        "Shadow decision identity mismatch.",
+      );
+      return record;
+    },
     async saveSnapshot(snapshot: Snapshot) {
       invariant(isSnapshot(snapshot), "Authenticated snapshot required.");
       return write("dataset", snapshot.sha256, snapshot.manifest);

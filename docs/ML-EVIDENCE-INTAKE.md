@@ -1,5 +1,7 @@
 # Approved evidence intake — next ML slice
 
+Follow-up: [offline shadow replay](ML-SHADOW-REPLAY.md) now connects fresh intake to local numerical policy fitting, immutable reports and future advisory drafts through a separate unprovisioned operator command. The intake CLI described here remains unchanged. Authentic source provisioning and independent evaluation remain outstanding.
+
 Branch: codex/ml-approved-evidence-intake, stacked on ML-Q0 commit 0138b53 / PR #27. Worktree remains /private/tmp/forecode-meta-rl-20261030, outside tracked parents. At the October 30 follow-up audit, fetched main was still 54e72b2, the measured-report exporter remained on unmerged tournament branches, and both PR #27 CI checks had passed. No core branch was merged or copied. No eligible authentic paired observation became available to this workstream.
 
 This slice implements a private draft exporter, approved-original artifact source, append-only admission audit and local CLI. It does not configure a production catalog, create an approval, run a tournament, train a policy or grant release authority.

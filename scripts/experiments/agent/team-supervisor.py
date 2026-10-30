@@ -311,6 +311,19 @@ class TeamSupervisor(base.Supervisor):
     def __init__(self, root=ROOT, docker=base.command, boot=base.boot_id):
         super().__init__(root, docker, boot)
 
+    def writable_mounts(self):
+        return (*super().writable_mounts(), '/work')
+
+    def worker_args(self, run_id, image):
+        args = super().worker_args(run_id, image)
+        at = args.index('--entrypoint')
+        for name in ['team-worker.mjs', 'team-public-checks.mjs', 'team-public-session.mjs']:
+            args[at:at] = ['--mount', 'type=bind,src=' + str(HERE / name) + ',dst=/run/' + name + ',readonly']
+            at += 2
+        args[at:at] = ['--tmpfs', '/work:rw,nosuid,nodev,size=256m,mode=1777']
+        args[-1] = '/run/team-worker.mjs'
+        return args
+
     def prepare_team(self, request, provider):
         transformed = preparation_request(request)
         if set(provider) != {'inputMicroUsdPerToken', 'outputMicroUsdPerToken'}:
@@ -362,7 +375,15 @@ class TeamSupervisor(base.Supervisor):
         return result
 
     def finalize(self, run_id, nonce):
-        result = super().finalize(run_id, nonce)
+        try:
+            result = super().finalize(run_id, nonce)
+        except BaseException as error:
+            # Retain a terminal export failure before host-owned cleanup.
+            # Refusing a replay of an already sealed run does not invalidate it.
+            _, state = self.state(run_id, nonce)
+            if state['stage'] not in ('sealed', 'cleaned'):
+                self.record_failure(run_id, nonce, error)
+            raise
         _, state = self.state(run_id, nonce)
         result.update(requestSha256=state['request']['teamRequestSha256'], terminationConfirmed=True,
                       restartAbsenceConfirmed=True, exportWithoutGuestExecution=True)

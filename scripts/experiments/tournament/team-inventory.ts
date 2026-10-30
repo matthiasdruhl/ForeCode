@@ -193,6 +193,9 @@ export async function collectTeamInventory(input: {
     "budget.py",
     "worker.mjs",
     "team-supervisor.py",
+    "team-worker.mjs",
+    "team-public-checks.mjs",
+    "team-public-session.mjs",
   ]) {
     const local = await protectedRead(
       fileURLToPath(new URL(`../agent/${name}`, import.meta.url)),

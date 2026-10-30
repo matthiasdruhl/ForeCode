@@ -194,6 +194,7 @@ type Request = Readonly<{
 }>;
 // Fixed operations only. There is no executable/path/command/endpoint selector.
 export type NoInferenceTeamControls = {
+  retainFailure?: PairedTransport["retainFailure"];
   inspect(signal: AbortSignal): Promise<unknown>;
   loadBaseline(
     variant: Variant,
@@ -608,6 +609,7 @@ function createTeamLifecycle(
       );
       return result; // Diagnostic process output; never a TrustedEvaluation.
     },
+    retainFailure: controls.retainFailure,
     async cleanup(runId) {
       const s = session;
       invariant(!s || s.runId === runId, "Refuse cleanup of another run.");

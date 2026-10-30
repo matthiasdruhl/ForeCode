@@ -228,6 +228,9 @@ class Supervisor:
                 '--mount', 'type=bind,src=/home/agent/.codex/config.toml,dst=/home/agent/.codex/config.toml,readonly',
                 '--entrypoint', '/usr/local/bin/node', image, '/run/forecode-worker.mjs']
 
+    def writable_mounts(self):
+        return ('/workspace/src', '/tmp', '/home/agent', '/home/agent/.codex')
+
     def validate_worker(self, cid, run_id, expected_user='1000:1000'):
         info = json.loads(self.docker(['inspect', cid]))[0]
         host, config = info['HostConfig'], info['Config']
@@ -244,8 +247,24 @@ class Supervisor:
         if any(v.get('Type') not in ('bind', 'tmpfs') for v in info['Mounts']):
             raise ValueError('unreviewed worker volume')
         for mount in info['Mounts']:
-            if mount.get('RW') and mount.get('Destination') not in ('/workspace/src', '/tmp', '/home/agent', '/home/agent/.codex'):
+            if mount.get('RW') and mount.get('Destination') not in self.writable_mounts():
                 raise ValueError('unexpected writable mount')
+
+    def record_failure(self, run_id, nonce, error):
+        # First error wins, including when cleanup fails afterward. No raw
+        # exception messages (which may contain candidate/provider text).
+        p = self.directory(run_id)
+        file = p / 'driver-error.json'
+        kind = type(error).__name__
+        if kind not in ('ValueError', 'RuntimeError', 'OSError', 'TimeoutError', 'FileNotFoundError'):
+            kind = 'Exception'
+        if not file.exists():
+            budget.atomic(file, {'class': kind, 'terminal': True})
+        with self.lock(run_id):
+            _, state = self.state(run_id, nonce)
+            state['stage'] = 'failed'
+            state['terminalFailure'] = 'driver-error.json'
+            budget.atomic(p / 'state.json', state)
 
     def start(self, run_id, nonce):
         with self.lock(run_id):
@@ -266,7 +285,7 @@ class Supervisor:
                 try:
                     self.drive(run_id, nonce)
                 except BaseException as error:
-                    budget.atomic(p / 'driver-error.json', {'class': type(error).__name__, 'message': str(error)[:1000]})
+                    self.record_failure(run_id, nonce, error)
                     # An unhandled driver error never authorizes export.
                     try:
                         self.remove(run_id)
@@ -360,12 +379,13 @@ class Supervisor:
                     'elapsedMs': int((time.monotonic() - began) * 1000)})
                 budget.atomic(p / 'state.json', state)
         except BaseException as error:
-            budget.atomic(p / 'driver-error.json', {'class': type(error).__name__, 'message': str(error)[:1000]})
-            self.remove(run_id)  # Failure here leaves nonterminal state for owner recovery.
-            with self.lock(run_id):
-                _, state = self.state(run_id, nonce)
-                state['stage'] = 'failed'
-                budget.atomic(p / 'state.json', state)
+            self.record_failure(run_id, nonce, error)
+            try:
+                self.remove(run_id)
+            except BaseException:
+                # Keep the primary error and failed stage; owned recovery is
+                # still required and must never authorize export/replay.
+                raise error
         finally:
             try:
                 os.kill(broker_pid, signal.SIGKILL)

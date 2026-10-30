@@ -37,12 +37,18 @@ export async function compositionFixture(
 ) {
   const sources: Record<string, string> = Object.fromEntries(
     await Promise.all(
-      ["supervisor.py", "budget.py", "worker.mjs", "team-supervisor.py"].map(
-        async (name) => [
-          name,
-          sha256(await readFile(`scripts/experiments/agent/${name}`)),
-        ],
-      ),
+      [
+        "supervisor.py",
+        "budget.py",
+        "worker.mjs",
+        "team-supervisor.py",
+        "team-worker.mjs",
+        "team-public-checks.mjs",
+        "team-public-session.mjs",
+      ].map(async (name) => [
+        name,
+        sha256(await readFile(`scripts/experiments/agent/${name}`)),
+      ]),
     ),
   );
   const guestSha = sha256(

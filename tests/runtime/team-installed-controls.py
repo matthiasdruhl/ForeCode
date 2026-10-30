@@ -27,6 +27,8 @@ class InertTeam(team.TeamSupervisor):
         self.mode = mode
 
     def worker_args(self, run_id, request):
+        if self.mode == 'driver-failure':
+            raise ValueError('injected primary driver failure')
         args = super().worker_args(run_id, request)
         # Explicit control-only substitution. All Docker isolation flags and
         # production validate_worker readbacks remain unchanged.
@@ -38,6 +40,14 @@ class InertTeam(team.TeamSupervisor):
         args[-1] = '/run/harmless-agent.mjs'
         args.append(self.mode)
         return args
+
+
+    def remove(self, run_id):
+        marker = self.directory(run_id) / 'cleanup-injection'
+        if self.mode == 'driver-failure' and not marker.exists():
+            marker.touch()
+            raise RuntimeError('injected secondary cleanup failure')
+        return super().remove(run_id)
 
 
 def wait(supervisor, run_id, nonce, heartbeat=False):
@@ -62,9 +72,9 @@ def main():
     ROOT.parent.mkdir(mode=0o700, exist_ok=True)
     ROOT.mkdir(mode=0o700)  # Exclusive operation: a failed root is never reused.
     rows = []
-    for case in ['normal', 'fail', 'timeout', 'flood', 'detached', 'boundary', 'SIGINT', 'SIGTERM']:
+    for case in ['normal', 'fail', 'timeout', 'flood', 'detached', 'boundary', 'SIGINT', 'SIGTERM', 'driver-failure', 'finalize-failure']:
         run_id, nonce = str(uuid.uuid4()), str(uuid.uuid4())
-        mode = 'hang' if case in ['timeout', 'SIGINT', 'SIGTERM'] else case
+        mode = 'hang' if case in ['timeout', 'SIGINT', 'SIGTERM'] else 'normal' if case == 'finalize-failure' else case
         supervisor = InertTeam(mode)
         files = [{'path': 'package.json', 'base64': base64.b64encode(b'{}').decode()},
                  {'path': 'src/main.ts', 'base64': base64.b64encode(b'export const value = 1;').decode()}]
@@ -84,9 +94,26 @@ def main():
                 observed = wait(supervisor, run_id, nonce, heartbeat=True)
                 supervisor.docker(['kill', '--signal', case, observed['containerId']])
             observed = wait(supervisor, run_id, nonce)
-            assert observed['stage'] == 'terminated' and observed['terminationConfirmed']
-            agent = observed['agent']
-            if case == 'timeout':
+            if case == 'driver-failure':
+                assert observed['stage'] == 'failed' and observed['terminalFailure'] == 'driver-error.json'
+                failure = json.loads((supervisor.directory(run_id) / 'driver-error.json').read_bytes())
+                assert failure == {'class': 'ValueError', 'terminal': True}
+                agent = {'reason': 'spawn_error', 'exitCode': None, 'signal': None}
+            else:
+                assert observed['stage'] == 'terminated' and observed['terminationConfirmed']
+                agent = observed['agent']
+            if case == 'driver-failure':
+                pass
+            elif case == 'finalize-failure':
+                (supervisor.directory(run_id) / 'sealed').mkdir()
+                try:
+                    supervisor.finalize(run_id, nonce)
+                    raise AssertionError('finalize must fail')
+                except FileExistsError:
+                    pass
+                assert supervisor.status(run_id, nonce)['stage'] == 'failed'
+                assert json.loads((supervisor.directory(run_id) / 'driver-error.json').read_bytes())['terminal']
+            elif case == 'timeout':
                 assert agent['reason'] == 'timed_out'
             elif case == 'flood':
                 assert agent['reason'] == 'output_limit'

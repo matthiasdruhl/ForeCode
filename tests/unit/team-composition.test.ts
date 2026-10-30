@@ -236,6 +236,49 @@ describe(
       );
       expect(starts).toHaveLength(2); // Exactly one per arm, no restart of A.
     });
+    it.each(["prepare", "finalize", "cleanup"])(
+      "retains terminal %s failures with original and cleanup errors kept separately",
+      async (operation) => {
+        const f = await fixture(),
+          original = f.deps.run;
+        let injected = false;
+        vi.spyOn(f.deps, "run").mockImplementation(
+          async (exe, args, options) => {
+            const body = options.input?.startsWith("{")
+              ? JSON.parse(options.input)
+              : null;
+            if (!injected && body?.operation === operation) {
+              injected = true;
+              throw new TypeError("SECRET-PRIMARY");
+            }
+            return original(exe, args, options);
+          },
+        );
+        const out = await runPairedTournament(f.input);
+        expect(injected).toBe(true);
+        expect(
+          out.attempts[0]?.failure !== null || operation === "cleanup",
+        ).toBe(true);
+        const dir = path.join(f.config.runtimeOriginalRoot, "control-failures");
+        const records = await Promise.all(
+          (await readdir(dir)).map(async (name) =>
+            JSON.parse(await readFile(path.join(dir, name), "utf8")),
+          ),
+        );
+        expect(
+          records.some(
+            (r) =>
+              r.stage ===
+                (operation === "cleanup"
+                  ? "cleanup"
+                  : operation === "prepare"
+                    ? "preparation"
+                    : "finalization") && r.runId === out.attempts[0]?.run.id,
+          ),
+        ).toBe(true);
+        expect(JSON.stringify(records)).not.toContain("SECRET");
+      },
+    );
     it("executes the exact fixed inventory/baseline/worker/seal/grader/cleanup sequence while remaining synthetic", async () => {
       const f = await fixture(),
         out = await runPairedTournament(f.input);

@@ -33,6 +33,20 @@ class Mechanics(unittest.TestCase):
             os.chmod(parent, 0o700)
         self.temp.cleanup()
 
+    def test_terminal_failure_precedes_cleanup_and_preserves_first_error(self):
+        run = '11111111-1111-4111-8111-111111111111'
+        nonce = '22222222-2222-4222-8222-222222222222'
+        p = self.root / run
+        p.mkdir()
+        m.budget.atomic(p / 'state.json', {'runId': run, 'nonce': nonce, 'stage': 'running'})
+        supervisor = m.Supervisor(self.root)
+        supervisor.record_failure(run, nonce, ValueError('SECRET original'))
+        supervisor.record_failure(run, nonce, RuntimeError('SECRET cleanup'))
+        self.assertEqual(json.loads((p / 'driver-error.json').read_bytes()), {'class': 'ValueError', 'terminal': True})
+        self.assertEqual(supervisor.state(run, nonce)[1]['stage'], 'failed')
+        self.assertEqual(supervisor.state(run, nonce)[1]['terminalFailure'], 'driver-error.json')
+        self.assertNotIn('SECRET', (p / 'driver-error.json').read_text())
+
     def budget_request(self, **changes):
         request = {'model': 'gpt-5.6-sol', 'deadline': time.time() + 60, 'tokenLimit': 100000, 'spendMicroUsd': 1000000,
                    'provider': {'endpoint': 'https://api.openai.com/v1/responses', 'maxOutputTokens': 4096, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 2}}

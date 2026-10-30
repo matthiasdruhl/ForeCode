@@ -254,7 +254,15 @@ function buildControls(
     }
   }
   async function retainFailure(
-    stage: "command" | "agent-lifecycle",
+    stage:
+      | "command"
+      | "agent-lifecycle"
+      | "admission"
+      | "preparation"
+      | "agent"
+      | "finalization"
+      | "grading"
+      | "cleanup",
     error: unknown,
     runId: string | null,
     commandSha256: string | null = null,
@@ -327,6 +335,7 @@ function buildControls(
       );
       throw error;
     }
+    if (observations.length === 16) observations.shift();
     observations.push({
       operation: args[0]!,
       commandSha256: jsonDigest(args),
@@ -728,6 +737,7 @@ function buildControls(
       baselines.set(variant, loaded);
       return loaded;
     },
+    retainFailure: (runId, stage, error) => retainFailure(stage, error, runId),
     async prepare(request, signal) {
       invariant(!recovering && !failedCleanup, "Cleanup fences preparation.");
       invariant(

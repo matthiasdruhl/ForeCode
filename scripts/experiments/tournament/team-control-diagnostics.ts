@@ -32,7 +32,16 @@ const Observation = z.strictObject({
 });
 export const TeamControlFailureSchema = z.strictObject({
   schemaVersion: z.literal("team-control-failure.local.v1"),
-  stage: z.enum(["command", "agent-lifecycle"]),
+  stage: z.enum([
+    "command",
+    "agent-lifecycle",
+    "admission",
+    "preparation",
+    "agent",
+    "finalization",
+    "grading",
+    "cleanup",
+  ]),
   origin: z.enum(["actual_control_process", "synthetic_no_inference"]),
   studyId: z.string().min(1).max(128),
   runId: z.string().uuid().nullable(),

@@ -14,6 +14,9 @@ import stat
 import pathlib
 import sys
 import types
+import time
+import urllib.request
+import urllib.error
 
 HERE = pathlib.Path(__file__).resolve().parent
 base = types.ModuleType('team_supervisor_base')
@@ -33,6 +36,39 @@ def exact_int(value, lower, upper):
 
 
 class TeamReservations(base.budget.Reservations):
+    def block(self):
+        # Latch first. Diagnostics never authorize another provider request.
+        error = sys.exc_info()[1]
+        super().block()
+        diagnostic = {
+            'exceptionClass': type(error).__name__,
+            'reasonSha256': hashlib.sha256(str(error).encode()).hexdigest(),
+            'httpStatus': error.code if isinstance(error, urllib.error.HTTPError) else None,
+            'requestCount': len(self.value['requests']),
+        }
+        base.budget.atomic(self.file.parent / 'provider-failure.json', diagnostic)
+
+    def observe(self, output, content_type, sent):
+        try:
+            return super().observe(output, content_type, sent)
+        except ValueError:
+            # Preserve bounded response bytes for owner review outside the
+            # worker. Never store request headers, credentials or HTTP errors.
+            if isinstance(output, bytes) and len(output) <= 8_000_000:
+                file = self.file.parent / 'unverified-response.bin'
+                fd = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+                with os.fdopen(fd, 'wb') as out:
+                    out.write(output)
+                    out.flush()
+                    os.fsync(out.fileno())
+                base.budget.atomic(self.file.parent / 'unverified-response.json', {
+                    'responseSha256': hashlib.sha256(output).hexdigest(),
+                    'requestSha256': hashlib.sha256(sent).hexdigest(),
+                    'contentType': content_type.split(';', 1)[0].strip().lower(),
+                    'bytes': len(output),
+                })
+            raise
+
     def reserve(self, raw):
         r = self.request
         if (len(raw) > 1_048_576 or len(self.value['requests']) >= r['maxRequests']
@@ -107,6 +143,46 @@ class TeamReservations(base.budget.Reservations):
 
 
 base.budget.Reservations = TeamReservations
+
+
+def team_provider_request(body, deadline):
+    # Full implementation responses can exceed the smoke's fixed30s socket
+    # timeout. Keep this trusted transport bounded by the task's hard deadline
+    # and a120s socket timeout; the independent supervisor still kills the
+    # complete owned group at the absolute deadline.
+    remaining = deadline - time.time()
+    if remaining <= 0:
+        raise ValueError('team provider deadline')
+    proxy = os.environ.get('HTTPS_PROXY', os.environ.get('https_proxy', ''))
+    if not proxy.startswith('http://'):
+        raise ValueError('reviewed credential proxy unavailable')
+    model = json.loads(body).get('model')
+    if model not in ('muse-spark-1.3', 'muse-spark-1.3-contributor'):
+        raise ValueError('fixed team provider model')
+    profile = base.budget.PROFILES[model]
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({'https': proxy}), base.budget.NoRedirect())
+    request = urllib.request.Request(profile['endpoint'], data=body, headers={
+        'Content-Type': 'application/json', 'Authorization': 'Bearer ' + profile['sentinel'],
+    })
+    with opener.open(request, timeout=min(120, remaining)) as response:
+        data = response.read(8_000_001)
+        if len(data) > 8_000_000 or response.status != 200:
+            raise ValueError('bounded team provider response unavailable')
+        return data, response.headers.get('Content-Type', 'application/json')
+
+
+_base_serve = base.budget.serve
+
+
+def serve_team(socket_path, reservations, upstream=None):
+    # The optional callable is the existing explicit no-inference test seam;
+    # production dispatch accepts no request-selected callable or endpoint.
+    if upstream is None:
+        upstream = lambda body: team_provider_request(body, reservations.request['deadline'])
+    return _base_serve(socket_path, reservations, upstream)
+
+
+base.budget.serve = serve_team
 
 
 def preparation_request(request):

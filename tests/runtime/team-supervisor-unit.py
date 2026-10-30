@@ -170,6 +170,10 @@ for name in ['exec_command', 'apply_patch', 'request_user_input', 'view_image', 
                 assert reservations.value['requests'][0]['observedUsage']['totalTokens'] == 2
             else:
                 denied(lambda: reservations.observe(output, content_type, sent))
+                assert (pathlib.Path(temp) / 'unverified-response.bin').read_bytes() == output
+                assert (pathlib.Path(temp) / 'unverified-response.bin').stat().st_mode & 0o777 == 0o400
+                diagnostic = json.loads((pathlib.Path(temp) / 'provider-failure.json').read_bytes())
+                assert diagnostic['exceptionClass'] == 'ValueError' and diagnostic['httpStatus'] is None
                 assert reservations.value['blockedReason'] == 'provider-outcome-unverified'
                 denied(lambda: reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert'}).encode()))
 
@@ -245,3 +249,31 @@ with tempfile.TemporaryDirectory() as temp:
         file.chmod(0o600); file.write_bytes(team.base.budget.canonical(changed)); file.chmod(0o400)
         denied(lambda: team.load_policy(file, team.os.getuid()))
 print('team production dispatch grammar/custody passed with inert stand-in only')
+
+# Fixed trusted HTTP transport only; fake opener records timeout and endpoint.
+class InertResponse:
+    status = 200
+    headers = {'Content-Type': 'application/json'}
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+    def read(self, size):
+        assert size == 8_000_001
+        return b'{}'
+class InertOpener:
+    def __init__(self): self.calls = []
+    def open(self, request, timeout):
+        assert request.full_url == 'https://api.meta.ai/v1/responses'
+        assert request.get_header('Authorization') == 'Bearer forecode-meta-sandbox'
+        self.calls.append(timeout)
+        return InertResponse()
+opener = InertOpener()
+with patch.dict(team.os.environ, {'HTTPS_PROXY': 'http://synthetic.invalid'}, clear=True), \
+        patch.object(team.time, 'time', return_value=100), \
+        patch.object(team.urllib.request, 'build_opener', return_value=opener):
+    body = json.dumps({'model': 'muse-spark-1.3-contributor'}).encode()
+    assert team.team_provider_request(body, 500) == (b'{}', 'application/json')
+    assert team.team_provider_request(body, 105) == (b'{}', 'application/json')
+    denied(lambda: team.team_provider_request(body, 100))
+    denied(lambda: team.team_provider_request(b'{"model":"arbitrary"}', 500))
+    assert opener.calls == [120, 5]
+print('team deadline-bounded provider transport and protected failure diagnostics passed; no upstream')

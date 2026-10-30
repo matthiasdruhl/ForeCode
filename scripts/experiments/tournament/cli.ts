@@ -12,6 +12,10 @@ import {
   recordExternalCommitment,
 } from "./operator";
 import { protocolSubject, validateStudyDefinition } from "./study";
+import {
+  configuredTournamentReports,
+  loadPrivateTournamentReport,
+} from "./report-operator";
 
 export async function tournamentCli(args: readonly string[]): Promise<number> {
   if (args.length === 1 && args[0] === "--help") {
@@ -25,6 +29,7 @@ export async function tournamentCli(args: readonly string[]): Promise<number> {
         "  --readiness /absolute/study-root freshly check independently held records\n" +
         "  --record-protocol /absolute/study-root index an authorized external original\n" +
         "  --record-prepared /absolute/study-root index the final external original\n" +
+        "  --report /absolute/study-root authenticate private original outcomes (no execution)\n" +
         "No approval, agent, provider, grader, artifact registration or certificate is invoked.\n",
     );
     return 0;
@@ -38,6 +43,35 @@ export async function tournamentCli(args: readonly string[]): Promise<number> {
       }) + "\n",
     );
     return 2;
+  }
+  if (
+    args.length === 2 &&
+    args[0] === "--report" &&
+    path.isAbsolute(args[1]!)
+  ) {
+    try {
+      const root = args[1]!;
+      validateStudyDefinition(await readStudyInput(root, "definition"));
+      const config = configuredTournamentReports.get(root);
+      if (!config)
+        process.stdout.write(
+          canonicalJson({
+            execution: "DISABLED",
+            correctness: "INCONCLUSIVE",
+            blockers: ["ORIGINAL_REPORT_CUSTODY_NOT_CONFIGURED"],
+          }) + "\n",
+        );
+      else
+        process.stdout.write(
+          canonicalJson(await loadPrivateTournamentReport(root, config)) + "\n",
+        );
+      return 2;
+    } catch {
+      process.stderr.write(
+        "Private original study report is unavailable or invalid.\n",
+      );
+      return 1;
+    }
   }
   if (
     args.length === 2 &&

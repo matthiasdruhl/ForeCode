@@ -24,6 +24,7 @@ export const CustodianRecordSchema = z.strictObject({
     "prepared",
     "runtime",
     "telemetry",
+    "execution",
     "disclosure",
   ]),
   subjectSha256: Sha256Schema,

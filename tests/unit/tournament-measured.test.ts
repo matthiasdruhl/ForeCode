@@ -162,6 +162,20 @@ describe("authenticated private tournament reports — synthetic signed original
       );
     } else expect(loaded).toBeNull();
   });
+  it("retains undeclared cancelled attempts and forbids comparison", async () => {
+    const f = await fixture();
+    const extra = {
+      ...f.loaded[1]!.original.run,
+      id: "undeclared-cancelled-attempt",
+      status: "cancelled",
+    };
+    const r = report(f, { additionalAttempts: [extra] });
+    expect(r.comparability).toBe("NOT_COMPARABLE");
+    expect(r.correctness).toBe("INCONCLUSIVE");
+    expect(r.attempts).toHaveLength(3);
+    expect(r.attempts[2]).toMatchObject({ id: extra.id, status: "cancelled" });
+    expect(r.deviations).toContain("UNPLANNED_ATTEMPT_RETAINED");
+  });
   it("rejects forged labels, missing preparation and expired assessments", async () => {
     const f = await fixture();
     expect(() =>

@@ -28,6 +28,7 @@ export async function measuredFixture(
     reverse?: boolean;
     telemetry?: boolean;
     deviation?: boolean;
+    noFutureB?: boolean;
   } = {},
 ) {
   const data = await studyFixture(
@@ -98,6 +99,12 @@ export async function measuredFixture(
       presentationMode: "recorded",
       limitations: ["PRIVATE_SENTINEL deliberately excluded from projection"],
     });
+    if (options.noFutureB && variant === "B") {
+      run.status = "timed_out";
+      run.evaluatedTreeSha256 = null;
+      run.receiptId = null;
+      run.verificationId = null;
+    }
     const baselineId = `baseline-${variant}`;
     const baseline = await syntheticEvaluation({
       root: evaluationRoot,
@@ -116,7 +123,7 @@ export async function measuredFixture(
       workspace: data.workspace,
       identity: {
         runId,
-        evaluatedTreeSha256: run.evaluatedTreeSha256!,
+        evaluatedTreeSha256: jsonDigest(finalManifest),
         fixtureSha256: run.fixtureSha256,
         ...data.study.draft.plan.futureOracle,
       },
@@ -129,7 +136,7 @@ export async function measuredFixture(
       missing: variant === "B" ? options.missingB : undefined,
     });
     evaluations.set(baselineId, baseline);
-    evaluations.set(runId, future);
+    if (!(options.noFutureB && variant === "B")) evaluations.set(runId, future);
     const original = RuntimeObservationSchema.parse({
       schemaVersion: "tournament-runtime-original.local.v1",
       origin: "actual_supervised_agent",
@@ -139,7 +146,8 @@ export async function measuredFixture(
       taskDefinitionSha256: data.study.draft.taskDefinitionSha256,
       sharedTaskSha256: jsonDigest(sharedFutureTask(data.study)),
       initialManifest,
-      finalManifest,
+      finalManifest:
+        options.noFutureB && variant === "B" ? null : finalManifest,
       baselineRunId: baselineId,
       deviations:
         options.deviation && variant === "A"

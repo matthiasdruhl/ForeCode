@@ -47,6 +47,8 @@ export function prepareTournamentPublication(
     comparability: report.comparability,
     correctness: report.correctness,
     baselineEvaluatorSha256: report.baselineEvaluator.evaluatorSha256,
+    baselineSuiteSha256: report.baselineEvaluator.testSuiteSha256,
+    baselinePolicySha256: report.baselineEvaluator.requiredPolicySha256,
     futureEvaluatorSha256: report.futureEvaluator.evaluatorSha256,
     futureSuiteSha256: report.futureEvaluator.testSuiteSha256,
     futurePolicySha256: report.futureEvaluator.requiredPolicySha256,
@@ -84,6 +86,13 @@ export function prepareTournamentPublication(
             null,
         }))
       : null,
+    attempts: report.attempts.map((a) => ({
+      id: a.id,
+      variant: a.variant,
+      status: a.status,
+      startedAt: a.startedAt,
+      endedAt: a.endedAt,
+    })),
     preparationAttempts: report.preparationAttempts,
     blockers: report.blockers,
     deviations: report.deviations,

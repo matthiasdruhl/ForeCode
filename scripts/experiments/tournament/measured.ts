@@ -252,6 +252,7 @@ export function historySubject(
 export function buildMeasuredTournamentReport(input: {
   study: unknown;
   arms: readonly unknown[];
+  additionalAttempts?: readonly unknown[];
   history?: unknown;
   assessmentAt: string;
 }) {
@@ -288,9 +289,15 @@ export function buildMeasuredTournamentReport(input: {
   } catch {
     blockers.push("COMPLETE_ORIGINAL_ATTEMPT_HISTORY_NOT_AUTHENTICATED");
   }
+  const additionalAttempts = z
+    .array(ExperimentRunV1Schema)
+    .max(100)
+    .parse(input.additionalAttempts ?? []);
+  if (additionalAttempts.length)
+    deviations.push("ADDITIONAL_ATTEMPTS_RETAINED");
   const local = buildTournamentReport({
     plan: study.draft.plan,
-    attempts: loaded.map((x) => x.original.run),
+    attempts: [...loaded.map((x) => x.original.run), ...additionalAttempts],
     baselines: new Map(loaded.map((x) => [x.variant, x.baseline])),
     evaluations: new Map(loaded.map((x) => [x.original.run.id, x.future])),
   });

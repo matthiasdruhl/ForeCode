@@ -30,6 +30,8 @@ import {
 import { requireInstalledTeamProfile } from "./team-installation";
 import { decodeBehaviorReply } from "./team-rpc.mjs";
 
+import { retainTeamDiagnostic } from "./team-diagnostics";
+
 const MAX = 1_048_576;
 const raw = readFileSync(0);
 if (raw.length > 12_000_000) throw new Error("Input bound");
@@ -214,6 +216,17 @@ try {
       }
       if (!ready) throw new Error("Worker not ready.");
       const result = await oracleProcess(kind, name);
+      if (future)
+        retainTeamDiagnostic(
+          "/var/lib/forecode-team-grader-diagnostics",
+          input.runId,
+          kind,
+          {
+            evaluatedTreeSha256: input.evaluatedTreeSha256,
+            evaluatorSha256: input.evaluatorSha256,
+          },
+          result,
+        );
       const exitCode =
         result.reason !== "completed" || result.signal ? null : result.status;
       checks.push({
@@ -233,6 +246,26 @@ try {
               : result.stdout.slice(0, 2048),
       });
     } catch {
+      if (future) {
+        const logs = await command("docker", ["logs", name], {
+          milliseconds: 5000,
+          maxBytes: 65536,
+        });
+        try {
+          retainTeamDiagnostic(
+            "/var/lib/forecode-team-grader-diagnostics",
+            input.runId,
+            kind,
+            {
+              evaluatedTreeSha256: input.evaluatedTreeSha256,
+              evaluatorSha256: input.evaluatorSha256,
+            },
+            { stage: "bridge-or-diagnostic-failure", logs },
+          );
+        } catch {
+          /* A custody/storage failure never changes an error into a pass. */
+        }
+      }
       checks.push({
         id: kind,
         status: "error",

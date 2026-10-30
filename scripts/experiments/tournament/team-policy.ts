@@ -57,9 +57,9 @@ export function teamEnforcementPlan(raw: unknown) {
   invariant(c.seed === null, "Provider seed enforcement is unavailable.");
   invariant(
     c.budget.maxSeconds <= 600 &&
-      c.budget.tokenLimit! <= 1_000_000 &&
+      c.budget.tokenLimit! <= 32_000_000 &&
       c.budget.spendUsd! > 0 &&
-      c.budget.spendUsd! <= 10,
+      c.budget.spendUsd! <= 40,
     "Unsupported runtime budget.",
   );
   const spendMicroUsd = c.budget.spendUsd! * 1_000_000;
@@ -139,6 +139,7 @@ export function teamEnforcementPlan(raw: unknown) {
     restrictions: d.restrictions,
     maxSeconds: c.budget.maxSeconds,
     tokenLimit: c.budget.tokenLimit!,
+    nativeRolloutTokenLimit: Math.min(c.budget.tokenLimit!, 1_000_000),
     spendMicroUsd,
     maxIterations: c.budget.maxIterations,
     iterationUnit: "upstream_responses_request" as const,

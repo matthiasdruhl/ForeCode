@@ -7,6 +7,19 @@ import { protectedRead } from "../artifacts/files";
 import { freezeBooking } from "../../evaluator/booking-v1/freeze";
 import { sha256 } from "../../../src/lib/report/digests";
 const extras = [
+  ...[
+    "team-Dockerfile",
+    "team-worker.mjs",
+    "team-public-checks.mjs",
+    "team-public-session.mjs",
+  ].map((name) => ({
+    source: `scripts/experiments/agent/${name}`,
+    target: `team/agent/${name}`,
+  })),
+  {
+    source: "scripts/experiments/agent/team-config.toml",
+    target: "team/agent/config.toml",
+  },
   {
     source: "scripts/experiments/agent/team-supervisor.py",
     target: "team/agent/team-supervisor.py",

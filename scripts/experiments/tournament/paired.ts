@@ -83,6 +83,17 @@ export type PairedTransport = {
   finalizeAgent(runId: string, signal: AbortSignal): Promise<AgentFinalization>;
   grade(input: GradeInput, signal: AbortSignal): Promise<ProcessResult>;
   cleanup(runId: string): Promise<void>;
+  retainFailure?(
+    runId: string,
+    stage:
+      | "admission"
+      | "preparation"
+      | "agent"
+      | "finalization"
+      | "grading"
+      | "cleanup",
+    error: unknown,
+  ): Promise<void>;
 };
 // No unchecked 'admitted:true' or transport.kind can grant a live capability.
 // This set intentionally has no registration API/default production member.
@@ -395,6 +406,9 @@ export async function runPairedTournament(input: {
           study.definition.protocol.conditions[0]!.budget.maxSeconds * 1000,
         ),
       ]);
+      let failureStage:
+        "admission" | "preparation" | "agent" | "finalization" | "grading" =
+        "admission";
       try {
         await fresh(variant);
         await transition("admission", variant);
@@ -421,6 +435,7 @@ export async function runPairedTournament(input: {
             arm.initialTreeSha256,
           "Source drift before worker preparation.",
         );
+        failureStage = "preparation";
         await transport.prepare(
           runId,
           original,
@@ -428,6 +443,7 @@ export async function runPairedTournament(input: {
           signal,
         );
         await fresh(variant);
+        failureStage = "agent";
         await transition("agent", variant);
         const process = ProcessSchema.parse(
           await transport.agent(runId, signal),
@@ -445,6 +461,7 @@ export async function runPairedTournament(input: {
           "Agent interrupted; no candidate grading.",
         );
         await fresh(variant);
+        failureStage = "finalization";
         await transition("sealing", variant);
         const finalized = await transport.finalizeAgent(runId, signal);
         invariant(
@@ -501,6 +518,7 @@ export async function runPairedTournament(input: {
           evaluationProfile: profile,
         });
         await fresh(variant);
+        failureStage = "grading";
         await transition("protected-grading", variant);
         const graded = ProcessSchema.parse(
           await transport.grade(gradeInput, signal),
@@ -528,7 +546,8 @@ export async function runPairedTournament(input: {
           "Sealed candidate changed during grading.",
         );
         await fresh(variant);
-      } catch {
+      } catch (error) {
+        await transport.retainFailure?.(runId, failureStage, error);
         if (attempt.run.status === "completed") attempt.run.status = "failed";
         if (input.signal.aborted) attempt.run.status = "cancelled";
         else if (signal.aborted) attempt.run.status = "timed_out";
@@ -539,7 +558,8 @@ export async function runPairedTournament(input: {
           if (active) await transport.cleanup(active);
           active = null;
           attempt.cleanupConfirmed = true;
-        } catch {
+        } catch (error) {
+          await transport.retainFailure?.(runId, "cleanup", error);
           safe = false;
           attempt.run.status = "blocked";
           attempt.grade = null;

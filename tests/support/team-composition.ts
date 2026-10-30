@@ -32,19 +32,30 @@ import { controllerFiles } from "../../scripts/evaluator/booking-v1/installed";
 import { validateGradeInput } from "../../scripts/evaluator/booking-v1/grade-profile";
 import type { ProcessResult } from "../../scripts/experiments/runner/process";
 export const fakeCli = Buffer.from("synthetic fixed CLI bytes");
-export async function compositionFixture() {
+export async function compositionFixture(
+  options: { graderWorkerImage?: string } = {},
+) {
   const sources: Record<string, string> = Object.fromEntries(
     await Promise.all(
-      ["supervisor.py", "budget.py", "worker.mjs", "team-supervisor.py"].map(
-        async (name) => [
-          name,
-          sha256(await readFile(`scripts/experiments/agent/${name}`)),
-        ],
-      ),
+      [
+        "supervisor.py",
+        "budget.py",
+        "worker.mjs",
+        "team-supervisor.py",
+        "team-worker.mjs",
+        "team-public-checks.mjs",
+        "team-public-session.mjs",
+      ].map(async (name) => [
+        name,
+        sha256(await readFile(`scripts/experiments/agent/${name}`)),
+      ]),
     ),
   );
   const guestSha = sha256(
     await readFile("scripts/evaluator/booking-v1/guest.ts"),
+  );
+  const configSha = sha256(
+    await readFile("scripts/experiments/agent/team-config.toml"),
   );
   const f = await studyFixture({
     configure(d, draft) {
@@ -52,6 +63,7 @@ export async function compositionFixture() {
       d.runtime.brokerSha256 = sources["budget.py"]!;
       d.runtime.graderExecutableSha256 = guestSha;
       for (const c of d.protocol.conditions) {
+        c.agentConfigSha256 = configSha;
         c.seed = null;
         c.budget.tokenLimit = 100000;
         c.networkPolicySha256 = jsonDigest(teamNetworkPolicy);
@@ -67,6 +79,7 @@ export async function compositionFixture() {
       draft.plan.manifest.budget = structuredClone(
         d.protocol.conditions[0]!.budget,
       );
+      draft.plan.manifest.agentConfigSha256 = configSha;
       draft.plan.visibleRoadmapSha256 =
         d.protocol.conditions[0]!.visibleRoadmapSha256;
     },
@@ -118,6 +131,7 @@ export async function compositionFixture() {
     sbx: "/opt/homebrew/bin/sbx",
     agentSandbox: "forecode-team-agent",
     graderSandbox: "forecode-team-grader",
+    graderWorkerImage: options.graderWorkerImage ?? plan.runtime.workerImage,
     expectedInventory: expected,
     graderNodeSha256: "d".repeat(64),
     graderLockSha256: "e".repeat(64),
@@ -268,7 +282,10 @@ export async function compositionFixture() {
     if (args.includes("image") && args.includes("inspect"))
       return JSON.stringify([
         {
-          Id: plan.runtime.workerImage,
+          Id:
+            name === config.graderSandbox
+              ? config.graderWorkerImage
+              : plan.runtime.workerImage,
           Os: "linux",
           Architecture: "arm64",
           RepoDigests: [],

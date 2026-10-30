@@ -128,6 +128,55 @@ for name in ['web_search', 'browser', 'mcp', 'read_private_oracle']:
                                                        'tools': [{'type': 'function', 'name': name}]}).encode()))
         assert not reservations.value['requests']
 # No production CLI admission can be manufactured with JSON.
+with tempfile.TemporaryDirectory() as temp:
+    r = team.preparation_request(request)
+    r.update(deadline=time.time()+10, provider={'endpoint': 'https://api.meta.ai/v1/responses',
+             'maxOutputTokens': 16, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+    reservations = team.TeamReservations(pathlib.Path(temp), r)
+    sent = reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert', 'tools': [
+        {'type': 'function', 'name': 'request_user_input', 'parameters': {'type': 'object'}},
+        {'type': 'function', 'name': 'exec_command'}]}).encode())
+    assert [t['name'] for t in json.loads(sent)['tools']] == ['exec_command']
+
+for name in ['request_user_input', 'view_image', 'spawn_agent', 'mcp']:
+    with tempfile.TemporaryDirectory() as temp:
+        r = team.preparation_request(request)
+        r.update(deadline=time.time()+10, provider={'endpoint': 'https://api.meta.ai/v1/responses',
+                 'maxOutputTokens': 16, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+        reservations = team.TeamReservations(pathlib.Path(temp), r)
+        denied(lambda: reservations.reserve(json.dumps({'model': r['model'], 'input': [
+            {'type': 'function_call', 'name': name, 'call_id': 'inert', 'arguments': '{}'}]}).encode()))
+        assert not reservations.value['requests']
+
+for name in ['exec_command', 'apply_patch', 'request_user_input', 'view_image', 'spawn_agent']:
+    for streaming in [False, True]:
+        with tempfile.TemporaryDirectory() as temp:
+            r = team.preparation_request(request)
+            r.update(deadline=time.time()+10, provider={'endpoint': 'https://api.meta.ai/v1/responses',
+                     'maxOutputTokens': 16, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+            reservations = team.TeamReservations(pathlib.Path(temp), r)
+            sent = reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert'}).encode())
+            call = {'type': 'function_call', 'name': name, 'call_id': 'inert', 'arguments': '{}'}
+            response = {'object': 'response', 'model': r['model'], 'service_tier': 'auto',
+                        'status': 'completed', 'output': [call],
+                        'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}
+            output = json.dumps(response).encode()
+            content_type = 'application/json'
+            if streaming:
+                output = b'data: ' + json.dumps({'type': 'response.output_item.done', 'item': call}).encode() + b'\n\ndata: ' + json.dumps({'type': 'response.completed', 'response': response}).encode() + b'\n\n'
+                content_type = 'text/event-stream'
+            if name in team.TOOLS:
+                reservations.observe(output, content_type, sent)
+                assert reservations.value['requests'][0]['observedUsage']['totalTokens'] == 2
+            else:
+                denied(lambda: reservations.observe(output, content_type, sent))
+                assert (pathlib.Path(temp) / 'unverified-response.bin').read_bytes() == output
+                assert (pathlib.Path(temp) / 'unverified-response.bin').stat().st_mode & 0o777 == 0o400
+                diagnostic = json.loads((pathlib.Path(temp) / 'provider-failure.json').read_bytes())
+                assert diagnostic['exceptionClass'] == 'ValueError' and diagnostic['httpStatus'] is None
+                assert reservations.value['blockedReason'] == 'provider-outcome-unverified'
+                denied(lambda: reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert'}).encode()))
+
 denied(team.main)
 print('team controls passed: source custody, replay, confinement arguments, request/tool/token/spend limits; no runtime or inference')
 
@@ -200,3 +249,87 @@ with tempfile.TemporaryDirectory() as temp:
         file.chmod(0o600); file.write_bytes(team.base.budget.canonical(changed)); file.chmod(0o400)
         denied(lambda: team.load_policy(file, team.os.getuid()))
 print('team production dispatch grammar/custody passed with inert stand-in only')
+
+# Fixed trusted HTTP transport only; fake opener records timeout and endpoint.
+class InertResponse:
+    status = 200
+    headers = {'Content-Type': 'application/json'}
+    def __enter__(self): return self
+    def __exit__(self, *args): pass
+    def read(self, size):
+        assert size == 8_000_001
+        return b'{}'
+class InertOpener:
+    def __init__(self): self.calls = []
+    def open(self, request, timeout):
+        assert request.full_url == 'https://api.meta.ai/v1/responses'
+        assert request.get_header('Authorization') == 'Bearer forecode-meta-sandbox'
+        self.calls.append(timeout)
+        return InertResponse()
+opener = InertOpener()
+with patch.dict(team.os.environ, {'HTTPS_PROXY': 'http://synthetic.invalid'}, clear=True), \
+        patch.object(team.time, 'time', return_value=100), \
+        patch.object(team.urllib.request, 'build_opener', return_value=opener):
+    body = json.dumps({'model': 'muse-spark-1.3-contributor'}).encode()
+    assert team.team_provider_request(body, 500) == (b'{}', 'application/json')
+    assert team.team_provider_request(body, 105) == (b'{}', 'application/json')
+    denied(lambda: team.team_provider_request(body, 100))
+    denied(lambda: team.team_provider_request(b'{"model":"arbitrary"}', 500))
+    assert opener.calls == [120, 5]
+print('team deadline-bounded provider transport and protected failure diagnostics passed; no upstream')
+
+# Match the actual overrun shape: optional summaries must be omitted, and
+# reported output above the original reservation is still rejected.
+with tempfile.TemporaryDirectory() as temp:
+    r = team.preparation_request(request)
+    r.update(deadline=time.time()+10, tokenLimit=200000, provider={
+        'endpoint': 'https://api.meta.ai/v1/responses', 'maxOutputTokens': 8192,
+        'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+    reservations = team.TeamReservations(pathlib.Path(temp), r)
+    sent = reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert',
+        'reasoning': {'effort': 'high', 'summary': 'auto'}}).encode())
+    assert json.loads(sent)['reasoning'] == {'effort': 'high'}
+    assert json.loads(sent)['max_output_tokens'] == 8192
+    response = {'object': 'response', 'model': r['model'], 'service_tier': 'auto',
+        'status': 'incomplete', 'output': [{'type': 'reasoning', 'id': 'synthetic'}],
+        'usage': {'input_tokens': 1, 'output_tokens': 8403, 'total_tokens': 8404}}
+    denied(lambda: reservations.observe(json.dumps(response).encode(), 'application/json', sent))
+    assert reservations.value['blockedReason'] == 'provider-outcome-unverified'
+    assert 'observedUsage' not in reservations.value['requests'][0]
+    denied(lambda: reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert'}).encode()))
+print('team summary omission and actual-shape over-reservation refusal passed; no upstream')
+
+with tempfile.TemporaryDirectory() as temp:
+    body = json.loads(json.dumps(request))
+    body['enforcement']['tokenLimit'] = 32_000_000
+    body['enforcement']['nativeRolloutTokenLimit'] = 1_000_000
+    body['enforcement']['restrictions']['maxOutputTokens'] = 32768
+    supervisor = team.TeamSupervisor(pathlib.Path(temp), lambda args: b'', lambda: 'synthetic-boot')
+    with patch.object(team.base.os, 'chown'):
+        supervisor.prepare_team(body, {'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+    p, state = supervisor.state(run, nonce)
+    assert state['request']['tokenLimit'] == 32_000_000
+    assert json.loads((p / 'task.json').read_bytes())['tokenLimit'] == 1_000_000
+    assert (p / 'task.json').stat().st_mode & 0o777 == 0o444
+    body['enforcement']['nativeRolloutTokenLimit'] = 4_000_000
+    denied(lambda: team.preparation_request(body))
+print('separate32M conservative broker /1M native rollout guards passed; no upstream')
+
+for field, value in [('tokenLimit', 32_000_001), ('spendMicroUsd', 40_000_001)]:
+    changed = json.loads(json.dumps(request))
+    changed['enforcement'][field] = value
+    denied(lambda: team.preparation_request(changed))
+
+# Failed source preparation retains cleanup identity before any source writes.
+with tempfile.TemporaryDirectory() as temp:
+    supervisor = team.TeamSupervisor(pathlib.Path(temp), lambda args: b'', lambda: 'synthetic-boot')
+    broken = json.loads(json.dumps(request))
+    broken['candidate']['files'].append({'path':'src/../unsafe.ts', 'base64':encoded('inert')})
+    broken['sourceTreeSha256'] = team.base.digest(sorted([{'path':f['path'],'sha256':team.hashlib.sha256(base64.b64decode(f['base64'])).hexdigest()} for f in broken['candidate']['files']], key=lambda f:f['path']))
+    with patch.object(team.base.os, 'chown'):
+        denied(lambda: supervisor.prepare_team(broken, {'inputMicroUsdPerToken':1,'outputMicroUsdPerToken':1}))
+    p,state = supervisor.state(run, nonce)
+    assert state['stage']=='failed' and state['terminalFailure']=='driver-error.json'
+    assert supervisor.cleanup(run, nonce)['scratchRemoved']
+    denied(lambda: supervisor.prepare_team(broken, {'inputMicroUsdPerToken':1,'outputMicroUsdPerToken':1}))
+print('partial preparation terminal state and cleanup passed; no runtime/inference')

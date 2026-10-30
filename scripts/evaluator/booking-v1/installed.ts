@@ -3,6 +3,7 @@ export const controllerFiles = [
   "guest.ts",
   "grade-profile.ts",
   "team-installation.ts",
+  "team-diagnostics.ts",
   "team-rpc.mjs",
   "installed-smoke.mjs",
   "installed-sample.ts",

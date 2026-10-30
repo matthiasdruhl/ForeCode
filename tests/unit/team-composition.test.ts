@@ -66,6 +66,64 @@ describe(
   "fixed team production composition under no-inference control",
   { timeout: 30_000 },
   () => {
+    it("uses the separately admitted grader image and explicit trusted root for protected operations", async () => {
+      const f = await compositionFixture({
+        graderWorkerImage: `sha256:${"6".repeat(64)}`,
+      });
+      roots.push(f.parent);
+      const out = await runPairedTournament(f.input);
+      expect(out.blockers).toEqual([]);
+      expect(out.attempts).toHaveLength(2);
+      const protectedCalls = f.calls.filter((c) =>
+        c.args.some((a) =>
+          /(?:guest\.ts|team-profile-inventory\.ts|lifecycle\.mjs)$/.test(a),
+        ),
+      );
+      expect(protectedCalls.length).toBeGreaterThan(4);
+      for (const call of protectedCalls) {
+        expect(call.args[call.args.indexOf("-u") + 1]).toBe("root");
+        if (call.args.some((a) => a.endsWith("guest.ts")))
+          expect(JSON.parse(call.input!).workerImage).toBe(
+            f.config.graderWorkerImage,
+          );
+      }
+      const images = f.calls.filter(
+        (c) => c.args.includes("image") && c.args.includes("inspect"),
+      );
+      for (const call of images)
+        expect(call.args.at(-1)).toBe(
+          call.args.includes(f.config.agentSandbox)
+            ? f.plan.runtime.workerImage
+            : f.config.graderWorkerImage,
+        );
+      expect(f.config.graderWorkerImage).not.toBe(f.plan.runtime.workerImage);
+      expect(out.execution).toBe("NOT_RUN");
+    });
+    it("rejects substitution of the coding image for the protected grader image before launch", async () => {
+      const f = await compositionFixture({
+        graderWorkerImage: `sha256:${"6".repeat(64)}`,
+      });
+      roots.push(f.parent);
+      const original = f.deps.run;
+      f.deps.run = async (...args) => {
+        const result = await original(...args);
+        if (
+          args[1].includes(f.config.graderSandbox) &&
+          args[1].includes("image") &&
+          args[1].includes("inspect")
+        ) {
+          const rows = JSON.parse(result.stdout);
+          rows[0].Id = f.plan.runtime.workerImage;
+          return { ...result, stdout: JSON.stringify(rows) };
+        }
+        return result;
+      };
+      const out = await runPairedTournament(f.input);
+      expect(out.attempts).toHaveLength(0);
+      expect(
+        f.calls.some((c) => c.input?.includes('"operation":"start"')),
+      ).toBe(false);
+    });
     it.each(["valid", "key", "override", "alias", "overlap"])(
       "loads only private registration data with source-pinned authority: %s",
       async (defect) => {
@@ -119,6 +177,106 @@ describe(
           ).toBeNull();
         } else await expect(readTeamRegistration(location)).rejects.toThrow();
         expect(f.calls).toEqual([]);
+      },
+    );
+    it("retains safe command and lifecycle failures before cleanup without retrying a worker", async () => {
+      const f = await fixture(),
+        original = f.deps.run;
+      let started = false,
+        injected = false;
+      vi.spyOn(f.deps, "run").mockImplementation(async (exe, args, options) => {
+        const body = options.input?.startsWith("{")
+          ? JSON.parse(options.input)
+          : null;
+        if (
+          args.includes("/opt/forecode-agent/team-supervisor.py") &&
+          body?.operation === "start"
+        )
+          started = true;
+        if (started && !injected && body?.operation === "status") {
+          injected = true;
+          return {
+            reason: "timed_out",
+            exitCode: null,
+            signal: "SIGKILL",
+            stdout: "SECRET-RAW-OUTPUT",
+            stderr: "SECRET-TRANSPORT-ERROR",
+            elapsedMs: 30001,
+          };
+        }
+        return original(exe, args, options);
+      });
+      const out = await runPairedTournament(f.input);
+      expect(injected).toBe(true);
+      expect(out.attempts[0]).toMatchObject({
+        finalizationConfirmed: false,
+        cleanupConfirmed: true,
+      });
+      expect(out.cleanupConfirmed).toBe(true);
+      expect(out.leaseReleased).toBe(true);
+      const dir = path.join(f.config.runtimeOriginalRoot, "control-failures"),
+        files = await readdir(dir);
+      expect(files.length).toBeGreaterThanOrEqual(2);
+      const diagnostics = await Promise.all(
+        files.map((name) => readFile(path.join(dir, name), "utf8")),
+      );
+      expect(diagnostics.join(" ")).not.toContain("SECRET");
+      expect(diagnostics.map((text) => JSON.parse(text).stage)).toContain(
+        "agent-lifecycle",
+      );
+      expect(
+        diagnostics.some((text) =>
+          JSON.parse(text).recentObservations.some(
+            (o: { reason: string }) => o.reason === "timed_out",
+          ),
+        ),
+      ).toBe(true);
+      const starts = f.calls.filter((c) =>
+        c.input?.includes('"operation":"start"'),
+      );
+      expect(starts).toHaveLength(2); // Exactly one per arm, no restart of A.
+    });
+    it.each(["prepare", "finalize", "cleanup"])(
+      "retains terminal %s failures with original and cleanup errors kept separately",
+      async (operation) => {
+        const f = await fixture(),
+          original = f.deps.run;
+        let injected = false;
+        vi.spyOn(f.deps, "run").mockImplementation(
+          async (exe, args, options) => {
+            const body = options.input?.startsWith("{")
+              ? JSON.parse(options.input)
+              : null;
+            if (!injected && body?.operation === operation) {
+              injected = true;
+              throw new TypeError("SECRET-PRIMARY");
+            }
+            return original(exe, args, options);
+          },
+        );
+        const out = await runPairedTournament(f.input);
+        expect(injected).toBe(true);
+        expect(
+          out.attempts[0]?.failure !== null || operation === "cleanup",
+        ).toBe(true);
+        const dir = path.join(f.config.runtimeOriginalRoot, "control-failures");
+        const records = await Promise.all(
+          (await readdir(dir)).map(async (name) =>
+            JSON.parse(await readFile(path.join(dir, name), "utf8")),
+          ),
+        );
+        expect(
+          records.some(
+            (r) =>
+              r.stage ===
+                (operation === "cleanup"
+                  ? "cleanup"
+                  : operation === "prepare"
+                    ? "preparation"
+                    : "finalization") && r.runId === out.attempts[0]?.run.id,
+          ),
+        ).toBe(true);
+        expect(JSON.stringify(records)).not.toContain("SECRET");
       },
     );
     it("executes the exact fixed inventory/baseline/worker/seal/grader/cleanup sequence while remaining synthetic", async () => {
@@ -261,7 +419,27 @@ describe(
         expect(out.execution).toBe("NOT_RUN");
         expect(out.attempts.length).toBeGreaterThan(0);
         expect(out.attempts[0]!.failure).not.toBeNull();
-        expect(await readdir(f.config.runtimeOriginalRoot)).toEqual([]);
+        const retained = await readdir(f.config.runtimeOriginalRoot);
+        expect(retained.filter((name) => name !== "control-failures")).toEqual(
+          [],
+        );
+        if (retained.includes("control-failures")) {
+          for (const name of await readdir(
+            path.join(f.config.runtimeOriginalRoot, "control-failures"),
+          )) {
+            const diagnostic = JSON.parse(
+              await readFile(
+                path.join(
+                  f.config.runtimeOriginalRoot,
+                  "control-failures",
+                  name,
+                ),
+                "utf8",
+              ),
+            );
+            expect(diagnostic.origin).toBe("synthetic_no_inference");
+          }
+        }
       },
     );
     it("stops before the second arm after failed cleanup and retains the lease", async () => {

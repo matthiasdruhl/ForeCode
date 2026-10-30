@@ -14,6 +14,9 @@ import stat
 import pathlib
 import sys
 import types
+import time
+import urllib.request
+import urllib.error
 
 HERE = pathlib.Path(__file__).resolve().parent
 base = types.ModuleType('team_supervisor_base')
@@ -33,28 +36,222 @@ def exact_int(value, lower, upper):
 
 
 class TeamReservations(base.budget.Reservations):
+    def record_refusal(self, error, stage, raw=None):
+        # First refusal wins. Latch before disk I/O: a logging failure must not
+        # authorize a later send. Parent is supervisor-owned, outside mounts.
+        if getattr(self, 'local_refused', False):
+            return
+        self.local_refused = True
+        codes = {
+            'team request byte ceiling': 'request-bytes',
+            'team request ceiling': 'request-count',
+            'team iteration ceiling': 'iteration-count',
+            'budget deadline or request limit': 'deadline-or-request-bytes',
+            'input depth/size': 'history-nodes',
+            'bounded team history structure': 'team-history-nodes',
+            'opaque context not from this reserved attempt': 'unauthenticated-opaque-context',
+            'prohibited team capability': 'tool-declaration',
+            'prohibited team history capability': 'history-tool',
+            'provider outcome requires owner review': 'provider-breaker',
+        }
+        projection = error.projection if isinstance(error, base.budget.ReservationCapacityError) else None
+        code = codes.get(str(error), 'invalid-request' if stage == 'reservation' else stage)
+        if isinstance(error, base.budget.ReservationCapacityError):
+            minimum = projection['minimumOutputTokens']
+            token = projection['tokenOutputCapacity'] < minimum
+            money = projection['moneyOutputCapacity'] < minimum
+            code = 'token-and-money-capacity' if token and money else 'token-capacity' if token else 'money-capacity'
+        value = {'schemaVersion': 'team-broker-refusal.local.v1', 'stage': stage, 'reasonCode': code,
+                 'requestCount': len(self.value['requests']), 'maxRequests': self.request['maxRequests'],
+                 'maxIterations': self.request['maxIterations'], 'reservedTokens': self.value['reservedTokens'],
+                 'tokenLimit': self.request['tokenLimit'], 'reservedMicroUsd': self.value['reservedMicroUsd'],
+                 'spendMicroUsd': self.request['spendMicroUsd'],
+                 'deadlineReached': time.time() >= self.request['deadline'],
+                 'lastAdmittedRequestSha256': self.value['requests'][-1]['requestSha256'] if self.value['requests'] else None,
+                 'refusedRequestSha256': hashlib.sha256(raw).hexdigest() if isinstance(raw, bytes) else None,
+                 'requestBytes': len(raw) if isinstance(raw, bytes) else None, 'projection': projection}
+        # Immutable, fsynced, root-private and bounded; never exception text,
+        # raw inputs, credentials, headers, native output or provider bodies.
+        file = self.file.parent / 'broker-refusal.json'
+        fd = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+        with os.fdopen(fd, 'wb') as out:
+            out.write(base.budget.canonical(value))
+            out.flush()
+            os.fsync(out.fileno())
+        directory = os.open(file.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+
+    def block(self):
+        # Latch first. Diagnostics never authorize another provider request.
+        error = sys.exc_info()[1]
+        super().block()
+        diagnostic = {
+            'exceptionClass': type(error).__name__,
+            'reasonSha256': hashlib.sha256(str(error).encode()).hexdigest(),
+            'httpStatus': error.code if isinstance(error, urllib.error.HTTPError) else None,
+            'requestCount': len(self.value['requests']),
+        }
+        base.budget.atomic(self.file.parent / 'provider-failure.json', diagnostic)
+
+    def observe(self, output, content_type, sent):
+        try:
+            return super().observe(output, content_type, sent)
+        except ValueError:
+            # Preserve bounded response bytes for owner review outside the
+            # worker. Never store request headers, credentials or HTTP errors.
+            if isinstance(output, bytes) and len(output) <= 8_000_000:
+                file = self.file.parent / 'unverified-response.bin'
+                fd = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+                with os.fdopen(fd, 'wb') as out:
+                    out.write(output)
+                    out.flush()
+                    os.fsync(out.fileno())
+                base.budget.atomic(self.file.parent / 'unverified-response.json', {
+                    'responseSha256': hashlib.sha256(output).hexdigest(),
+                    'requestSha256': hashlib.sha256(sent).hexdigest(),
+                    'contentType': content_type.split(';', 1)[0].strip().lower(),
+                    'bytes': len(output),
+                })
+            raise
+
     def reserve(self, raw):
+        if getattr(self, 'local_refused', False):
+            raise ValueError('team broker already refused')
+        try:
+            return self.reserve_team(raw)
+        except Exception as error:
+            self.record_refusal(error, 'reservation', raw)
+            raise
+
+    def reserve_team(self, raw):
         r = self.request
-        if (len(raw) > 1_048_576 or len(self.value['requests']) >= r['maxRequests']
-                or len(self.value['requests']) >= r['maxIterations']):
-            raise ValueError('team request or iteration ceiling')
+        if len(raw) > 1_048_576:
+            raise ValueError('team request byte ceiling')
+        if len(self.value['requests']) >= r['maxRequests']:
+            raise ValueError('team request ceiling')
+        if len(self.value['requests']) >= r['maxIterations']:
+            raise ValueError('team iteration ceiling')
         body = json.loads(raw)
         if not isinstance(body, dict):
             raise ValueError('provider object required')
+        reasoning = body.get('reasoning', {})
+        if (not isinstance(reasoning, dict)
+                or set(reasoning) - {'effort', 'summary', 'generate_summary'}
+                or reasoning.get('effort', 'high') != 'high'):
+            raise ValueError('fixed team reasoning profile')
+        # Optional summaries produced additional billed tokens beyond the
+        # requested cap in actual Meta responses. Omit them; keep encrypted
+        # replay and the strict reported-usage bound, with no token refunds.
+        body['reasoning'] = {'effort': 'high'}
         tools = body.get('tools', [])
         if not isinstance(tools, list):
             raise ValueError('tools array required')
         for tool in tools:
+            # Codex 0.165 advertises this client UI declaration even with
+            # default-mode input disabled. It is never a team-model tool.
+            # Remove only this exact declaration; all other unsupported tools
+            # still refuse the whole request, before any reservation/send.
+            if isinstance(tool, dict) and tool.get('type') == 'function' and tool.get('name') == 'request_user_input':
+                continue
             if (not isinstance(tool, dict) or tool.get('type') not in ('custom', 'function')
                     or tool.get('name') not in TOOLS):
                 raise ValueError('prohibited team capability')
+        body['tools'] = [t for t in tools if t.get('name') != 'request_user_input']
         choice = body.get('tool_choice')
         if choice not in (None, 'auto', 'none', 'required'):
             raise ValueError('unsupported tool selection')
-        return super().reserve(raw)
+        # History cannot reintroduce a capability omitted from declarations.
+        pending = [body.get('input')]
+        visited = 0
+        while pending:
+            value = pending.pop()
+            visited += 1
+            if visited > 50000:
+                raise ValueError('bounded team history structure')
+            if isinstance(value, dict):
+                if value.get('type') in ('function_call', 'custom_tool_call') and value.get('name') not in TOOLS:
+                    raise ValueError('prohibited team history capability')
+                pending.extend(value.values())
+            elif isinstance(value, list):
+                pending.extend(value)
+        return super().reserve(base.budget.canonical(body))
+
+    def observe_verified(self, output, content_type, sent):
+        # Enforce responses independently of advertised tools: a hallucinated
+        # or substituted call never reaches the confined CLI. Base observe()
+        # durably blocks subsequent sends when this validation raises.
+        def item(value):
+            if not isinstance(value, dict):
+                raise ValueError('malformed team output item')
+            kind = value.get('type')
+            if kind in ('function_call', 'custom_tool_call'):
+                if value.get('name') not in TOOLS:
+                    raise ValueError('prohibited team response capability')
+            elif kind not in ('message', 'reasoning'):
+                raise ValueError('unsupported team output item')
+
+        def response(value):
+            if isinstance(value, dict) and isinstance(value.get('output'), list):
+                for value in value['output']:
+                    item(value)
+
+        if content_type.split(';', 1)[0].strip().lower() == 'text/event-stream':
+            for line in output.splitlines():
+                if line.startswith(b'data:') and line[5:].strip() not in (b'', b'[DONE]'):
+                    event = json.loads(line[5:].strip())
+                    if isinstance(event, dict):
+                        if event.get('type') in ('response.output_item.added', 'response.output_item.done'):
+                            item(event.get('item'))
+                        response(event.get('response'))
+        elif content_type.split(';', 1)[0].strip().lower() == 'application/json':
+            response(json.loads(output))
+        return super().observe_verified(output, content_type, sent)
 
 
 base.budget.Reservations = TeamReservations
+
+
+def team_provider_request(body, deadline):
+    # Full implementation responses can exceed the smoke's fixed30s socket
+    # timeout. Keep this trusted transport bounded by the task's hard deadline
+    # and a120s socket timeout; the independent supervisor still kills the
+    # complete owned group at the absolute deadline.
+    remaining = deadline - time.time()
+    if remaining <= 0:
+        raise ValueError('team provider deadline')
+    proxy = os.environ.get('HTTPS_PROXY', os.environ.get('https_proxy', ''))
+    if not proxy.startswith('http://'):
+        raise ValueError('reviewed credential proxy unavailable')
+    model = json.loads(body).get('model')
+    if model not in ('muse-spark-1.3', 'muse-spark-1.3-contributor'):
+        raise ValueError('fixed team provider model')
+    profile = base.budget.PROFILES[model]
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({'https': proxy}), base.budget.NoRedirect())
+    request = urllib.request.Request(profile['endpoint'], data=body, headers={
+        'Content-Type': 'application/json', 'Authorization': 'Bearer ' + profile['sentinel'],
+    })
+    with opener.open(request, timeout=min(120, remaining)) as response:
+        data = response.read(8_000_001)
+        if len(data) > 8_000_000 or response.status != 200:
+            raise ValueError('bounded team provider response unavailable')
+        return data, response.headers.get('Content-Type', 'application/json')
+
+
+_base_serve = base.budget.serve
+
+
+def serve_team(socket_path, reservations, upstream=None):
+    # The optional callable is the existing explicit no-inference test seam;
+    # production dispatch accepts no request-selected callable or endpoint.
+    if upstream is None:
+        upstream = lambda body: team_provider_request(body, reservations.request['deadline'])
+    return _base_serve(socket_path, reservations, upstream, reservations.record_refusal)
+
+
+base.budget.serve = serve_team
 
 
 def preparation_request(request):
@@ -77,10 +274,13 @@ def preparation_request(request):
         raise ValueError('unsupported confinement')
     exact_int(e['maxIterations'], 1, 100)
     exact_int(e['maxSeconds'], 1, 600)
-    exact_int(e['tokenLimit'], 1, 1_000_000)
-    exact_int(e['spendMicroUsd'], 1, 10_000_000)
+    exact_int(e['tokenLimit'], 1, 32_000_000)
+    native_limit = min(e['tokenLimit'], 1_000_000)
+    if e.get('nativeRolloutTokenLimit', native_limit) != native_limit:
+        raise ValueError('fixed native rollout guard')
+    exact_int(e['spendMicroUsd'], 1, 40_000_000)
     exact_int(r['maxRequests'], 1, 100)
-    exact_int(r['maxOutputTokens'], 16, min(8192, e['tokenLimit']))
+    exact_int(r['maxOutputTokens'], 16, min(32768, e['tokenLimit']))
     exact_int(resources['outputBytes'], 1024, 8_000_000)
     candidate = request['candidate']
     manifest = [{'path': f['path'], 'sha256': hashlib.sha256(base.base64.b64decode(f['base64'], validate=True)).hexdigest()}
@@ -111,6 +311,19 @@ class TeamSupervisor(base.Supervisor):
     def __init__(self, root=ROOT, docker=base.command, boot=base.boot_id):
         super().__init__(root, docker, boot)
 
+    def writable_mounts(self):
+        return (*super().writable_mounts(), '/work')
+
+    def worker_args(self, run_id, image):
+        args = super().worker_args(run_id, image)
+        at = args.index('--entrypoint')
+        for name in ['team-worker.mjs', 'team-public-checks.mjs', 'team-public-session.mjs']:
+            args[at:at] = ['--mount', 'type=bind,src=' + str(HERE / name) + ',dst=/run/' + name + ',readonly']
+            at += 2
+        args[at:at] = ['--tmpfs', '/work:rw,nosuid,nodev,size=256m,mode=1777']
+        args[-1] = '/run/team-worker.mjs'
+        return args
+
     def prepare_team(self, request, provider):
         transformed = preparation_request(request)
         if set(provider) != {'inputMicroUsdPerToken', 'outputMicroUsdPerToken'}:
@@ -120,6 +333,28 @@ class TeamSupervisor(base.Supervisor):
         transformed['provider'] = {**provider, 'endpoint': 'https://api.meta.ai/v1/responses',
                                    'maxOutputTokens': request['enforcement']['restrictions']['maxOutputTokens']}
         result = super().prepare(transformed)
+        # The unchanged smoke bridge validates a1M native rollout counter.
+        # Keep that stricter actual-token guard while the outside-worker
+        # broker separately reserves up to32M worst-case byte/opaque tokens.
+        native_limit = min(transformed['tokenLimit'], 1_000_000)
+        if native_limit != transformed['tokenLimit']:
+            p = self.directory(request['runId'])
+            task = json.loads(base.read_regular(p / 'task.json'))
+            if task['tokenLimit'] != transformed['tokenLimit']:
+                raise ValueError('native task mapping changed')
+            task['tokenLimit'] = native_limit
+            temp = p / 'native-task.next'
+            fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o444)
+            with os.fdopen(fd, 'wb') as out:
+                out.write(base.budget.canonical(task))
+                out.flush()
+                os.fsync(out.fileno())
+            os.replace(temp, p / 'task.json')
+            directory = os.open(p, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
         # Persist the reservation directory before any later start can fork.
         parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
         try:
@@ -140,7 +375,15 @@ class TeamSupervisor(base.Supervisor):
         return result
 
     def finalize(self, run_id, nonce):
-        result = super().finalize(run_id, nonce)
+        try:
+            result = super().finalize(run_id, nonce)
+        except BaseException as error:
+            # Retain a terminal export failure before host-owned cleanup.
+            # Refusing a replay of an already sealed run does not invalidate it.
+            _, state = self.state(run_id, nonce)
+            if state['stage'] not in ('sealed', 'cleaned'):
+                self.record_failure(run_id, nonce, error)
+            raise
         _, state = self.state(run_id, nonce)
         result.update(requestSha256=state['request']['teamRequestSha256'], terminationConfirmed=True,
                       restartAbsenceConfirmed=True, exportWithoutGuestExecution=True)

@@ -8,7 +8,6 @@ import {
   IdSchema,
   Sha256Schema,
   UtcTimestampSchema,
-  RelativePathSchema,
 } from "../../../src/lib/contracts/common";
 import { invariant, sameIds } from "../../../src/lib/contracts/validation";
 import {
@@ -28,6 +27,7 @@ import {
   validateFutureStudy,
 } from "./future-study";
 import { immutable, requireHeldRecord, type HeldRecord } from "./custody";
+import { SourceManifestSchema as ManifestSchema } from "./source-manifest";
 
 // Constructible before B exists. Contains no fabricated prepared source or cost.
 export const ProtocolSchema = z.strictObject({
@@ -70,7 +70,7 @@ export const StudyDefinitionSchema = z.strictObject({
     network: z.literal("none"),
     credentials: z.literal("trusted_broker_only"),
     maxRequests: z.number().int().min(1).max(100),
-    maxOutputTokens: z.number().int().min(16).max(8192),
+    maxOutputTokens: z.number().int().min(16).max(32768),
   }),
   comparisonMetrics: z.tuple([
     z.literal("correctness"),
@@ -166,10 +166,6 @@ export function preparationSubject(
     instructionsSha256: sha256(instructions),
   });
 }
-const ManifestSchema = z
-  .array(z.strictObject({ path: RelativePathSchema, sha256: Sha256Schema }))
-  .min(1)
-  .max(100);
 export const PreparationEvidenceSchema = z.strictObject({
   record: PreparationRecordSchema,
   selectionAt: UtcTimestampSchema,

@@ -371,6 +371,20 @@ describe("dedicated supervised team contract, no inference", () => {
       ),
     ).rejects.toThrow("COMPOSITION");
   });
+  it("admits explicitly committed larger reasoning/output and replay reservations", async () => {
+    const f = await fixture();
+    const definition = structuredClone(f.study.definition);
+    for (const condition of definition.protocol.conditions) {
+      condition.budget.tokenLimit = 32_000_000;
+      condition.budget.spendUsd = 32;
+    }
+    definition.restrictions.maxOutputTokens = 32768;
+    const plan = teamEnforcementPlan(definition);
+    expect(plan.tokenLimit).toBe(32_000_000);
+    expect(plan.nativeRolloutTokenLimit).toBe(1_000_000);
+    expect(plan.spendMicroUsd).toBe(32_000_000);
+    expect(plan.restrictions.maxOutputTokens).toBe(32768);
+  });
   it.each([
     "seed",
     "iteration",
@@ -386,6 +400,7 @@ describe("dedicated supervised team contract, no inference", () => {
     "roadmap",
     "token",
     "spend",
+    "spend-cap",
     "precision",
     "provider-output",
     "timeout",
@@ -412,10 +427,11 @@ describe("dedicated supervised team contract, no inference", () => {
     if (defect === "network") c.networkPolicySha256 = "0".repeat(64);
     if (defect === "credentials") c.credentialPolicySha256 = "0".repeat(64);
     if (defect === "roadmap") c.visibleRoadmapSha256 = "0".repeat(64);
-    if (defect === "token") c.budget.tokenLimit = 1_000_001;
+    if (defect === "token") c.budget.tokenLimit = 32_000_001;
     if (defect === "spend") c.budget.spendUsd = 0;
+    if (defect === "spend-cap") c.budget.spendUsd = 40.000001;
     if (defect === "precision") c.budget.spendUsd = 0.0000001;
-    if (defect === "provider-output") d.restrictions.maxOutputTokens = 10001;
+    if (defect === "provider-output") d.restrictions.maxOutputTokens = 32769;
     if (defect === "timeout") c.budget.maxSeconds = 601;
     if (defect === "old-task")
       Object.assign(d.protocol.task, { id: "booking-ownership-refactor-v1" });
@@ -722,6 +738,14 @@ describe("dedicated supervised team contract, no inference", () => {
     expect(
       execFileSync("python3", ["-I", "-B", script], { encoding: "utf8" }),
     ).toContain("team controls passed");
+  });
+  it("exercises full replay growth and durable broker refusals with zero upstream calls", () => {
+    const script = fileURLToPath(
+      new URL("../runtime/team-reservation-controls.py", import.meta.url),
+    );
+    expect(
+      execFileSync("python3", ["-I", "-B", script], { encoding: "utf8" }),
+    ).toContain("zero-send negative controls passed");
   });
   it("delivers committed scenario assumptions as part of the exact common prompt", async () => {
     const f = await fixture(),

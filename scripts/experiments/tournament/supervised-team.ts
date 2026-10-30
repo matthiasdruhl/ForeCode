@@ -148,6 +148,10 @@ export const TeamInventorySchema = z.strictObject({
   enforcementSha256: hash,
   agentInstance: z.string().min(1),
   graderInstance: z.string().min(1),
+  graderWorkerImage: z
+    .string()
+    .regex(/^sha256:[a-f0-9]{64}$/)
+    .optional(),
   runtime: z.strictObject({
     agentImage: z.string(),
     graderImage: z.string(),
@@ -190,6 +194,7 @@ type Request = Readonly<{
 }>;
 // Fixed operations only. There is no executable/path/command/endpoint selector.
 export type NoInferenceTeamControls = {
+  retainFailure?: PairedTransport["retainFailure"];
   inspect(signal: AbortSignal): Promise<unknown>;
   loadBaseline(
     variant: Variant,
@@ -604,6 +609,7 @@ function createTeamLifecycle(
       );
       return result; // Diagnostic process output; never a TrustedEvaluation.
     },
+    retainFailure: controls.retainFailure,
     async cleanup(runId) {
       const s = session;
       invariant(!s || s.runId === runId, "Refuse cleanup of another run.");

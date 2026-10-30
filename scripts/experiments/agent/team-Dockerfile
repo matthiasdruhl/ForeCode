@@ -1,0 +1,9 @@
+# Public tools only. Both immutable input images must be independently audited.
+# Never copy a grader controller, private oracle, candidate or authenticated VM.
+ARG PUBLIC_TOOLCHAIN
+ARG AGENT_BASE
+FROM ${PUBLIC_TOOLCHAIN} AS publictools
+FROM ${AGENT_BASE}
+USER root
+COPY --from=publictools /toolchain /toolchain
+USER 1000:1000

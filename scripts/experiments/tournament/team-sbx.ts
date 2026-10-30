@@ -28,7 +28,7 @@ import {
   protectedRead,
 } from "../artifacts/files";
 import { publishEvaluation } from "../artifacts/publish";
-import { boundedProcess } from "../runner/process";
+import { boundedProcess, type ProcessResult } from "../runner/process";
 import { ensureOfflineVmResources } from "../isolation/vm-resources";
 import { validateRestartObservation } from "../runner/lifecycle-protocol";
 import {
@@ -57,6 +57,7 @@ import {
 } from "./supervised-team";
 import { teamEnforcementPlan } from "./team-policy";
 import { collectTeamInventory, teamInventoryProgram } from "./team-inventory";
+import { retainTeamControlFailure } from "./team-control-diagnostics";
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const uuid = z.string().uuid();
 const processSchema = z.strictObject({
@@ -147,6 +148,7 @@ function buildControls(
     expected.enforcementSha256 === jsonDigest(plan) &&
       (mode === "synthetic" ||
         (expected.enforcementObservationSha256 &&
+          expected.graderWorkerImage === config.graderWorkerImage &&
           plan.profile.baselineEvaluatorSha256 === implementation)),
     "Complete production enforcement observations required.",
   );
@@ -251,6 +253,57 @@ function buildControls(
       });
     }
   }
+  async function retainFailure(
+    stage:
+      | "command"
+      | "agent-lifecycle"
+      | "admission"
+      | "preparation"
+      | "agent"
+      | "finalization"
+      | "grading"
+      | "cleanup",
+    error: unknown,
+    runId: string | null,
+    commandSha256: string | null = null,
+    limitMilliseconds: number | null = null,
+    maxBytes: number | null = null,
+  ) {
+    try {
+      await retainTeamControlFailure(config.runtimeOriginalRoot, {
+        schemaVersion: "team-control-failure.local.v1",
+        stage,
+        origin:
+          mode === "production"
+            ? "actual_control_process"
+            : "synthetic_no_inference",
+        studyId: study.definition.protocol.studyId,
+        runId,
+        implementationSha256: implementation,
+        inventorySha256: jsonDigest(expected),
+        compositionSha256,
+        observedAt: now(),
+        errorClass:
+          error === null
+            ? null
+            : error instanceof TypeError
+              ? "TypeError"
+              : error instanceof SyntaxError
+                ? "SyntaxError"
+                : error instanceof RangeError
+                  ? "RangeError"
+                  : error instanceof Error
+                    ? "Error"
+                    : "Unknown",
+        commandSha256,
+        limitMilliseconds,
+        maxBytes,
+        recentObservations: observations.slice(-16),
+      });
+    } catch {
+      /* Storage failure never permits retry or bypasses cleanup. */
+    }
+  }
   async function raw(
     args: string[],
     signal: AbortSignal,
@@ -263,12 +316,26 @@ function buildControls(
         sha256(await deps.cliBytes()) === expected.sandboxCliSha256,
       "CLI changed or operation cancelled.",
     );
-    const result = await deps.run(config.sbx, args, {
-      signal,
-      input,
-      maxBytes,
-      milliseconds,
-    });
+    let result: ProcessResult;
+    try {
+      result = await deps.run(config.sbx, args, {
+        signal,
+        input,
+        maxBytes,
+        milliseconds,
+      });
+    } catch (error) {
+      await retainFailure(
+        "command",
+        error,
+        null,
+        jsonDigest(args),
+        milliseconds,
+        maxBytes,
+      );
+      throw error;
+    }
+    if (observations.length === 16) observations.shift();
     observations.push({
       operation: args[0]!,
       commandSha256: jsonDigest(args),
@@ -277,6 +344,19 @@ function buildControls(
       stdoutSha256: sha256(result.stdout),
       stderrSha256: sha256(result.stderr),
     });
+    if (
+      result.reason !== "completed" ||
+      result.exitCode !== 0 ||
+      signal.aborted
+    )
+      await retainFailure(
+        "command",
+        null,
+        null,
+        jsonDigest(args),
+        milliseconds,
+        maxBytes,
+      );
     invariant(
       result.reason === "completed" && result.exitCode === 0 && !signal.aborted,
       "Fixed sandbox command failed.",
@@ -423,10 +503,19 @@ function buildControls(
   }
   async function gradeFixed(input: GradeInput, signal: AbortSignal) {
     await inspect(signal);
+    // The study's runtime.workerImage is the coding worker. Protected checks
+    // use the separately inventoried grader image bound by both installed
+    // admissions through the composition/inventory digests, for both arms.
+    const graderInput = validateGradeInput({
+      ...input,
+      workerImage: config.graderWorkerImage,
+    });
     const result = await exec(
       [
         "exec",
         "-i",
+        "-u",
+        "root",
         config.graderSandbox,
         "/opt/forecode-booking/bin/node",
         "--conditions=react-server",
@@ -435,7 +524,7 @@ function buildControls(
         "/opt/forecode-booking/controller/guest.ts",
       ],
       signal,
-      JSON.stringify(input),
+      JSON.stringify(graderInput),
       1_048_576,
       590_000,
     );
@@ -495,6 +584,8 @@ function buildControls(
         await verifyFiles("grader", signal);
         const args = [
           "exec",
+          "-u",
+          "root",
           config.graderSandbox,
           "/opt/forecode-booking/bin/node",
           "/opt/forecode-booking/controller/lifecycle.mjs",
@@ -646,6 +737,7 @@ function buildControls(
       baselines.set(variant, loaded);
       return loaded;
     },
+    retainFailure: (runId, stage, error) => retainFailure(stage, error, runId),
     async prepare(request, signal) {
       invariant(!recovering && !failedCleanup, "Cleanup fences preparation.");
       invariant(
@@ -670,46 +762,51 @@ function buildControls(
     },
     async agent(runId, nonce, signal) {
       const s = state(runId, nonce);
-      invariant(
-        !recovering && !s.cancelled && !s.startRequested,
-        "One unfenced worker start required.",
-      );
-      s.startRequested = true;
-      await inspect(signal);
-      await helper("start", s, signal);
-      for (;;) {
-        invariant(!s.cancelled, "Owned worker cancelled for cleanup.");
-        signal.throwIfAborted();
-        const value = status(await helper("status", s, signal), s);
+      try {
         invariant(
-          value.stage !== "failed",
-          "Trusted supervisor failed; cleanup required.",
+          !recovering && !s.cancelled && !s.startRequested,
+          "One unfenced worker start required.",
         );
-        if (value.stage === "terminated") {
+        s.startRequested = true;
+        await inspect(signal);
+        await helper("start", s, signal);
+        for (;;) {
+          invariant(!s.cancelled, "Owned worker cancelled for cleanup.");
+          signal.throwIfAborted();
+          const value = status(await helper("status", s, signal), s);
           invariant(
-            value.agent &&
-              value.containerId &&
-              value.terminationConfirmed &&
-              value.restartAbsenceConfirmed,
-            "Real termination observation incomplete.",
+            value.stage !== "failed",
+            "Trusted supervisor failed; cleanup required.",
           );
-          s.observed = mode === "production";
-          return {
-            runId,
-            nonce,
-            requestSha256: s.digest,
-            bootId: s.bootId,
-            containerId: value.containerId,
-            process: value.agent,
-            terminationConfirmed: true,
-            restartAbsenceConfirmed: true,
-          };
+          if (value.stage === "terminated") {
+            invariant(
+              value.agent &&
+                value.containerId &&
+                value.terminationConfirmed &&
+                value.restartAbsenceConfirmed,
+              "Real termination observation incomplete.",
+            );
+            s.observed = mode === "production";
+            return {
+              runId,
+              nonce,
+              requestSha256: s.digest,
+              bootId: s.bootId,
+              containerId: value.containerId,
+              process: value.agent,
+              terminationConfirmed: true,
+              restartAbsenceConfirmed: true,
+            };
+          }
+          invariant(
+            ["starting", "running"].includes(value.stage),
+            "Unexpected supervisor transition.",
+          );
+          await new Promise((r) => setTimeout(r, 200));
         }
-        invariant(
-          ["starting", "running"].includes(value.stage),
-          "Unexpected supervisor transition.",
-        );
-        await new Promise((r) => setTimeout(r, 200));
+      } catch (error) {
+        await retainFailure("agent-lifecycle", error, runId);
+        throw error;
       }
     },
     async finalize(runId, nonce, signal) {
@@ -728,6 +825,7 @@ function buildControls(
       invariant(!recovering && !s?.cancelled, "Cleanup fences grading.");
       invariant(
         s?.finalized &&
+          input.workerImage === plan.runtime.workerImage &&
           jsonDigest(input.evaluationProfile) === jsonDigest(plan.profile),
         "Only finalized fixed team source may be graded.",
       );

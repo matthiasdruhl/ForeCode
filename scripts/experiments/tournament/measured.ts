@@ -7,11 +7,7 @@ import {
   ExperimentRunV1Schema,
   MetricsSchema,
 } from "../../../src/lib/contracts/evidence";
-import {
-  IdSchema,
-  Sha256Schema,
-  RelativePathSchema,
-} from "../../../src/lib/contracts/common";
+import { IdSchema, Sha256Schema } from "../../../src/lib/contracts/common";
 import { invariant } from "../../../src/lib/contracts/validation";
 import { jsonDigest, sha256 } from "../../../src/lib/report/digests";
 import {
@@ -28,11 +24,8 @@ import { pairedRuntimeSubject, sharedFutureTask, type Variant } from "./paired";
 import { supervisedTeamRuntimeSubject } from "./supervised-team";
 import { teamAgentId, teamEnforcementPlan } from "./team-policy";
 import { buildTournamentReport } from "./report";
+import { SourceManifestSchema as ManifestSchema } from "./source-manifest";
 
-const ManifestSchema = z
-  .array(z.strictObject({ path: RelativePathSchema, sha256: Sha256Schema }))
-  .min(1)
-  .max(100);
 export const RuntimeObservationSchema = z.strictObject({
   schemaVersion: z.literal("tournament-runtime-original.local.v1"),
   origin: z.literal("actual_supervised_agent"),

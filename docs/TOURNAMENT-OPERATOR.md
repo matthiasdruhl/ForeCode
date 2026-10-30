@@ -1,5 +1,7 @@
 # Tournament operator handoff
 
+**Current status — October 30:** Owner-designated AI technical review, dedicated installation and actual inert controls are complete. Source-only B preparation and current protected baseline checks are recorded. The registered case02 remains disabled pending exact $6 pair-spending consent and fresh per-study runtime admission. [Installed acceptance and next operation](BOOKING-TEAM-INERT-ACCEPTANCE.md) supersedes historical status statements below; no downstream A/B model result exists.
+
 Implementation is preparation tooling, not authorization to run a study. No actual B, original study commitments, paid future-task attempt or publication approval has been supplied. The existing smoke and private grader acceptance keep their original scopes.
 
 ## Trust and originals

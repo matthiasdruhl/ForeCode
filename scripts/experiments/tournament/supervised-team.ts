@@ -148,6 +148,10 @@ export const TeamInventorySchema = z.strictObject({
   enforcementSha256: hash,
   agentInstance: z.string().min(1),
   graderInstance: z.string().min(1),
+  graderWorkerImage: z
+    .string()
+    .regex(/^sha256:[a-f0-9]{64}$/)
+    .optional(),
   runtime: z.strictObject({
     agentImage: z.string(),
     graderImage: z.string(),

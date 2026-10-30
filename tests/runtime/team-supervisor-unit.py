@@ -128,6 +128,51 @@ for name in ['web_search', 'browser', 'mcp', 'read_private_oracle']:
                                                        'tools': [{'type': 'function', 'name': name}]}).encode()))
         assert not reservations.value['requests']
 # No production CLI admission can be manufactured with JSON.
+with tempfile.TemporaryDirectory() as temp:
+    r = team.preparation_request(request)
+    r.update(deadline=time.time()+10, provider={'endpoint': 'https://api.meta.ai/v1/responses',
+             'maxOutputTokens': 16, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+    reservations = team.TeamReservations(pathlib.Path(temp), r)
+    sent = reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert', 'tools': [
+        {'type': 'function', 'name': 'request_user_input', 'parameters': {'type': 'object'}},
+        {'type': 'function', 'name': 'exec_command'}]}).encode())
+    assert [t['name'] for t in json.loads(sent)['tools']] == ['exec_command']
+
+for name in ['request_user_input', 'view_image', 'spawn_agent', 'mcp']:
+    with tempfile.TemporaryDirectory() as temp:
+        r = team.preparation_request(request)
+        r.update(deadline=time.time()+10, provider={'endpoint': 'https://api.meta.ai/v1/responses',
+                 'maxOutputTokens': 16, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+        reservations = team.TeamReservations(pathlib.Path(temp), r)
+        denied(lambda: reservations.reserve(json.dumps({'model': r['model'], 'input': [
+            {'type': 'function_call', 'name': name, 'call_id': 'inert', 'arguments': '{}'}]}).encode()))
+        assert not reservations.value['requests']
+
+for name in ['exec_command', 'apply_patch', 'request_user_input', 'view_image', 'spawn_agent']:
+    for streaming in [False, True]:
+        with tempfile.TemporaryDirectory() as temp:
+            r = team.preparation_request(request)
+            r.update(deadline=time.time()+10, provider={'endpoint': 'https://api.meta.ai/v1/responses',
+                     'maxOutputTokens': 16, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+            reservations = team.TeamReservations(pathlib.Path(temp), r)
+            sent = reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert'}).encode())
+            call = {'type': 'function_call', 'name': name, 'call_id': 'inert', 'arguments': '{}'}
+            response = {'object': 'response', 'model': r['model'], 'service_tier': 'auto',
+                        'status': 'completed', 'output': [call],
+                        'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}
+            output = json.dumps(response).encode()
+            content_type = 'application/json'
+            if streaming:
+                output = b'data: ' + json.dumps({'type': 'response.output_item.done', 'item': call}).encode() + b'\n\ndata: ' + json.dumps({'type': 'response.completed', 'response': response}).encode() + b'\n\n'
+                content_type = 'text/event-stream'
+            if name in team.TOOLS:
+                reservations.observe(output, content_type, sent)
+                assert reservations.value['requests'][0]['observedUsage']['totalTokens'] == 2
+            else:
+                denied(lambda: reservations.observe(output, content_type, sent))
+                assert reservations.value['blockedReason'] == 'provider-outcome-unverified'
+                denied(lambda: reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert'}).encode()))
+
 denied(team.main)
 print('team controls passed: source custody, replay, confinement arguments, request/tool/token/spend limits; no runtime or inference')
 

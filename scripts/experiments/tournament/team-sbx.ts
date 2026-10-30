@@ -147,6 +147,7 @@ function buildControls(
     expected.enforcementSha256 === jsonDigest(plan) &&
       (mode === "synthetic" ||
         (expected.enforcementObservationSha256 &&
+          expected.graderWorkerImage === config.graderWorkerImage &&
           plan.profile.baselineEvaluatorSha256 === implementation)),
     "Complete production enforcement observations required.",
   );
@@ -423,10 +424,19 @@ function buildControls(
   }
   async function gradeFixed(input: GradeInput, signal: AbortSignal) {
     await inspect(signal);
+    // The study's runtime.workerImage is the coding worker. Protected checks
+    // use the separately inventoried grader image bound by both installed
+    // admissions through the composition/inventory digests, for both arms.
+    const graderInput = validateGradeInput({
+      ...input,
+      workerImage: config.graderWorkerImage,
+    });
     const result = await exec(
       [
         "exec",
         "-i",
+        "-u",
+        "root",
         config.graderSandbox,
         "/opt/forecode-booking/bin/node",
         "--conditions=react-server",
@@ -435,7 +445,7 @@ function buildControls(
         "/opt/forecode-booking/controller/guest.ts",
       ],
       signal,
-      JSON.stringify(input),
+      JSON.stringify(graderInput),
       1_048_576,
       590_000,
     );
@@ -495,6 +505,8 @@ function buildControls(
         await verifyFiles("grader", signal);
         const args = [
           "exec",
+          "-u",
+          "root",
           config.graderSandbox,
           "/opt/forecode-booking/bin/node",
           "/opt/forecode-booking/controller/lifecycle.mjs",
@@ -728,6 +740,7 @@ function buildControls(
       invariant(!recovering && !s?.cancelled, "Cleanup fences grading.");
       invariant(
         s?.finalized &&
+          input.workerImage === plan.runtime.workerImage &&
           jsonDigest(input.evaluationProfile) === jsonDigest(plan.profile),
         "Only finalized fixed team source may be graded.",
       );

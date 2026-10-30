@@ -45,13 +45,65 @@ class TeamReservations(base.budget.Reservations):
         if not isinstance(tools, list):
             raise ValueError('tools array required')
         for tool in tools:
+            # Codex 0.165 advertises this client UI declaration even with
+            # default-mode input disabled. It is never a team-model tool.
+            # Remove only this exact declaration; all other unsupported tools
+            # still refuse the whole request, before any reservation/send.
+            if isinstance(tool, dict) and tool.get('type') == 'function' and tool.get('name') == 'request_user_input':
+                continue
             if (not isinstance(tool, dict) or tool.get('type') not in ('custom', 'function')
                     or tool.get('name') not in TOOLS):
                 raise ValueError('prohibited team capability')
+        body['tools'] = [t for t in tools if t.get('name') != 'request_user_input']
         choice = body.get('tool_choice')
         if choice not in (None, 'auto', 'none', 'required'):
             raise ValueError('unsupported tool selection')
-        return super().reserve(raw)
+        # History cannot reintroduce a capability omitted from declarations.
+        pending = [body.get('input')]
+        visited = 0
+        while pending:
+            value = pending.pop()
+            visited += 1
+            if visited > 50000:
+                raise ValueError('bounded team history structure')
+            if isinstance(value, dict):
+                if value.get('type') in ('function_call', 'custom_tool_call') and value.get('name') not in TOOLS:
+                    raise ValueError('prohibited team history capability')
+                pending.extend(value.values())
+            elif isinstance(value, list):
+                pending.extend(value)
+        return super().reserve(base.budget.canonical(body))
+
+    def observe_verified(self, output, content_type, sent):
+        # Enforce responses independently of advertised tools: a hallucinated
+        # or substituted call never reaches the confined CLI. Base observe()
+        # durably blocks subsequent sends when this validation raises.
+        def item(value):
+            if not isinstance(value, dict):
+                raise ValueError('malformed team output item')
+            kind = value.get('type')
+            if kind in ('function_call', 'custom_tool_call'):
+                if value.get('name') not in TOOLS:
+                    raise ValueError('prohibited team response capability')
+            elif kind not in ('message', 'reasoning'):
+                raise ValueError('unsupported team output item')
+
+        def response(value):
+            if isinstance(value, dict) and isinstance(value.get('output'), list):
+                for value in value['output']:
+                    item(value)
+
+        if content_type.split(';', 1)[0].strip().lower() == 'text/event-stream':
+            for line in output.splitlines():
+                if line.startswith(b'data:') and line[5:].strip() not in (b'', b'[DONE]'):
+                    event = json.loads(line[5:].strip())
+                    if isinstance(event, dict):
+                        if event.get('type') in ('response.output_item.added', 'response.output_item.done'):
+                            item(event.get('item'))
+                        response(event.get('response'))
+        elif content_type.split(';', 1)[0].strip().lower() == 'application/json':
+            response(json.loads(output))
+        return super().observe_verified(output, content_type, sent)
 
 
 base.budget.Reservations = TeamReservations

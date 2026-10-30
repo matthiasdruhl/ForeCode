@@ -206,6 +206,14 @@ export async function collectTeamInventory(input: {
     agentFiles["/opt/forecode-agent/team-policy.json"] ===
       config.installedPolicySha256 &&
       agentFiles["/home/agent/.codex/config.toml"] === plan.agentConfigSha256 &&
+      plan.agentConfigSha256 ===
+        sha256(
+          await protectedRead(
+            fileURLToPath(
+              new URL("../agent/team-config.toml", import.meta.url),
+            ),
+          ),
+        ) &&
       agentFiles["/usr/local/bin/codex"] === plan.runtime.agentBinarySha256,
     "Installed policy or agent identity changed.",
   );
@@ -255,7 +263,7 @@ export async function collectTeamInventory(input: {
         "docker",
         "image",
         "inspect",
-        plan.runtime.workerImage,
+        config.graderWorkerImage,
       ],
       signal,
     ),
@@ -268,7 +276,7 @@ export async function collectTeamInventory(input: {
     "Agent worker image mismatch.",
   );
   await verifyInstalledGrader(graderFiles, graderImages, {
-    workerImage: plan.runtime.workerImage,
+    workerImage: config.graderWorkerImage,
     graderNodeSha256: config.graderNodeSha256,
     graderLockSha256: config.graderLockSha256,
     graderModulesSha256: config.graderModulesSha256,
@@ -316,6 +324,8 @@ export async function collectTeamInventory(input: {
           [
             "exec",
             "-i",
+            "-u",
+            "root",
             config.graderSandbox,
             "/opt/forecode-booking/bin/node",
             "--conditions=react-server",
@@ -359,6 +369,7 @@ export async function collectTeamInventory(input: {
     enforcementSha256: jsonDigest(plan),
     agentInstance: agent.id,
     graderInstance: grader.id,
+    graderWorkerImage: config.graderWorkerImage,
     runtime: {
       ...plan.runtime,
       agentBinarySha256: agentFiles["/usr/local/bin/codex"],

@@ -2,6 +2,7 @@
 import path from "node:path";
 import { lstat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { homedir } from "node:os";
 import { privateDirectory, protectedRead, disjoint } from "../artifacts/files";
 import { invariant } from "../../../src/lib/contracts/validation";
 import { IdSchema } from "../../../src/lib/contracts/common";
@@ -21,6 +22,7 @@ export const TeamRuntimeConfigSchema = z.strictObject({
   sbx: z.literal("/opt/homebrew/bin/sbx"),
   agentSandbox: z.literal("forecode-team-agent"),
   graderSandbox: z.literal("forecode-team-grader"),
+  graderWorkerImage: z.string().regex(/^sha256:[a-f0-9]{64}$/),
   expectedInventory: z.unknown(),
   graderNodeSha256: hash,
   graderLockSha256: hash,
@@ -59,7 +61,31 @@ export type TeamRuntimeLocation = Readonly<{
 // hashes/record pins are read as private data AFTER source freeze, avoiding a
 // circular implementation digest. No request/env can select a location or key.
 export const configuredTeamRuntimes: ReadonlyMap<string, TeamRuntimeLocation> =
-  new Map();
+  new Map([
+    [
+      "forecode-team-20261030-case-02",
+      {
+        // Owner explicitly delegated technical review/operator work to AI.
+        // Public trust anchor only. Private key/data stay outside this repo.
+        // Registration is disabled until exact paid-run approval and originals.
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+  ]);
 const RegistrationDocumentSchema = z.strictObject({
   schemaVersion: z.literal("supervised-team-registration.local.v1"),
   studyRoot: absolute,

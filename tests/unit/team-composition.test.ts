@@ -66,6 +66,64 @@ describe(
   "fixed team production composition under no-inference control",
   { timeout: 30_000 },
   () => {
+    it("uses the separately admitted grader image and explicit trusted root for protected operations", async () => {
+      const f = await compositionFixture({
+        graderWorkerImage: `sha256:${"6".repeat(64)}`,
+      });
+      roots.push(f.parent);
+      const out = await runPairedTournament(f.input);
+      expect(out.blockers).toEqual([]);
+      expect(out.attempts).toHaveLength(2);
+      const protectedCalls = f.calls.filter((c) =>
+        c.args.some((a) =>
+          /(?:guest\.ts|team-profile-inventory\.ts|lifecycle\.mjs)$/.test(a),
+        ),
+      );
+      expect(protectedCalls.length).toBeGreaterThan(4);
+      for (const call of protectedCalls) {
+        expect(call.args[call.args.indexOf("-u") + 1]).toBe("root");
+        if (call.args.some((a) => a.endsWith("guest.ts")))
+          expect(JSON.parse(call.input!).workerImage).toBe(
+            f.config.graderWorkerImage,
+          );
+      }
+      const images = f.calls.filter(
+        (c) => c.args.includes("image") && c.args.includes("inspect"),
+      );
+      for (const call of images)
+        expect(call.args.at(-1)).toBe(
+          call.args.includes(f.config.agentSandbox)
+            ? f.plan.runtime.workerImage
+            : f.config.graderWorkerImage,
+        );
+      expect(f.config.graderWorkerImage).not.toBe(f.plan.runtime.workerImage);
+      expect(out.execution).toBe("NOT_RUN");
+    });
+    it("rejects substitution of the coding image for the protected grader image before launch", async () => {
+      const f = await compositionFixture({
+        graderWorkerImage: `sha256:${"6".repeat(64)}`,
+      });
+      roots.push(f.parent);
+      const original = f.deps.run;
+      f.deps.run = async (...args) => {
+        const result = await original(...args);
+        if (
+          args[1].includes(f.config.graderSandbox) &&
+          args[1].includes("image") &&
+          args[1].includes("inspect")
+        ) {
+          const rows = JSON.parse(result.stdout);
+          rows[0].Id = f.plan.runtime.workerImage;
+          return { ...result, stdout: JSON.stringify(rows) };
+        }
+        return result;
+      };
+      const out = await runPairedTournament(f.input);
+      expect(out.attempts).toHaveLength(0);
+      expect(
+        f.calls.some((c) => c.input?.includes('"operation":"start"')),
+      ).toBe(false);
+    });
     it.each(["valid", "key", "override", "alias", "overlap"])(
       "loads only private registration data with source-pinned authority: %s",
       async (defect) => {

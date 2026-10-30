@@ -56,6 +56,8 @@ export {
   type Variant,
 } from "./paired-inputs";
 
+import { PublicReadinessSchema, type PublicReadiness } from "./team-readiness";
+
 export type PairedTransport = {
   kind: "synthetic-development" | "supervised-team";
   preflight?(
@@ -80,7 +82,10 @@ export type PairedTransport = {
     signal: AbortSignal,
   ): Promise<void>;
   agent(runId: string, signal: AbortSignal): Promise<ProcessResult>;
-  finalizeAgent(runId: string, signal: AbortSignal): Promise<AgentFinalization>;
+  finalizeAgent(
+    runId: string,
+    signal: AbortSignal,
+  ): Promise<AgentFinalization & { publicReadiness?: PublicReadiness }>;
   grade(input: GradeInput, signal: AbortSignal): Promise<ProcessResult>;
   cleanup(runId: string): Promise<void>;
   retainFailure?(
@@ -122,6 +127,7 @@ export type PairedAttempt = {
   candidateTreeSha256: string | null;
   changedFiles: string[] | null;
   finalizationConfirmed: boolean;
+  publicReadiness: PublicReadiness | null;
   cleanupConfirmed: boolean;
   grade: ReturnType<typeof validateGradeReport> | null;
   failure: string | null;
@@ -395,6 +401,7 @@ export async function runPairedTournament(input: {
         candidateTreeSha256: null,
         changedFiles: null,
         finalizationConfirmed: false,
+        publicReadiness: null,
         cleanupConfirmed: false,
         grade: null,
         failure: null,
@@ -456,14 +463,15 @@ export async function runPairedTournament(input: {
               : process.reason === "completed" && process.exitCode === 0
                 ? "completed"
                 : "failed";
-        invariant(
-          process.reason === "completed" && !signal.aborted,
-          "Agent interrupted; no candidate grading.",
-        );
+        // Terminated/interrupted source can still be archived. This grants no
+        // extra coding/checking time and never resumes the native agent.
         await fresh(variant);
         failureStage = "finalization";
         await transition("sealing", variant);
-        const finalized = await transport.finalizeAgent(runId, signal);
+        const finalized = await transport.finalizeAgent(
+          runId,
+          signal.aborted ? AbortSignal.timeout(30_000) : signal,
+        );
         invariant(
           transport.kind === "synthetic-development" ||
             isTrustedAgentFinalization(finalized) ||
@@ -479,6 +487,20 @@ export async function runPairedTournament(input: {
           "Agent termination or sealing unconfirmed.",
         );
         attempt.finalizationConfirmed = true;
+        if (finalized.publicReadiness) {
+          attempt.publicReadiness = PublicReadinessSchema.parse(
+            finalized.publicReadiness,
+          );
+          invariant(
+            attempt.publicReadiness.candidateSha256 ===
+              finalized.candidateSha256,
+            "Public readiness source changed.",
+          );
+        }
+        invariant(
+          transport.kind !== "supervised-team" || attempt.publicReadiness,
+          "Public readiness missing.",
+        );
         const candidate = await freezeCandidate(
           finalized.candidate,
           runId,
@@ -490,6 +512,19 @@ export async function runPairedTournament(input: {
         attempt.changedFiles = sourceDiff(
           (await snapshotTree(input.sources[variant])).files,
           candidate.manifest,
+        );
+        if (
+          attempt.publicReadiness?.status !== "READY" &&
+          attempt.publicReadiness
+        ) {
+          if (attempt.run.status === "completed") attempt.run.status = "failed";
+          attempt.run.limitations.push(
+            "Finalized candidate is not publicly ready; failed source retained independently of protected grading.",
+          );
+        }
+        invariant(
+          !signal.aborted && process.reason === "completed",
+          "Interrupted candidate archived; no protected grading.",
         );
         const oracle = study.draft.plan.futureOracle;
         const profile: TeamGradeProfile = {

@@ -68,9 +68,20 @@ const seed = Object.freeze({
   ],
 });
 const { createTeamBenchmark } = await load("src/server/team-benchmark.ts");
-const subject = createTeamBenchmark({
+assert.equal(
+  typeof createTeamBenchmark,
+  "function",
+  "public createTeamBenchmark export required",
+);
+const subject = await createTeamBenchmark({
   seed,
   now: () => new Date("2026-11-01T00:00:00.000Z"),
   newId: () => "team-booking-0001",
 });
+assert.ok(
+  subject &&
+    typeof subject.domain === "function" &&
+    typeof subject.http === "function",
+  "public domain/http interface required",
+);
 cookie(await subject.http(request(), "u-alice"));

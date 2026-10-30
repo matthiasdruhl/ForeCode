@@ -45,6 +45,9 @@ export async function compositionFixture(
         "team-worker.mjs",
         "team-public-checks.mjs",
         "team-public-session.mjs",
+        "team-workflow.mjs",
+        "team-source-write.mjs",
+        "team-shell-hook.sh",
       ].map(async (name) => [
         name,
         sha256(await readFile(`scripts/experiments/agent/${name}`)),
@@ -364,6 +367,12 @@ export async function compositionFixture(
         return JSON.stringify({
           ...identity,
           stage: "sealed",
+          publicReadiness: {
+            status: "READY",
+            reason: "public-checks-passed",
+            candidateSha256: jsonDigest(s.candidate),
+            outputSha256: "a".repeat(64),
+          },
           candidate: s.candidate,
           candidateSha256: jsonDigest(s.candidate),
           terminationConfirmed: true,

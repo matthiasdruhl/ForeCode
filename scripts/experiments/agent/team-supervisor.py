@@ -315,9 +315,14 @@ class TeamSupervisor(base.Supervisor):
         return (*super().writable_mounts(), '/work')
 
     def worker_args(self, run_id, image):
+        p, state = self.state(run_id, json.loads(base.read_regular(self.directory(run_id) / 'state.json'))['nonce'])
+        task = json.loads(base.read_regular(p / 'task.json'))
+        task.update(teamWorkflow='public-v2', deadline=state.get('deadline', time.time() + state['request']['maxSeconds']), maxRequests=state['request']['maxRequests'])
+        base.budget.atomic(p / 'task.json', task)
+        os.chmod(p / 'task.json', 0o444)
         args = super().worker_args(run_id, image)
         at = args.index('--entrypoint')
-        for name in ['team-worker.mjs', 'team-public-checks.mjs', 'team-public-session.mjs']:
+        for name in ['team-worker.mjs', 'team-public-checks.mjs', 'team-public-session.mjs', 'team-workflow.mjs', 'team-source-write.mjs', 'team-shell-hook.sh']:
             args[at:at] = ['--mount', 'type=bind,src=' + str(HERE / name) + ',dst=/run/' + name + ',readonly']
             at += 2
         args[at:at] = ['--tmpfs', '/work:rw,nosuid,nodev,size=256m,mode=1777']
@@ -376,7 +381,7 @@ class TeamSupervisor(base.Supervisor):
 
     def finalize(self, run_id, nonce):
         try:
-            result = super().finalize(run_id, nonce)
+            result = super().finalize(run_id, nonce, allow_interrupted=True)
         except BaseException as error:
             # Retain a terminal export failure before host-owned cleanup.
             # Refusing a replay of an already sealed run does not invalidate it.
@@ -387,6 +392,101 @@ class TeamSupervisor(base.Supervisor):
         _, state = self.state(run_id, nonce)
         result.update(requestSha256=state['request']['teamRequestSha256'], terminationConfirmed=True,
                       restartAbsenceConfirmed=True, exportWithoutGuestExecution=True)
+        readiness = self.public_readiness(run_id, nonce, result['candidateSha256'])
+        result['publicReadiness'] = readiness
+        with self.lock(run_id):
+            p, state = self.state(run_id, nonce)
+            state['publicReadiness'] = readiness
+            base.budget.atomic(p / 'state.json', state)
+            base.budget.atomic(p / 'public-readiness.json', readiness)
+        return result
+
+    def public_readiness(self, run_id, nonce, candidate_sha256):
+        # A second, confined readonly guest executes sealed source. Worker text
+        # and advisory checkpoint files cannot authorize READY. No paid transport.
+        p, state = self.state(run_id, nonce)
+        result = {'status': 'NOT_CHECKED', 'reason': 'deadline', 'candidateSha256': candidate_sha256}
+        remaining = min(180, state.get('deadline', 0) - time.time())
+        if remaining < 1:
+            return result
+        args = super().worker_args(run_id, state['request']['workerImage'])
+        at = args.index('--entrypoint')
+        # Remove gateway/task/native/config and writable src mounts. Read sealed
+        # source only; checks have their own scratch and no credential socket.
+        cleaned = []
+        index = 0
+        while index < len(args):
+            if args[index] == '--mount':
+                mount = args[index + 1]
+                if 'dst=/workspace,' in mount:
+                    cleaned += ['--mount', 'type=bind,src=' + str(p / 'sealed') + ',dst=/workspace,readonly']
+                index += 2
+                continue
+            cleaned.append(args[index]); index += 1
+        args = cleaned
+        args[args.index('--name') + 1] = 'forecode-public-ready-' + run_id
+        args[args.index('--label') + 1] = 'forecode.booking.team.public=' + run_id
+        at = args.index('--entrypoint')
+        for name in ['team-public-checks.mjs', 'team-public-session.mjs']:
+            args[at:at] = ['--mount', 'type=bind,src=' + str(HERE / name) + ',dst=/run/' + name + ',readonly']
+            at += 2
+        args[at:at] = ['--tmpfs', '/work:rw,nosuid,nodev,size=256m,mode=1777',
+                       '--env', 'FORECODE_DEADLINE=' + str(state['deadline'])]
+        args[-1] = '/run/team-public-checks.mjs'
+        cid = None
+        # Sealed directories are owner-private; a dedicated root-owned readonly
+        # copy is made traversable for UID1000, never the retained private seal.
+        public = p / 'public-source'
+        try:
+            shutil.copytree(p / 'sealed', public)
+            for parent, _, files in os.walk(public):
+                os.chmod(parent, 0o755)
+                for name in files: os.chmod(pathlib.Path(parent) / name, 0o444)
+            args = [a.replace(str(p / 'sealed') + ',dst=', str(public) + ',dst=') for a in args]
+            cid = self.docker(args).decode().strip()
+            with self.lock(run_id):
+                _, current = self.state(run_id, nonce)
+                current['publicContainerId'] = cid
+                base.budget.atomic(p / 'state.json', current)
+            remaining = min(180, state['deadline'] - time.time())
+            if remaining <= 0:
+                return result
+            output = self.docker(['start', '--attach', cid], timeout=remaining)
+            result.update(status='READY', reason='public-checks-passed', outputSha256=hashlib.sha256(output).hexdigest())
+        except Exception as error:
+            result.update(status='BLOCKED', reason='public-checks-failed-or-interrupted', errorClass=type(error).__name__ if type(error).__name__ in ['ValueError', 'TimeoutExpired', 'OSError'] else 'Exception')
+        finally:
+            # Failed candidates stay sealed. Removal failure is terminal and
+            # retained before the ordinary owned cleanup gets another chance.
+            try:
+                if cid: self.remove(run_id)
+            except BaseException as error:
+                self.record_failure(run_id, nonce, error)
+                raise
+            finally:
+                if public.exists(): shutil.rmtree(public)
+        return result
+
+    def remove_public(self, run_id):
+        p = self.directory(run_id)
+        file = p / 'state.json'
+        state = json.loads(base.read_regular(file)) if file.exists() else {}
+        ids = self.docker(['ps', '-aq', '--filter', 'label=forecode.booking.team.public=' + run_id]).decode().split()
+        if len(ids) > 1:
+            raise ValueError('extra public readiness containers')
+        for cid in ids:
+            info = json.loads(self.docker(['inspect', cid]))[0]
+            if (info['Name'] != '/forecode-public-ready-' + run_id
+                    or info['Config']['Labels'].get('forecode.booking.team.public') != run_id
+                    or (state.get('publicContainerId') and info['Id'] != state['publicContainerId'])):
+                raise ValueError('public readiness container ownership changed')
+            self.docker(['rm', '--force', info['Id']])
+        if self.docker(['ps', '-aq', '--filter', 'label=forecode.booking.team.public=' + run_id]).strip():
+            raise ValueError('public readiness worker remains')
+
+    def remove(self, run_id):
+        result = super().remove(run_id)
+        self.remove_public(run_id)
         return result
 
     def cleanup(self, run_id, nonce):
@@ -395,7 +495,7 @@ class TeamSupervisor(base.Supervisor):
         # budget/evidence records, but remove all run-owned runtime scratch.
         with self.lock(run_id):
             p, state = self.state(run_id, nonce)
-            for name in ['source', 'sealed', 'gateway']:
+            for name in ['source', 'sealed', 'gateway', 'public-source']:
                 target = p / name
                 if target.is_symlink():
                     raise ValueError('cleanup scratch alias')
@@ -408,7 +508,7 @@ class TeamSupervisor(base.Supervisor):
                 if task.is_symlink():
                     raise ValueError('cleanup task alias')
                 task.unlink()
-            if any((p / name).exists() for name in ['source', 'sealed', 'gateway', 'task.json']):
+            if any((p / name).exists() for name in ['source', 'sealed', 'gateway', 'public-source', 'task.json']):
                 raise ValueError('runtime scratch remains')
             state['scratchRemoved'] = True
             base.budget.atomic(p / 'state.json', state)

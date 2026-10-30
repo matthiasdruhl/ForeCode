@@ -333,3 +333,14 @@ with tempfile.TemporaryDirectory() as temp:
     assert supervisor.cleanup(run, nonce)['scratchRemoved']
     denied(lambda: supervisor.prepare_team(broken, {'inputMicroUsdPerToken':1,'outputMicroUsdPerToken':1}))
 print('partial preparation terminal state and cleanup passed; no runtime/inference')
+
+# Readiness expiration cannot execute a candidate or return READY. It remains
+# source-bound and distinct from a sealed native process result.
+with tempfile.TemporaryDirectory() as temp:
+    supervisor = team.TeamSupervisor(pathlib.Path(temp), lambda args: (_ for _ in ()).throw(AssertionError('no Docker after deadline')), lambda:'boot')
+    p = pathlib.Path(temp) / run
+    p.mkdir()
+    team.base.budget.atomic(p/'state.json', {'runId':run,'nonce':nonce,'stage':'sealed','deadline':0})
+    value=supervisor.public_readiness(run,nonce,'a'*64)
+    assert value=={'status':'NOT_CHECKED','reason':'deadline','candidateSha256':'a'*64}
+print('expired public readiness retained without guest execution or extra allowance')

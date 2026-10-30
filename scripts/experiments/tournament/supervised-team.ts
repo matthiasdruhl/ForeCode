@@ -28,6 +28,8 @@ import {
 import type { PairedTransport } from "./paired";
 import { teamEnforcementPlan, type TeamEnforcementPlan } from "./team-policy";
 
+import { PublicReadinessSchema } from "./team-readiness";
+
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const processSchema = z.strictObject({
   exitCode: z.number().int().min(0).max(255).nullable(),
@@ -52,6 +54,7 @@ const identitySchema = z.strictObject({
 });
 const finalizationSchema = identitySchema.extend({
   stage: z.literal("sealed"),
+  publicReadiness: PublicReadinessSchema,
   candidate: CandidateEnvelopeSchema,
   candidateSha256: hash,
   terminationConfirmed: z.literal(true),
@@ -533,7 +536,7 @@ function createTeamLifecycle(
       );
       s.bootId = result.bootId;
       s.containerId = result.containerId;
-      if (result.process.reason === "completed") s.phase = "terminated";
+      s.phase = "terminated";
       return result.process;
     },
     async finalizeAgent(runId, signal) {
@@ -550,7 +553,8 @@ function createTeamLifecycle(
           result.containerId === s.containerId &&
           result.requestSha256 === s.requestSha256 &&
           result.candidate.runId === runId &&
-          result.candidateSha256 === jsonDigest(result.candidate),
+          result.candidateSha256 === jsonDigest(result.candidate) &&
+          result.publicReadiness.candidateSha256 === result.candidateSha256,
         "Finalization identity changed.",
       );
       const finalManifest = result.candidate.files
@@ -565,6 +569,7 @@ function createTeamLifecycle(
       return immutable({
         runId,
         candidate: result.candidate,
+        publicReadiness: result.publicReadiness,
         candidateSha256: result.candidateSha256,
         terminationConfirmed: true,
         restartAbsenceConfirmed: true,

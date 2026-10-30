@@ -1,10 +1,10 @@
-# Glimmer QLoRA: Colab and Georgia Tech pilot
+# Glimmer QLoRA: Colab pilot
 
 Prepared October 30, 2026. Planning/preparation only; no runtime, purchase, account request, model download, data upload or training was performed. The proposed Colab envelope is 100 compute units, not an authorization already recorded in the training configuration. Existing spending approval remains zero. This document extends ML-Q1-PREPARATION.md.
 
 ## Recommendation
 
-Pursue Georgia Tech access while preparing a portable Colab fallback. Prefer one H100/H200 allocation if it can be approved promptly. A Colab A100 with at least 40 GB VRAM is a candidate for a short pilot after actual memory/software checks; no specific Colab GPU is guaranteed. Do not burn the 100-unit envelope repeatedly trying a 30B recipe on undersized hardware.
+Owner decision, October 30: use Colab as the primary path because access is already available. Georgia Tech is deferred; no access application or sponsor request is needed for this work. The [Colab notebook preparation](../research/qlora/README.md) now provides the offline-tested launch scaffold. Actual GPU compatibility remains unvalidated. A Colab A100 with at least 40 GB VRAM is a candidate for a short pilot after actual memory/software checks; no specific Colab GPU is guaranteed. Do not burn the 100-unit envelope repeatedly trying a 30B recipe on undersized hardware.
 
 Meta's [official training documentation](https://dev.meta.ai/docs/muse-glimmer/post-training) confirms a single-H100 QLoRA reference for the pinned Glimmer checkpoint. The [Axolotl language-model recipe](https://docs.axolotl.ai/docs/models/muse-glimmer.html) reports approximately 27 GiB VRAM. Neither establishes ForeCode's actual memory, throughput or time. Our engineering starting target is at least 40 GB VRAM, preferably 80 GB or more. A different low-memory recipe would need separate validation.
 
@@ -35,7 +35,7 @@ If the first stage cannot fit its envelope, stop and revise rather than consumin
 
 ## Shared training design
 
-Keep one model/config/dataset protocol with two launch surfaces: an interactive Colab notebook and a Georgia Tech job wrapper adapted to the actual approved scheduler. Avoid assuming a partition, account name or Slurm command before access details are known.
+Use one model/config/dataset protocol in the interactive Colab notebook. No Georgia Tech job wrapper is needed for the selected route. The earlier campus comparison and unsent request below remain background reference only.
 
 Base and tokenizer: meta-models/Muse-Glimmer-30B at a4e59da52a7bc87ae7251dd5545c0dd437c44b68. Preserve the published Axolotl 0.19.0 recipe as the reference. Freeze the base/vision tower and train only language projection adapters. Start with NF4/bf16 QLoRA, rank 32/alpha 16/dropout .05, batch 1, accumulation 4, LR 2e-4 and seed 42, matching the existing draft. Use short 512–1024-token smoke inputs; increase to the draft's 2048-token pilot only after memory checks.
 
@@ -66,7 +66,7 @@ Store training data and frequent checkpoints on suitable runtime/local scratch a
 
 Serving is a separate step. An adapter is a base-checkpoint-dependent artifact, not a fine-tuned Spark API model. First validate base-plus-adapter reload locally on approved compute; do not assume either Colab or a campus batch allocation is an always-on public inference service.
 
-## Information needed for the GT route
+## Deferred GT reference — no action planned
 
 Determine the actual access route (existing account, sponsor, course/event allocation or student application), supported project scope and approval lead time. Then obtain the GPU type/VRAM, ability to request a single GPU, account/queue/partition, maximum wall time, unit/billing policy, memory/scratch quota and download/egress/container rules.
 

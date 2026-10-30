@@ -1,5 +1,7 @@
 # ML workstream delivery — October 30
 
+Subsequent independent slices: [approved evidence intake](ML-EVIDENCE-INTAKE.md) and [offline shadow replay/decision drafts](ML-SHADOW-REPLAY.md). The latter now connects fresh evidence to persisted policy updates. Production source provisioning and independently measured outcomes remain outstanding; the original ML-Q0 delivery record below is historical.
+
 Branch: codex/meta-rl-learning-workstream. Worktree: /private/tmp/forecode-meta-rl-20261030 (outside all tracked parent repositories). Base: fetched main 54e72b2. Implementation: 23d8f7c; chronology/history hardening: c5e8c48; QLoRA preparation is the subsequent commit in this PR. No branch was merged. Planning and other agents' checkouts were not modified.
 
 **Implemented:** closed versioned KEEP/BOUNDARY/ADAPTER and ABSTAIN decision contracts; deterministic 21-dimensional pre-decision features with unknowns; separate Spark/Glimmer proposal provenance; intake requiring existing authenticated evaluator/custody objects and independent projection approval; separate correctness/conditional preparation-inclusive USD rewards; real constrained disjoint LinUCB updates; immutable datasets, family splits, policy ancestry, persistence/reload/replay and rollback; train-only evidence retrieval; roadmap-aware fixed control; matched 2×2 analysis. Everything stays operator-local and advisory.

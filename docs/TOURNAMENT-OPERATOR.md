@@ -1,6 +1,10 @@
 # Tournament operator handoff
 
-**Current status — October 30:** Owner-designated AI technical review, dedicated installation and actual inert controls are complete. Source-only B preparation and current protected baseline checks are recorded. The registered case02 remains disabled pending exact $6 pair-spending consent and fresh per-study runtime admission. [Installed acceptance and next operation](BOOKING-TEAM-INERT-ACCEPTANCE.md) supersedes historical status statements below; no downstream A/B model result exists.
+**Current status — October 30:** The owner authorized necessary Contributor spending and delegated technical review/operator work to AI. Exact scoped owner-AI runtime admission and actual installed observations now exist; case06 uses `muse-spark-1.3-contributor` with optional reasoning summaries omitted and separate native/broker token guards. Historical case03/04 failed attempts are authenticated and retained privately; case05 stopped in no-upstream preflight. Review/custody share the implementation context, with no independent human, organizational or blind review. [Contributor accounting](CONTRIBUTOR-USAGE-ACCOUNTING.md) and [installed acceptance](BOOKING-TEAM-INERT-ACCEPTANCE.md) supersede earlier pending-spending and empty-catalog statements. The declared ordered pair is complete; genuine protected/runtime/history originals and usage accounting were freshly authenticated privately. Full-task correctness remains inconclusive. Both dedicated guests are stopped, the consumed registration is disabled and the owned lease is released. Public result disclosure remains disabled.
+
+## Historical pre-admission handoff
+
+The following handoff records the earlier unadmitted state; the current status and accounting above supersede its pending authorization statements.
 
 Implementation is preparation tooling, not authorization to run a study. No actual B, original study commitments, paid future-task attempt or publication approval has been supplied. The existing smoke and private grader acceptance keep their original scopes.
 

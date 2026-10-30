@@ -1,5 +1,11 @@
 # Installed team transport acceptance — October 30, 2026
 
+**Subsequent authorized work:** The owner explicitly authorized necessary spending and selected Contributor. Cases03/04 exercised the paid lifecycle and retained their failed attempts privately. Case05 stopped in zero-upstream preflight. Case06 prospectively binds corrected transport, summary omission and separate native/broker guards, with identical Contributor limits for both arms. Exact scope, prices and limits are recorded in [Contributor accounting](CONTRIBUTOR-USAGE-ACCOUNTING.md). This supersedes the historical pending-consent/unused-Standard state below. The one ordered pair has completed; its authenticated private report records inconclusive full-task correctness and all failures. Both dedicated guests are stopped, the consumed registration is disabled and the lease is released. No public comparative recording is authorized.
+
+## Historical case02 acceptance record
+
+The following record predates Contributor execution. Its disabled registration, unused Standard proposal and pending-consent statements describe that earlier case only. The current status above and Contributor accounting supersede them.
+
 The owner delegated implementation, technical review and operator work to the AI. The dedicated team transport is installed and has passed actual no-inference sandbox controls. The AI performed source-only B preparation and protected original-baseline verification. The downstream A/B model experiment has **not run**. Spending, per-study operational admission and public result publication remain disabled.
 
 This is owner-designated AI review in the implementation context. It supplies no independent human, organizational or blind review. Cryptographic signatures authenticate these particular records and their chronology; they do not create reviewer independence. The operator and architecture documents below retain historical statements; this record supersedes their earlier empty-catalog, uninstalled and no-real-controls status.
@@ -34,7 +40,7 @@ These are installed maintenance observations, not a per-study runtime admission.
 
 Pinned coding image: `sha256:f53ce5467a39d55ed8dde1ed9191af3151cfae3f000903babbef48222d173091`. Pinned grader image: `sha256:f34a6b6b4712646f4eef562c5690d2b9302bd8ad9faafc4ad6fe7ff6dacdd989`. Pinned team config: `7b37e3b68acf57bbfe06bd24a5137c58b84b70e0e207bba04e50c8f3e4addbfe`. Pinned team helper: `2c690bdd12632359f1aa697c546e0350414a3e1b5650ab9543afe6f97729b407`. Private oracle assertion hash remains `3100d52acdf7e627f93acbc74245857e3e79c35cc0b19b5cc710c81927ad094c`.
 
-## Prepared study and next operation
+## Historical prepared case02 study and proposed operation
 
 Case01 genuinely froze its protocol, prepared an owner-policy seam and passed both baseline checks, then failed preparation-manifest validation on the unchanged fixture's dynamic route. All its originals, commits, failures and unknown authoring costs remain retained. It obtained no prepared-study admission and made no downstream attempt.
 

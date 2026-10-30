@@ -37,45 +37,22 @@ import {
 import type { ProcessResult } from "../runner/process";
 import { isPreparedStudy, sourceDiff, type PreparedStudy } from "./study";
 import { requireHeldRecord, immutable } from "./custody";
+import {
+  isAdmittedSupervisedTeamTransport,
+  teamCompositionBlockers,
+} from "./supervised-team";
 
-export type Variant = "A" | "B";
-export function sharedFutureTask(study: PreparedStudy) {
-  invariant(isPreparedStudy(study), "Authenticated study required.");
-  const d = study.definition,
-    p = d.protocol;
-  return immutable({
-    task: p.task,
-    prompt: d.downstreamPrompt,
-    adapterInstructions: d.adapterInstructions,
-    tools: d.toolAllowlist,
-    model: p.executionConditions[0]!.modelId,
-    agent: p.executionConditions[0]!.agentId,
-    resources: p.executionConditions[0]!.resources,
-    runtime: d.runtime,
-    restrictions: d.restrictions,
-    seed: p.conditions[0]!.seed,
-    budget: p.conditions[0]!.budget,
-  });
-}
-export function pairedRuntimeSubject(
-  study: PreparedStudy,
-  implementationSha256: string,
-  variant: Variant,
-) {
-  const arm = study.draft.plan.manifest.arms.find(
-    (x) => x.variant === variant,
-  )!;
-  return jsonDigest({
-    purpose: "supervised-booking-team-future-v1",
-    preparedOriginalSha256: study.prepared.sha256,
-    implementationSha256,
-    variant,
-    runId: arm.runId,
-    sourceCommit: arm.initialCommit,
-    sourceTreeSha256: arm.initialTreeSha256,
-    sharedTaskSha256: jsonDigest(sharedFutureTask(study)),
-  });
-}
+import {
+  sharedFutureTask,
+  pairedRuntimeSubject,
+  type Variant,
+} from "./paired-inputs";
+export {
+  sharedFutureTask,
+  pairedRuntimeSubject,
+  type Variant,
+} from "./paired-inputs";
+
 export type PairedTransport = {
   kind: "synthetic-development" | "supervised-team";
   baseline(
@@ -102,10 +79,10 @@ export type PairedTransport = {
 };
 // No unchecked 'admitted:true' or transport.kind can grant a live capability.
 // This set intentionally has no registration API/default production member.
-const admittedLiveTransports = new WeakSet<object>();
 export const pairedRuntimeBlockers = [
   "TEAM_AGENT_PROFILE_NOT_INDEPENDENTLY_ADMITTED",
   "EXACT_STUDY_RUNTIME_AND_SPENDING_AUTHORITY_REQUIRED",
+  ...teamCompositionBlockers,
 ] as const;
 const ProcessSchema = z.strictObject({
   exitCode: z.number().int().min(0).max(255).nullable(),
@@ -162,7 +139,7 @@ export async function runPairedTournament(input: {
     studyId = study.definition.protocol.studyId;
   if (
     transport.kind !== "synthetic-development" &&
-    !admittedLiveTransports.has(transport)
+    !isAdmittedSupervisedTeamTransport(transport)
   )
     return {
       kind: "blocked_paired_execution",

@@ -1,6 +1,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { protectedRead, privateDirectory } from "../artifacts/files";
+import { teamCompositionBlockers } from "./supervised-team";
 import { realAgentExecutionBlockers } from "../runner/commitment";
 import { canonicalJson } from "../../../src/lib/report/canonical";
 import { buildTournamentReport, tournamentExecutionBlockers } from "./report";
@@ -40,6 +41,7 @@ export async function tournamentCli(args: readonly string[]): Promise<number> {
         execution: "DISABLED",
         blockers: tournamentExecutionBlockers,
         runtimeBlockers: realAgentExecutionBlockers,
+        teamRuntimeBlockers: teamCompositionBlockers,
       }) + "\n",
     );
     return 2;

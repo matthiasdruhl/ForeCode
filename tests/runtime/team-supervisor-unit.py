@@ -301,16 +301,21 @@ print('team summary omission and actual-shape over-reservation refusal passed; n
 
 with tempfile.TemporaryDirectory() as temp:
     body = json.loads(json.dumps(request))
-    body['enforcement']['tokenLimit'] = 4_000_000
+    body['enforcement']['tokenLimit'] = 32_000_000
     body['enforcement']['nativeRolloutTokenLimit'] = 1_000_000
     body['enforcement']['restrictions']['maxOutputTokens'] = 32768
     supervisor = team.TeamSupervisor(pathlib.Path(temp), lambda args: b'', lambda: 'synthetic-boot')
     with patch.object(team.base.os, 'chown'):
         supervisor.prepare_team(body, {'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
     p, state = supervisor.state(run, nonce)
-    assert state['request']['tokenLimit'] == 4_000_000
+    assert state['request']['tokenLimit'] == 32_000_000
     assert json.loads((p / 'task.json').read_bytes())['tokenLimit'] == 1_000_000
     assert (p / 'task.json').stat().st_mode & 0o777 == 0o444
     body['enforcement']['nativeRolloutTokenLimit'] = 4_000_000
     denied(lambda: team.preparation_request(body))
-print('separate4M conservative broker /1M native rollout guards passed; no upstream')
+print('separate32M conservative broker /1M native rollout guards passed; no upstream')
+
+for field, value in [('tokenLimit', 32_000_001), ('spendMicroUsd', 40_000_001)]:
+    changed = json.loads(json.dumps(request))
+    changed['enforcement'][field] = value
+    denied(lambda: team.preparation_request(changed))

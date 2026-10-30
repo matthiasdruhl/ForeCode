@@ -54,6 +54,16 @@ def atomic(file, value):
             os.unlink(temp)
 
 
+class ReservationCapacityError(ValueError):
+    """Safe numeric projection; no provider or caller text belongs here."""
+    def __init__(self, input_upper, token_output, money_output, minimum):
+        super().__init__('hard reservation exhausted')
+        self.projection = {'inputTokenUpperBound': input_upper,
+                           'tokenOutputCapacity': token_output,
+                           'moneyOutputCapacity': money_output,
+                           'minimumOutputTokens': minimum}
+
+
 class Reservations:
     """Serial server: reserve worst-case tokens/microUSD durably, never refund."""
     def __init__(self, directory, request):
@@ -126,13 +136,13 @@ class Reservations:
         # Deliberately conservative: all UTF-8 request bytes plus a fixed
         # framing allowance. No cached-input discount, hidden context or refund.
         input_upper = len(canonical(body)) + count * 32 + 16384 + opaque_upper
-        output = min(provider['maxOutputTokens'],
-                     r['tokenLimit'] - self.value['reservedTokens'] - input_upper)
+        token_output = r['tokenLimit'] - self.value['reservedTokens'] - input_upper
         micro_left = r['spendMicroUsd'] - self.value['reservedMicroUsd']
-        output = min(output, (micro_left - input_upper * provider['inputMicroUsdPerToken'])
-                     // provider['outputMicroUsdPerToken'])
+        money_output = (micro_left - input_upper * provider['inputMicroUsdPerToken']) // provider['outputMicroUsdPerToken']
+        output = min(provider['maxOutputTokens'], token_output, money_output)
         if output < self.profile['minimumOutputTokens']:
-            raise ValueError('hard reservation exhausted')
+            raise ReservationCapacityError(input_upper, token_output, money_output,
+                                           self.profile['minimumOutputTokens'])
         body['max_output_tokens'] = output
         reserved = input_upper * provider['inputMicroUsdPerToken'] + output * provider['outputMicroUsdPerToken']
         self.value['reservedTokens'] += input_upper + output
@@ -292,26 +302,35 @@ def provider_request(body):
         return data, response.headers.get('Content-Type', 'application/json')
 
 
-def serve(socket_path, reservations, upstream=provider_request):
+def serve(socket_path, reservations, upstream=provider_request, refusal=None):
     class Handler(http.server.BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass  # Never log headers, provider content, auth or private text.
 
         def do_POST(self):
+            stage = 'http-preflight'
             try:
                 size = int(self.headers.get('Content-Length', '-1'))
                 if self.path != '/v1/responses' or not 0 <= size <= 1_048_576 or self.headers.get('Transfer-Encoding'):
                     raise ValueError('unsupported request')
+                stage = 'reservation'
                 body = reservations.reserve(self.rfile.read(size))
+                stage = 'upstream'
                 try:
                     output, content_type = upstream(body)  # Exactly one attempt.
                 except Exception:
                     reservations.block()
                     raise
+                stage = 'response-validation'
                 reservations.observe(output, content_type, body)
                 self.send_response(200)
                 self.send_header('Content-Type', content_type)
-            except Exception:
+            except Exception as error:
+                if refusal is not None:
+                    try:
+                        refusal(error, stage)
+                    except Exception:
+                        pass  # Diagnostics cannot change the fixed denial envelope.
                 output = b'{"error":{"message":"Bounded provider request unavailable"}}'
                 self.send_response(403)
                 self.send_header('Content-Type', 'application/json')

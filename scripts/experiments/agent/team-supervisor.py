@@ -36,6 +36,54 @@ def exact_int(value, lower, upper):
 
 
 class TeamReservations(base.budget.Reservations):
+    def record_refusal(self, error, stage, raw=None):
+        # First refusal wins. Latch before disk I/O: a logging failure must not
+        # authorize a later send. Parent is supervisor-owned, outside mounts.
+        if getattr(self, 'local_refused', False):
+            return
+        self.local_refused = True
+        codes = {
+            'team request byte ceiling': 'request-bytes',
+            'team request ceiling': 'request-count',
+            'team iteration ceiling': 'iteration-count',
+            'budget deadline or request limit': 'deadline-or-request-bytes',
+            'input depth/size': 'history-nodes',
+            'bounded team history structure': 'team-history-nodes',
+            'opaque context not from this reserved attempt': 'unauthenticated-opaque-context',
+            'prohibited team capability': 'tool-declaration',
+            'prohibited team history capability': 'history-tool',
+            'provider outcome requires owner review': 'provider-breaker',
+        }
+        projection = error.projection if isinstance(error, base.budget.ReservationCapacityError) else None
+        code = codes.get(str(error), 'invalid-request' if stage == 'reservation' else stage)
+        if isinstance(error, base.budget.ReservationCapacityError):
+            minimum = projection['minimumOutputTokens']
+            token = projection['tokenOutputCapacity'] < minimum
+            money = projection['moneyOutputCapacity'] < minimum
+            code = 'token-and-money-capacity' if token and money else 'token-capacity' if token else 'money-capacity'
+        value = {'schemaVersion': 'team-broker-refusal.local.v1', 'stage': stage, 'reasonCode': code,
+                 'requestCount': len(self.value['requests']), 'maxRequests': self.request['maxRequests'],
+                 'maxIterations': self.request['maxIterations'], 'reservedTokens': self.value['reservedTokens'],
+                 'tokenLimit': self.request['tokenLimit'], 'reservedMicroUsd': self.value['reservedMicroUsd'],
+                 'spendMicroUsd': self.request['spendMicroUsd'],
+                 'deadlineReached': time.time() >= self.request['deadline'],
+                 'lastAdmittedRequestSha256': self.value['requests'][-1]['requestSha256'] if self.value['requests'] else None,
+                 'refusedRequestSha256': hashlib.sha256(raw).hexdigest() if isinstance(raw, bytes) else None,
+                 'requestBytes': len(raw) if isinstance(raw, bytes) else None, 'projection': projection}
+        # Immutable, fsynced, root-private and bounded; never exception text,
+        # raw inputs, credentials, headers, native output or provider bodies.
+        file = self.file.parent / 'broker-refusal.json'
+        fd = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+        with os.fdopen(fd, 'wb') as out:
+            out.write(base.budget.canonical(value))
+            out.flush()
+            os.fsync(out.fileno())
+        directory = os.open(file.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+
     def block(self):
         # Latch first. Diagnostics never authorize another provider request.
         error = sys.exc_info()[1]
@@ -70,10 +118,22 @@ class TeamReservations(base.budget.Reservations):
             raise
 
     def reserve(self, raw):
+        if getattr(self, 'local_refused', False):
+            raise ValueError('team broker already refused')
+        try:
+            return self.reserve_team(raw)
+        except Exception as error:
+            self.record_refusal(error, 'reservation', raw)
+            raise
+
+    def reserve_team(self, raw):
         r = self.request
-        if (len(raw) > 1_048_576 or len(self.value['requests']) >= r['maxRequests']
-                or len(self.value['requests']) >= r['maxIterations']):
-            raise ValueError('team request or iteration ceiling')
+        if len(raw) > 1_048_576:
+            raise ValueError('team request byte ceiling')
+        if len(self.value['requests']) >= r['maxRequests']:
+            raise ValueError('team request ceiling')
+        if len(self.value['requests']) >= r['maxIterations']:
+            raise ValueError('team iteration ceiling')
         body = json.loads(raw)
         if not isinstance(body, dict):
             raise ValueError('provider object required')
@@ -188,7 +248,7 @@ def serve_team(socket_path, reservations, upstream=None):
     # production dispatch accepts no request-selected callable or endpoint.
     if upstream is None:
         upstream = lambda body: team_provider_request(body, reservations.request['deadline'])
-    return _base_serve(socket_path, reservations, upstream)
+    return _base_serve(socket_path, reservations, upstream, reservations.record_refusal)
 
 
 base.budget.serve = serve_team
@@ -214,11 +274,11 @@ def preparation_request(request):
         raise ValueError('unsupported confinement')
     exact_int(e['maxIterations'], 1, 100)
     exact_int(e['maxSeconds'], 1, 600)
-    exact_int(e['tokenLimit'], 1, 4_000_000)
+    exact_int(e['tokenLimit'], 1, 32_000_000)
     native_limit = min(e['tokenLimit'], 1_000_000)
     if e.get('nativeRolloutTokenLimit', native_limit) != native_limit:
         raise ValueError('fixed native rollout guard')
-    exact_int(e['spendMicroUsd'], 1, 10_000_000)
+    exact_int(e['spendMicroUsd'], 1, 40_000_000)
     exact_int(r['maxRequests'], 1, 100)
     exact_int(r['maxOutputTokens'], 16, min(32768, e['tokenLimit']))
     exact_int(resources['outputBytes'], 1024, 8_000_000)
@@ -262,7 +322,7 @@ class TeamSupervisor(base.Supervisor):
         result = super().prepare(transformed)
         # The unchanged smoke bridge validates a1M native rollout counter.
         # Keep that stricter actual-token guard while the outside-worker
-        # broker separately reserves up to4M worst-case byte/opaque tokens.
+        # broker separately reserves up to32M worst-case byte/opaque tokens.
         native_limit = min(transformed['tokenLimit'], 1_000_000)
         if native_limit != transformed['tokenLimit']:
             p = self.directory(request['runId'])

@@ -77,6 +77,15 @@ class TeamReservations(base.budget.Reservations):
         body = json.loads(raw)
         if not isinstance(body, dict):
             raise ValueError('provider object required')
+        reasoning = body.get('reasoning', {})
+        if (not isinstance(reasoning, dict)
+                or set(reasoning) - {'effort', 'summary', 'generate_summary'}
+                or reasoning.get('effort', 'high') != 'high'):
+            raise ValueError('fixed team reasoning profile')
+        # Optional summaries produced additional billed tokens beyond the
+        # requested cap in actual Meta responses. Omit them; keep encrypted
+        # replay and the strict reported-usage bound, with no token refunds.
+        body['reasoning'] = {'effort': 'high'}
         tools = body.get('tools', [])
         if not isinstance(tools, list):
             raise ValueError('tools array required')
@@ -205,10 +214,13 @@ def preparation_request(request):
         raise ValueError('unsupported confinement')
     exact_int(e['maxIterations'], 1, 100)
     exact_int(e['maxSeconds'], 1, 600)
-    exact_int(e['tokenLimit'], 1, 1_000_000)
+    exact_int(e['tokenLimit'], 1, 4_000_000)
+    native_limit = min(e['tokenLimit'], 1_000_000)
+    if e.get('nativeRolloutTokenLimit', native_limit) != native_limit:
+        raise ValueError('fixed native rollout guard')
     exact_int(e['spendMicroUsd'], 1, 10_000_000)
     exact_int(r['maxRequests'], 1, 100)
-    exact_int(r['maxOutputTokens'], 16, min(8192, e['tokenLimit']))
+    exact_int(r['maxOutputTokens'], 16, min(32768, e['tokenLimit']))
     exact_int(resources['outputBytes'], 1024, 8_000_000)
     candidate = request['candidate']
     manifest = [{'path': f['path'], 'sha256': hashlib.sha256(base.base64.b64decode(f['base64'], validate=True)).hexdigest()}
@@ -248,6 +260,28 @@ class TeamSupervisor(base.Supervisor):
         transformed['provider'] = {**provider, 'endpoint': 'https://api.meta.ai/v1/responses',
                                    'maxOutputTokens': request['enforcement']['restrictions']['maxOutputTokens']}
         result = super().prepare(transformed)
+        # The unchanged smoke bridge validates a1M native rollout counter.
+        # Keep that stricter actual-token guard while the outside-worker
+        # broker separately reserves up to4M worst-case byte/opaque tokens.
+        native_limit = min(transformed['tokenLimit'], 1_000_000)
+        if native_limit != transformed['tokenLimit']:
+            p = self.directory(request['runId'])
+            task = json.loads(base.read_regular(p / 'task.json'))
+            if task['tokenLimit'] != transformed['tokenLimit']:
+                raise ValueError('native task mapping changed')
+            task['tokenLimit'] = native_limit
+            temp = p / 'native-task.next'
+            fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o444)
+            with os.fdopen(fd, 'wb') as out:
+                out.write(base.budget.canonical(task))
+                out.flush()
+                os.fsync(out.fileno())
+            os.replace(temp, p / 'task.json')
+            directory = os.open(p, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
         # Persist the reservation directory before any later start can fork.
         parent = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
         try:

@@ -277,3 +277,40 @@ with patch.dict(team.os.environ, {'HTTPS_PROXY': 'http://synthetic.invalid'}, cl
     denied(lambda: team.team_provider_request(b'{"model":"arbitrary"}', 500))
     assert opener.calls == [120, 5]
 print('team deadline-bounded provider transport and protected failure diagnostics passed; no upstream')
+
+# Match the actual overrun shape: optional summaries must be omitted, and
+# reported output above the original reservation is still rejected.
+with tempfile.TemporaryDirectory() as temp:
+    r = team.preparation_request(request)
+    r.update(deadline=time.time()+10, tokenLimit=200000, provider={
+        'endpoint': 'https://api.meta.ai/v1/responses', 'maxOutputTokens': 8192,
+        'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+    reservations = team.TeamReservations(pathlib.Path(temp), r)
+    sent = reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert',
+        'reasoning': {'effort': 'high', 'summary': 'auto'}}).encode())
+    assert json.loads(sent)['reasoning'] == {'effort': 'high'}
+    assert json.loads(sent)['max_output_tokens'] == 8192
+    response = {'object': 'response', 'model': r['model'], 'service_tier': 'auto',
+        'status': 'incomplete', 'output': [{'type': 'reasoning', 'id': 'synthetic'}],
+        'usage': {'input_tokens': 1, 'output_tokens': 8403, 'total_tokens': 8404}}
+    denied(lambda: reservations.observe(json.dumps(response).encode(), 'application/json', sent))
+    assert reservations.value['blockedReason'] == 'provider-outcome-unverified'
+    assert 'observedUsage' not in reservations.value['requests'][0]
+    denied(lambda: reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert'}).encode()))
+print('team summary omission and actual-shape over-reservation refusal passed; no upstream')
+
+with tempfile.TemporaryDirectory() as temp:
+    body = json.loads(json.dumps(request))
+    body['enforcement']['tokenLimit'] = 4_000_000
+    body['enforcement']['nativeRolloutTokenLimit'] = 1_000_000
+    body['enforcement']['restrictions']['maxOutputTokens'] = 32768
+    supervisor = team.TeamSupervisor(pathlib.Path(temp), lambda args: b'', lambda: 'synthetic-boot')
+    with patch.object(team.base.os, 'chown'):
+        supervisor.prepare_team(body, {'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+    p, state = supervisor.state(run, nonce)
+    assert state['request']['tokenLimit'] == 4_000_000
+    assert json.loads((p / 'task.json').read_bytes())['tokenLimit'] == 1_000_000
+    assert (p / 'task.json').stat().st_mode & 0o777 == 0o444
+    body['enforcement']['nativeRolloutTokenLimit'] = 4_000_000
+    denied(lambda: team.preparation_request(body))
+print('separate4M conservative broker /1M native rollout guards passed; no upstream')

@@ -70,7 +70,7 @@ export const StudyDefinitionSchema = z.strictObject({
     network: z.literal("none"),
     credentials: z.literal("trusted_broker_only"),
     maxRequests: z.number().int().min(1).max(100),
-    maxOutputTokens: z.number().int().min(16).max(8192),
+    maxOutputTokens: z.number().int().min(16).max(32768),
   }),
   comparisonMetrics: z.tuple([
     z.literal("correctness"),

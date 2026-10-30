@@ -371,6 +371,20 @@ describe("dedicated supervised team contract, no inference", () => {
       ),
     ).rejects.toThrow("COMPOSITION");
   });
+  it("admits explicitly committed larger reasoning/output and replay reservations", async () => {
+    const f = await fixture();
+    const definition = structuredClone(f.study.definition);
+    for (const condition of definition.protocol.conditions) {
+      condition.budget.tokenLimit = 4_000_000;
+      condition.budget.spendUsd = 6;
+    }
+    definition.restrictions.maxOutputTokens = 32768;
+    const plan = teamEnforcementPlan(definition);
+    expect(plan.tokenLimit).toBe(4_000_000);
+    expect(plan.nativeRolloutTokenLimit).toBe(1_000_000);
+    expect(plan.spendMicroUsd).toBe(6_000_000);
+    expect(plan.restrictions.maxOutputTokens).toBe(32768);
+  });
   it.each([
     "seed",
     "iteration",
@@ -412,10 +426,10 @@ describe("dedicated supervised team contract, no inference", () => {
     if (defect === "network") c.networkPolicySha256 = "0".repeat(64);
     if (defect === "credentials") c.credentialPolicySha256 = "0".repeat(64);
     if (defect === "roadmap") c.visibleRoadmapSha256 = "0".repeat(64);
-    if (defect === "token") c.budget.tokenLimit = 1_000_001;
+    if (defect === "token") c.budget.tokenLimit = 4_000_001;
     if (defect === "spend") c.budget.spendUsd = 0;
     if (defect === "precision") c.budget.spendUsd = 0.0000001;
-    if (defect === "provider-output") d.restrictions.maxOutputTokens = 10001;
+    if (defect === "provider-output") d.restrictions.maxOutputTokens = 32769;
     if (defect === "timeout") c.budget.maxSeconds = 601;
     if (defect === "old-task")
       Object.assign(d.protocol.task, { id: "booking-ownership-refactor-v1" });

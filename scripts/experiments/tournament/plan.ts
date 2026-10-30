@@ -23,7 +23,7 @@ export const OracleSchema = z.strictObject({
   requiredPolicySha256: Sha256Schema,
   requiredCheckIds: ids(64, 1),
 });
-const ArmConditionsSchema = z.strictObject({
+export const ArmConditionsSchema = z.strictObject({
   variant: z.enum(["A", "B"]),
   originalCommit: GitCommitSchema,
   originalTreeSha256: Sha256Schema,

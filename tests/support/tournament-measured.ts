@@ -16,10 +16,19 @@ import {
   pairedRuntimeSubject,
   sharedFutureTask,
 } from "../../scripts/experiments/tournament/paired";
+import {
+  teamAgentId,
+  teamNetworkPolicy,
+  teamCredentialPolicy,
+  teamRoadmapDigest,
+  teamEnforcementPlan,
+} from "../../scripts/experiments/tournament/team-policy";
+import { supervisedTeamRuntimeSubject } from "../../scripts/experiments/tournament/supervised-team";
 import { studyFixture } from "./tournament-study";
 import { syntheticEvaluation } from "./tournament-evidence";
 export async function measuredFixture(
   options: {
+    installedRuntime?: boolean;
     failA?: boolean;
     failB?: boolean;
     missingB?: string;
@@ -31,19 +40,44 @@ export async function measuredFixture(
     noFutureB?: boolean;
   } = {},
 ) {
-  const data = await studyFixture(
-    options.telemetry
+  const fixtureOptions = options.telemetry
+    ? {
+        preparationMetrics: {
+          elapsedMs: 60000,
+          tokens: 200,
+          costUsd: 0.5,
+          iterations: 1,
+          filesTouched: 2,
+        },
+      }
+    : {};
+  const data = await studyFixture({
+    ...fixtureOptions,
+    ...(options.installedRuntime
       ? {
-          preparationMetrics: {
-            elapsedMs: 60000,
-            tokens: 200,
-            costUsd: 0.5,
-            iterations: 1,
-            filesTouched: 2,
+          configure(d, draft) {
+            for (const c of d.protocol.conditions) {
+              c.seed = null;
+              c.budget.tokenLimit = 100000;
+              c.networkPolicySha256 = jsonDigest(teamNetworkPolicy);
+              c.credentialPolicySha256 = jsonDigest(teamCredentialPolicy);
+              c.visibleRoadmapSha256 = teamRoadmapDigest(d);
+            }
+            for (const e of d.protocol.executionConditions)
+              e.agentId = teamAgentId;
+            draft.plan.conditions = structuredClone(d.protocol.conditions);
+            draft.executionConditions = structuredClone(
+              d.protocol.executionConditions,
+            );
+            draft.plan.manifest.budget = structuredClone(
+              d.protocol.conditions[0]!.budget,
+            );
+            draft.plan.visibleRoadmapSha256 =
+              d.protocol.conditions[0]!.visibleRoadmapSha256;
           },
         }
-      : {},
-  );
+      : {}),
+  });
   const runtimeRoot = path.join(data.parent, "runtime-originals"),
     evaluationRoot = path.join(data.parent, "protected-evaluations");
   for (const root of [runtimeRoot, evaluationRoot])
@@ -89,7 +123,7 @@ export async function measuredFixture(
       requiredPolicySha256:
         data.study.draft.plan.futureOracle.requiredPolicySha256,
       isolationAttestationId: null,
-      seed: 1,
+      seed: data.study.definition.protocol.conditions[0]!.seed,
       startedAt,
       endedAt,
       verificationId: `verify-receipt-${runId}`,
@@ -176,6 +210,38 @@ export async function measuredFixture(
       ),
       predecessorSha256: data.study.prepared.sha256,
     }))!;
+    let installedAdmissionId: string | undefined;
+    if (options.installedRuntime) {
+      installedAdmissionId = `installed-admission-${variant}`;
+      const provider = { inputMicroUsdPerToken: 1, outputMicroUsdPerToken: 1 },
+        inventorySha256 = "8".repeat(64),
+        compositionSha256 = "9".repeat(64);
+      const installed = (await data.hold({
+        id: installedAdmissionId,
+        studyId,
+        kind: "runtime",
+        heldAt: "2026-10-28T12:05:30.000Z",
+        subjectSha256: supervisedTeamRuntimeSubject({
+          study: data.study,
+          variant,
+          implementationSha256: original.implementationSha256,
+          inventorySha256,
+          compositionSha256,
+          provider,
+          pairedAuthorizationSha256: admission.sha256,
+        }),
+        predecessorSha256: admission.sha256,
+      }))!;
+      original.installedRuntime = {
+        admissionSha256: installed.sha256,
+        inventorySha256,
+        compositionSha256,
+        provider,
+        enforcementSha256: jsonDigest(
+          teamEnforcementPlan(data.study.definition),
+        ),
+      };
+    }
     const execution = (await data.hold({
       id: `execution-${variant}`,
       studyId,
@@ -229,6 +295,7 @@ export async function measuredFixture(
       loadRecord: async (id: string) =>
         (await createStudyCustodyStore(data.config)).load(id),
       admissionId: admission.record.id,
+      installedAdmissionId,
       executionId: execution.record.id,
       telemetryId,
       loadEvaluation: async (id: string) =>

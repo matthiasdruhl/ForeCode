@@ -12,6 +12,9 @@ const extras = [
     "team-worker.mjs",
     "team-public-checks.mjs",
     "team-public-session.mjs",
+    "team-workflow.mjs",
+    "team-source-write.mjs",
+    "team-shell-hook.sh",
   ].map((name) => ({
     source: `scripts/experiments/agent/${name}`,
     target: `team/agent/${name}`,

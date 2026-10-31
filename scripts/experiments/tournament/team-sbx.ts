@@ -475,6 +475,7 @@ function buildControls(
         signal,
         input,
         16_000_000,
+        operation === "finalize" ? 180_000 : 30_000,
       ),
     );
   }

@@ -36,6 +36,125 @@ def exact_int(value, lower, upper):
 
 
 class TeamReservations(base.budget.Reservations):
+    def __init__(self, directory, request):
+        self.contract_clock = time.monotonic()
+        self.contract_failed = False
+        super().__init__(directory, request)
+
+    def contract_event(self, stage, sent, details=None):
+        # Append-only diagnostic observations, never admission/correctness
+        # authority. Only fixed callers supply stages and closed projections.
+        # A failed write latches before raising, including direct test callers.
+        try:
+            if self.contract_failed or stage not in (
+                    'admitted', 'upstream-started', 'upstream-failed',
+                    'response-received', 'response-accepted', 'response-rejected'):
+                raise ValueError('invalid contract stage')
+            ordinal = len(self.value['requests'])
+            digest = hashlib.sha256(sent).hexdigest()
+            if not ordinal or self.value['requests'][-1]['requestSha256'] != digest:
+                raise ValueError('unreserved contract observation')
+            value = {
+                'schemaVersion': 'team-request-contract-observation.local.v1',
+                'ordinal': ordinal, 'stage': stage, 'requestSha256': digest,
+                'observedAtEpochMs': int(time.time() * 1000),
+                'brokerElapsedMs': max(0, int((time.monotonic() - self.contract_clock) * 1000)),
+                'details': details or {},
+            }
+            raw = base.budget.canonical(value)
+            if len(raw) > 8192:
+                raise ValueError('bounded contract observation')
+            file = self.file.parent / f'request-{ordinal:04d}-{stage}.json'
+            fd = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+            with os.fdopen(fd, 'wb') as out:
+                if out.write(raw) != len(raw):
+                    raise OSError('incomplete diagnostic write')
+                out.flush()
+                os.fsync(out.fileno())
+            parent = os.open(self.file.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(parent)
+            finally:
+                os.close(parent)
+        except Exception:
+            self.contract_failed = True
+            raise ValueError('team contract diagnostics unavailable') from None
+
+    @staticmethod
+    def kind_counts(items):
+        # Never use untrusted names/types as persisted object keys.
+        kinds = {'message', 'reasoning', 'function_call', 'function_call_output',
+                 'custom_tool_call', 'custom_tool_call_output'}
+        counts = {}
+        for item in items[:4096]:
+            kind = item.get('type') if isinstance(item, dict) else None
+            kind = kind if isinstance(kind, str) and kind in kinds else 'other'
+            counts[kind] = counts.get(kind, 0) + 1
+        return {'counts': counts, 'truncated': len(items) > 4096}
+
+    def request_contract(self, sent):
+        # Inspect the final canonical bytes RETURNED by base.reserve, including
+        # all normalization and actual conservative output-cap selection.
+        body = json.loads(sent)
+        ordinal = len(self.value['requests'])
+        ceiling = min(self.request['maxRequests'], self.request['maxIterations'])
+        remaining = ceiling - ordinal + 1
+        closing = min(3, self.request.get('completionReserveRequests', 0))
+        phase = {3: 'completion', 2: 'validation', 1: 'final'}.get(remaining, 'work') if remaining <= closing else 'work'
+        instructions = body.get('instructions')
+        items = body['input'] if isinstance(body['input'], list) else []
+        tools = body.get('tools', [])
+        return {
+            'phase': phase, 'requestsRemainingAfterAdmission': ceiling - ordinal,
+            'toolCount': len(tools), 'toolNames': sorted({t['name'] for t in tools}),
+            'toolChoice': body.get('tool_choice'),
+            'inputKind': 'items' if isinstance(body['input'], list) else 'text',
+            'inputItemCount': len(items), 'inputItemKinds': self.kind_counts(items),
+            'instructionsBytes': len(instructions.encode()) if isinstance(instructions, str) else None,
+            'instructionsSha256': hashlib.sha256(instructions.encode()).hexdigest() if isinstance(instructions, str) else None,
+            'maxOutputTokens': body['max_output_tokens'],
+            'maxRequests': self.request['maxRequests'], 'maxIterations': self.request['maxIterations'],
+            'tokenLimit': self.request['tokenLimit'], 'spendMicroUsd': self.request['spendMicroUsd'],
+            'nativeRolloutTokenLimit': min(self.request['tokenLimit'], 1_000_000),
+            'deadlineEpochMs': int(self.request['deadline'] * 1000),
+            'deadlineRemainingMs': max(0, int((self.request['deadline'] - time.time()) * 1000)),
+        }
+
+    def response_contract(self, output, content_type):
+        # Shape/echo only, from an UNTRUSTED response. Do not log text,
+        # arguments, usage, IDs or arbitrary provider names. Earlier SSE items
+        # remain independently validated even when absent from the terminal.
+        media = content_type.split(';', 1)[0].strip().lower()
+        summary = {'responseSha256': hashlib.sha256(output).hexdigest(),
+                   'responseBytes': len(output),
+                   'contentType': media if media in ('application/json', 'text/event-stream') else 'other'}
+        try:
+            responses = []
+            if media == 'application/json':
+                responses = [json.loads(output)]
+            elif media == 'text/event-stream':
+                for line in output.splitlines():
+                    if line.startswith(b'data:') and line[5:].strip() not in (b'', b'[DONE]'):
+                        event = json.loads(line[5:].strip())
+                        if isinstance(event, dict) and event.get('type') in (
+                                'response.completed', 'response.incomplete', 'response.failed'):
+                            # More than one terminal is invalid; keep no unbounded list.
+                            if responses:
+                                return {**summary, 'terminalShape': 'multiple'}
+                            responses.append(event.get('response'))
+            if len(responses) != 1 or not isinstance(responses[0], dict):
+                return {**summary, 'terminalShape': 'missing-or-malformed'}
+            response = responses[0]
+            items = response.get('output')
+            instructions = response.get('instructions')
+            return {**summary, 'terminalShape': 'observed-not-authenticated',
+                    'outputItemKinds': self.kind_counts(items) if isinstance(items, list) else None,
+                    'echoedToolsCount': len(response['tools']) if isinstance(response.get('tools'), list) else None,
+                    'echoedToolChoice': 'auto' if response.get('tool_choice') == 'auto' else 'absent' if 'tool_choice' not in response else 'other',
+                    'echoedInstructionsSha256': hashlib.sha256(instructions.encode()).hexdigest() if isinstance(instructions, str) else None}
+        except (ValueError, TypeError, UnicodeError):
+            return {**summary, 'terminalShape': 'malformed'}
+
     def record_refusal(self, error, stage, raw=None):
         # First refusal wins. Latch before disk I/O: a logging failure must not
         # authorize a later send. Parent is supervisor-owned, outside mounts.
@@ -53,6 +172,7 @@ class TeamReservations(base.budget.Reservations):
             'prohibited team capability': 'tool-declaration',
             'prohibited team history capability': 'history-tool',
             'provider outcome requires owner review': 'provider-breaker',
+            'team contract diagnostics unavailable': 'contract-diagnostics',
         }
         projection = error.projection if isinstance(error, base.budget.ReservationCapacityError) else None
         code = codes.get(str(error), 'invalid-request' if stage == 'reservation' else stage)
@@ -98,9 +218,19 @@ class TeamReservations(base.budget.Reservations):
         base.budget.atomic(self.file.parent / 'provider-failure.json', diagnostic)
 
     def observe(self, output, content_type, sent):
+        self.response_rejection = 'response-validation'
         try:
-            return super().observe(output, content_type, sent)
-        except ValueError:
+            self.contract_event('response-received', sent, {
+                'responseSha256': hashlib.sha256(output).hexdigest(), 'responseBytes': len(output)})
+            result = super().observe(output, content_type, sent)
+            self.contract_event('response-accepted', sent, self.response_contract(output, content_type))
+            return result
+        except Exception:
+            # Contract-storage failure before validation also leaves the
+            # provider outcome unverified. Validated usage, if already stored,
+            # is never erased merely because a later diagnostic write failed.
+            if self.value['blockedReason'] is None:
+                self.block()
             # Preserve bounded response bytes for owner review outside the
             # worker. Never store request headers, credentials or HTTP errors.
             if isinstance(output, bytes) and len(output) <= 8_000_000:
@@ -116,10 +246,17 @@ class TeamReservations(base.budget.Reservations):
                     'contentType': content_type.split(';', 1)[0].strip().lower(),
                     'bytes': len(output),
                 })
+            if not self.contract_failed:
+                try:
+                    self.contract_event('response-rejected', sent, {
+                        'reasonCode': self.response_rejection,
+                        **self.response_contract(output, content_type)})
+                except ValueError:
+                    pass  # Latch storage failure, but preserve the original rejection.
             raise
 
     def reserve(self, raw):
-        if getattr(self, 'local_refused', False):
+        if self.contract_failed or getattr(self, 'local_refused', False):
             raise ValueError('team broker already refused')
         try:
             return self.reserve_team(raw)
@@ -199,7 +336,9 @@ class TeamReservations(base.budget.Reservations):
             # Meta Responses supports auto, not tool_choice:none. Empty tools
             # advertise no new calls; returned calls are independently refused.
             body['tool_choice'] = 'auto'
-        return super().reserve(base.budget.canonical(body))
+        sent = super().reserve(base.budget.canonical(body))
+        self.contract_event('admitted', sent, self.request_contract(sent))
+        return sent
 
     def observe_verified(self, output, content_type, sent):
         # Enforce responses independently of advertised tools: a hallucinated
@@ -211,6 +350,7 @@ class TeamReservations(base.budget.Reservations):
             kind = value.get('type')
             if kind in ('function_call', 'custom_tool_call'):
                 if self.request.get('completionReserveRequests', 0) and len(self.value['requests']) == min(self.request['maxRequests'], self.request['maxIterations']):
+                    self.response_rejection = 'final-tool-call'
                     raise ValueError('tool call during final response reserve')
                 if value.get('name') not in TOOLS:
                     raise ValueError('prohibited team response capability')
@@ -272,7 +412,17 @@ def serve_team(socket_path, reservations, upstream=None):
     # production dispatch accepts no request-selected callable or endpoint.
     if upstream is None:
         upstream = lambda body: team_provider_request(body, reservations.request['deadline'])
-    server = _base_serve(socket_path, reservations, upstream, reservations.record_refusal)
+    def observed_upstream(body):
+        reservations.contract_event('upstream-started', body)
+        try:
+            return upstream(body)
+        except Exception:
+            try:
+                reservations.contract_event('upstream-failed', body)
+            except ValueError:
+                pass  # Storage failure latches; preserve the original transport error.
+            raise
+    server = _base_serve(socket_path, reservations, observed_upstream, reservations.record_refusal)
     handler = server.RequestHandlerClass
     class TeamHandler(handler):
         def end_headers(self):

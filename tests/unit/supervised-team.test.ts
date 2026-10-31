@@ -745,6 +745,14 @@ describe("dedicated supervised team contract, no inference", () => {
       execFileSync("python3", ["-I", "-B", script], { encoding: "utf8" }),
     ).toContain("team controls passed");
   });
+  it("retains bounded completion contracts and fails closed on diagnostic storage errors without sockets or inference", () => {
+    const script = fileURLToPath(
+      new URL("../runtime/team-contract-controls.py", import.meta.url),
+    );
+    expect(
+      execFileSync("python3", ["-I", "-B", script], { encoding: "utf8" }),
+    ).toContain("team contract controls passed");
+  });
   it("exercises full replay growth and durable broker refusals with zero upstream calls", () => {
     const script = fileURLToPath(
       new URL("../runtime/team-reservation-controls.py", import.meta.url),

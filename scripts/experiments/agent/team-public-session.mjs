@@ -85,3 +85,6 @@ assert.ok(
   "public domain/http interface required",
 );
 cookie(await subject.http(request(), "u-alice"));
+// A candidate may terminate its importing process with exit(0). The parent
+// must observe completion of these public assertions as well as a zero exit.
+process.stdout.write("PUBLIC_SESSION_CHECK_COMPLETED\n");

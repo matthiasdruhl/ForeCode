@@ -489,8 +489,50 @@ class TeamSupervisor(base.Supervisor):
         self.remove_public(run_id)
         return result
 
+    def retain_cleanup_source(self, run_id, nonce):
+        # Cleanup may be the only path after cancellation, host timeout or a
+        # finalization error. Capture inert bytes AFTER the base helper has
+        # killed the owned process groups and removed all workers. This is a
+        # private recovery snapshot, never a finalized/graded candidate.
+        with self.lock(run_id):
+            p, state = self.state(run_id, nonce)
+            source = p / 'source'
+            if not source.exists() and not source.is_symlink():
+                return
+            candidate = base.capture(source, run_id)
+            record = {'kind': 'cleanup-source-snapshot.local.v1', 'runId': run_id,
+                      'requestSha256': state['requestSha256'], 'candidate': candidate,
+                      'candidateSha256': base.digest(candidate),
+                      'protectedCorrectness': 'NOT_ESTABLISHED'}
+            raw = base.budget.canonical(record)
+            if len(raw) > 12_000_000:
+                raise ValueError('cleanup source archive bound')
+            file = p / 'cleanup-source.json'
+            if file.exists() or file.is_symlink():
+                if (stat.S_IMODE(file.lstat().st_mode) != 0o400
+                        or base.read_regular(file, 12_000_000) != raw):
+                    raise ValueError('cleanup source archive changed')
+            else:
+                fd = os.open(file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
+                with os.fdopen(fd, 'wb') as out:
+                    out.write(raw)
+                    out.flush()
+                    os.fsync(out.fileno())
+                directory = os.open(p, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory)
+                finally:
+                    os.close(directory)
+
     def cleanup(self, run_id, nonce):
         result = super().cleanup(run_id, nonce)
+        try:
+            self.retain_cleanup_source(run_id, nonce)
+        except BaseException as error:
+            # Retain source scratch on an unsafe tree/storage failure. The
+            # host must retain its lease and stop; no silent evidence loss.
+            self.record_failure(run_id, nonce, error)
+            raise
         # Only after trusted group termination/removal; retain durable state and
         # budget/evidence records, but remove all run-owned runtime scratch.
         with self.lock(run_id):

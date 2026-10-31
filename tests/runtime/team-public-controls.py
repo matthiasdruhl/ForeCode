@@ -12,11 +12,12 @@ for name,raw in r['files'].items():
 rows=[]
 adapter=root/'src/server/team-benchmark.ts'
 positive='export function createTeamBenchmark(){return {domain(){return {};},http(){return Response.json({}, {headers:{"Set-Cookie":"booking_demo_session=synthetic; HttpOnly; SameSite=Strict; Path=/"}});}};}'
-for case in ['missing-adapter','missing-export','unusable-interface','cookie-failure','compile-failure','positive']:
+for case in ['missing-adapter','missing-export','unusable-interface','cookie-failure','compile-failure','positive','early-exit']:
  if adapter.exists(): adapter.unlink()
  if case=='missing-export':adapter.write_text('export const somethingElse = 1;')
  elif case=='unusable-interface':adapter.write_text('export function createTeamBenchmark(){return {domain:1,http:1};}')
  elif case=='cookie-failure':adapter.write_text('export function createTeamBenchmark(){return {domain(){return {};},http(){return Response.json({});}};}')
+ elif case=='early-exit':adapter.write_text('process.exit(0); export function createTeamBenchmark(){return {domain(){return {};},http(){return Response.json({});}};}')
  elif case!='missing-adapter':adapter.write_text(positive)
  if case=='compile-failure':
   (root/'src/public-control.ts').write_text('export const wrong: string = 1;')

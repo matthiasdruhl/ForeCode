@@ -1,5 +1,17 @@
 # PR #32 and prospective tournament audit
 
+## Integration update — October 31 UTC, 2026
+
+Fresh remote inspection found PRs #32–#34 merged into the tournament dependency branch at `61f59792b783626b1d1b0dfdfcd77e3014b55480`, but absent from main `57a42a992a4b8878a48ee1edbbb5429b98e54318`. A fresh main-based integration preserves the complete implementation, including interrupted-source retention, premature-exit rejection and the CI preflight regression fix. Only the appended implementation log conflicted; both histories were retained. The complete integrated diff was reviewed. Implementation bytes match the dependency branch exactly; no security, grading, accounting or experimental control was relaxed.
+
+Fresh local validation passed: `npm run check` (1,014 tests / 55 files, lint, strict types and both builds), documented planning parity128, app browser60, fixture browser2, standalone fixture export/test/typecheck/build, Python supervisor and reservation controls, changed-file formatting and whitespace checks. Actual dedicated-guest inventory matched the installed agent helpers and protected grader/native closure. Seven isolated public cases, scripted pinned-native repair/exhaustion controls and eleven harmless lifecycle controls passed. These exercise real isolated mechanisms with synthetic Responses or no provider requests; they are not autonomous model completion or protected prospective baseline receipts.
+
+Final actual closure verified changed boot IDs after restarting both exact guests, worker/run-scratch absence and unchanged hashes for all26 retained cleanup archives (13 additional archives from these controls). Both guests were stopped again; deny-all networking and disabled policy/registration were preserved. All4,331 previously indexed private files remained byte-identical. The owned maintenance lease was released and its absence verified. New operational records remain owner-private.
+
+Case-12 still matches trusted implementation digest `98a72cfcb45466511be71e42e412e6be44b45e218e0e77b80107fd4cbbc98fd8`, the frozen task and original A tree. The owner's separate conditional approval for exactly one A-then-B Contributor pair is recorded privately: $32 reserved per arm/$64 total,600s,20 requests/iterations,32M conservative tokens,32768 output/request and the separate1M native guard. Consent is not a runtime admission or authenticated protocol. The **first unresolved gate is authentic prospective protocol custody and designated preparation authority**, before B selection. No held case-12 protocol/preparation originals, B source, protected baseline receipts, prepared commitment, current per-study runtime/spending admissions or enabled registration exist. No new paid call, protected prospective baseline, real pair, retry, fallback, comparative disclosure or automatic merge occurred. Same-context engineering review does not establish independent or blind custody. The historical audit below describes its earlier checkpoint; its pending-spending and open-PR statements are superseded by this update.
+
+## Historical audit checkpoint
+
 Audit date: October 30 Eastern / October 31 UTC, 2026. No paid inference or comparative publication was authorized or performed.
 
 ## Reviewed inputs and merge assessment

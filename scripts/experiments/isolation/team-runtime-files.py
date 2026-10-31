@@ -42,7 +42,7 @@ def collect_team_runtime(runtime):
     role = runtime.sys.argv[1]
     if role == 'agent':
         extra = ['/opt/forecode-agent/team-supervisor.py', '/usr/local/bin/node']
-        extra += ['/opt/forecode-agent/' + n for n in ['team-worker.mjs', 'team-public-checks.mjs', 'team-public-session.mjs']]
+        extra += ['/opt/forecode-agent/' + n for n in ['team-worker.mjs', 'team-public-checks.mjs', 'team-public-session.mjs', 'team-workflow.mjs', 'team-source-write.mjs', 'team-shell-hook.sh']]
         root = pathlib.Path('/var/lib/forecode-team-agent')
         info = root.lstat()
         if (root.is_symlink() or info.st_uid != 0 or stat.S_IMODE(info.st_mode) != 0o700):

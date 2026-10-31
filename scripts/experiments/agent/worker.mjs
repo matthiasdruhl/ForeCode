@@ -34,6 +34,13 @@ try {
 } catch {
   process.exit(125);
 }
+// Opt-in team affordances; smoke tasks and their native environment are unchanged.
+const workflow =
+  input.teamWorkflow === "public-v2"
+    ? await import("/run/team-workflow.mjs")
+    : null;
+let admittedRequests = 0;
+workflow?.updateProgress(input, admittedRequests);
 const server = createServer((req, res) => {
   if (req.method !== "POST" || req.url !== "/v1/responses") {
     res.writeHead(403).end();
@@ -50,6 +57,8 @@ const server = createServer((req, res) => {
       },
     },
     (reply) => {
+      if (reply.statusCode === 200)
+        workflow?.updateProgress(input, ++admittedRequests);
       res.writeHead(reply.statusCode ?? 502, {
         "content-type": reply.headers["content-type"] ?? "application/json",
       });
@@ -108,7 +117,7 @@ server.listen(8787, "127.0.0.1", () => {
     // Above the largest reviewed 1M-token reservation ceiling: no hidden
     // compact/history request outside the finite stateless Responses protocol.
     "model_auto_compact_token_limit=2000000",
-    input.prompt,
+    workflow ? input.prompt + "\n\n" + workflow.orientation : input.prompt,
   ];
   if (["muse-spark-1.3", "muse-spark-1.3-contributor"].includes(input.model))
     args.splice(
@@ -129,6 +138,7 @@ server.listen(8787, "127.0.0.1", () => {
       HOME: "/home/agent",
       CODEX_HOME: "/home/agent/.codex",
       LANG: "C.UTF-8",
+      ...(workflow ? { BASH_ENV: "/run/team-shell-hook.sh" } : {}),
     },
   });
   child.on("error", () => {

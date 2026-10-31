@@ -101,6 +101,9 @@ def main():
                 ack=supervisor.cleanup(run_id, nonce)
                 cleaned=bool(ack['absent'] and ack['scratchRemoved'])
                 assert cleaned and not supervisor.owned(run_id)
+                archive=json.loads((supervisor.directory(run_id)/'cleanup-source.json').read_bytes())
+                assert archive['runId']==run_id and archive['candidateSha256']==team.base.digest(archive['candidate'])
+                assert archive['protectedCorrectness']=='NOT_ESTABLISHED'
                 rows.append({'case':case,'runId':run_id,'terminalFailureRetained':True,'cleanupConfirmed':True,'providerRequests':0})
                 continue
             supervisor.prepare_team(request, template['provider'])
@@ -153,6 +156,9 @@ def main():
             p = supervisor.directory(run_id)
             assert all(not (p / name).exists() for name in ['source', 'sealed', 'gateway', 'task.json'])
             assert (p / 'state.json').exists()
+            archive=json.loads((p/'cleanup-source.json').read_bytes())
+            assert archive['runId']==run_id and archive['candidateSha256']==team.base.digest(archive['candidate'])
+            assert archive['protectedCorrectness']=='NOT_ESTABLISHED'
             rows.append({'case': case, 'runId': run_id, 'worker': observed['containerId'],
                          'process': {key: agent[key] for key in ['reason', 'exitCode', 'signal']},
                          'cleanupConfirmed': True, 'providerRequests': 0})

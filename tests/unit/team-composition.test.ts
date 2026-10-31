@@ -179,6 +179,60 @@ describe(
         expect(f.calls).toEqual([]);
       },
     );
+    it.each(["BLOCKED", "NOT_CHECKED"] as const)(
+      "archives %s public candidates without presenting successful native exit as readiness",
+      async (status) => {
+        const f = await fixture(),
+          original = f.deps.run;
+        vi.spyOn(f.deps, "run").mockImplementation(
+          async (exe, args, options) => {
+            const result = await original(exe, args, options);
+            if (options.input?.includes('"operation":"finalize"')) {
+              const value = JSON.parse(result.stdout);
+              value.publicReadiness = {
+                status,
+                reason:
+                  status === "BLOCKED"
+                    ? "public-checks-failed-or-interrupted"
+                    : "deadline",
+                candidateSha256: value.candidateSha256,
+              };
+              return { ...result, stdout: JSON.stringify(value) };
+            }
+            return result;
+          },
+        );
+        const out = await runPairedTournament(f.input);
+        for (const attempt of out.attempts) {
+          expect(attempt.finalizationConfirmed).toBe(true);
+          expect(attempt.candidateTreeSha256).toMatch(/^[a-f0-9]{64}$/);
+          expect(attempt.publicReadiness?.status).toBe(status);
+          expect(attempt.run.status).toBe("failed");
+          expect(attempt.cleanupConfirmed).toBe(true);
+          // Protected observations stay distinct even if their synthetic checks pass.
+          expect(attempt.grade?.checks).toHaveLength(8);
+        }
+      },
+    );
+    it("rejects public readiness attached to a different source", async () => {
+      const f = await fixture(),
+        original = f.deps.run;
+      vi.spyOn(f.deps, "run").mockImplementation(async (exe, args, options) => {
+        const result = await original(exe, args, options);
+        if (options.input?.includes('"operation":"finalize"')) {
+          const value = JSON.parse(result.stdout);
+          value.publicReadiness.candidateSha256 = "0".repeat(64);
+          return { ...result, stdout: JSON.stringify(value) };
+        }
+        return result;
+      });
+      const out = await runPairedTournament(f.input);
+      expect(
+        out.attempts.every(
+          (a) => !a.finalizationConfirmed && a.cleanupConfirmed,
+        ),
+      ).toBe(true);
+    });
     it("retains safe command and lifecycle failures before cleanup without retrying a worker", async () => {
       const f = await fixture(),
         original = f.deps.run;

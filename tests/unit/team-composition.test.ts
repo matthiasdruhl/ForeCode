@@ -66,6 +66,32 @@ describe(
   "fixed team production composition under no-inference control",
   { timeout: 30_000 },
   () => {
+    it("refuses malformed trusted broker-stop metadata instead of deriving it from native stdout", async () => {
+      const f = await fixture(),
+        original = f.deps.run;
+      vi.spyOn(f.deps, "run").mockImplementation(async (exe, args, options) => {
+        const result = await original(exe, args, options);
+        if (options.input?.includes('"operation":"status"')) {
+          const value = JSON.parse(result.stdout);
+          if (value.stage === "terminated") {
+            value.brokerStop = {
+              reasonCode: "request-count",
+              requestCount: 101,
+              refusalSha256: "a".repeat(64),
+            };
+            return { ...result, stdout: JSON.stringify(value) };
+          }
+        }
+        return result;
+      });
+      const outcome = await runPairedTournament(f.input);
+      expect(outcome.attempts).toHaveLength(2);
+      expect(
+        outcome.attempts.every(
+          (a) => !a.finalizationConfirmed && a.cleanupConfirmed,
+        ),
+      ).toBe(true);
+    });
     it("uses the separately admitted grader image and explicit trusted root for protected operations", async () => {
       const f = await compositionFixture({
         graderWorkerImage: `sha256:${"6".repeat(64)}`,

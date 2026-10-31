@@ -25,6 +25,7 @@ import { supervisedTeamRuntimeSubject } from "./supervised-team";
 import { teamAgentId, teamEnforcementPlan } from "./team-policy";
 import { buildTournamentReport } from "./report";
 import { SourceManifestSchema as ManifestSchema } from "./source-manifest";
+import { BrokerStopSchema } from "./team-termination";
 
 export const RuntimeObservationSchema = z.strictObject({
   schemaVersion: z.literal("tournament-runtime-original.local.v1"),
@@ -36,6 +37,9 @@ export const RuntimeObservationSchema = z.strictObject({
   initialManifest: ManifestSchema,
   finalManifest: ManifestSchema.nullable(),
   baselineRunId: IdSchema,
+  // Optional for historical originals. New observations derive this solely
+  // from the outside-worker immutable first-refusal record, never CLI text.
+  brokerStop: BrokerStopSchema.optional(),
   installedRuntime: z
     .strictObject({
       admissionSha256: Sha256Schema,
@@ -140,6 +144,15 @@ export async function loadTournamentArm(input: {
         jsonDigest(original.initialManifest) === arm.initialTreeSha256,
       "Runtime source/task/model binding mismatch.",
     );
+    if (original.brokerStop)
+      invariant(
+        original.brokerStop.requestCount <=
+          Math.min(
+            study.definition.restrictions.maxRequests,
+            study.definition.protocol.conditions[0]!.budget.maxIterations,
+          ),
+        "Broker stop exceeds frozen request limits.",
+      );
     const admission = requireHeldRecord(
       await input.loadRecord(input.admissionId),
       {
@@ -397,6 +410,7 @@ export function buildMeasuredTournamentReport(input: {
       inputTokens: observed?.telemetry?.inputTokens ?? null,
       outputTokens: observed?.telemetry?.outputTokens ?? null,
       reservedMicroUsd: observed?.telemetry?.reservedMicroUsd ?? null,
+      brokerStop: observed?.original.brokerStop ?? null,
       executionOriginalSha256: observed?.originalRecord.sha256 ?? null,
       baselineReceiptId: observed?.baseline.receipt.id ?? null,
       checks: study.draft.plan.futureOracle.requiredCheckIds.map((id) => ({

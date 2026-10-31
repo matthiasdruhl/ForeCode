@@ -7,12 +7,15 @@ import {
   chmod,
   readdir,
   lstat,
+  readFile,
+  writeFile,
 } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 const quick = process.argv.includes("--quick");
+const interfaceOnly = process.argv.includes("--interface-only");
 const began = Date.now();
 const deadline = Math.min(
-  began + (quick ? 20_000 : 170_000),
+  began + (quick || interfaceOnly ? 20_000 : 170_000),
   Number(process.env.FORECODE_DEADLINE || Infinity) * 1000,
 );
 const rows = [];
@@ -70,13 +73,24 @@ function run(id, args, limit = 90_000, completionMarker) {
 }
 try {
   // Missing adapter is caught before copying, typegen or expensive builds.
-  const adapter = await lstat("/workspace/src/server/team-benchmark.ts");
+  const proposed = process.argv.indexOf("--proposed-adapter");
+  const adapter = await lstat(
+    proposed !== -1 && interfaceOnly
+      ? process.argv[proposed + 1]
+      : "/workspace/src/server/team-benchmark.ts",
+  );
   if (!adapter.isFile() || adapter.nlink !== 1 || adapter.size === 0)
     throw new Error("PUBLIC_ADAPTER_MISSING_OR_ALIAS");
   await validate("/workspace");
   work = await mkdtemp("/work/public-check-");
   await cp("/workspace", work, { recursive: true });
   await writable(work);
+  if (proposed !== -1) {
+    if (!interfaceOnly) throw new Error("PROPOSED_INTERFACE_ONLY");
+    const bytes = await readFile(process.argv[proposed + 1]);
+    if (bytes.length > 2_097_152) throw new Error("PROPOSED_SOURCE_BOUND");
+    await writeFile(`${work}/src/server/team-benchmark.ts`, bytes);
+  }
   await symlink("/toolchain/node_modules", `${work}/node_modules`);
   // Dynamic import and documented bootstrap exercise the public interface,
   // including cookies, before build. Source inspection alone cannot pass.
@@ -86,9 +100,21 @@ try {
     "/toolchain/node_modules/tsx/dist/loader.mjs",
     "/run/team-public-session.mjs",
     work,
+    ...(interfaceOnly ? ["--interface-only"] : []),
   ];
-  const sessionCompletion = "PUBLIC_SESSION_CHECK_COMPLETED";
-  if (run("adapter-session", session, 15_000, sessionCompletion) && !quick) {
+  const sessionCompletion = interfaceOnly
+    ? "PUBLIC_INTERFACE_CHECK_COMPLETED"
+    : "PUBLIC_SESSION_CHECK_COMPLETED";
+  if (
+    run(
+      interfaceOnly ? "adapter-interface" : "adapter-session",
+      session,
+      15_000,
+      sessionCompletion,
+    ) &&
+    !quick &&
+    !interfaceOnly
+  ) {
     if (
       run("typegen", [
         "/toolchain/node_modules/next/dist/bin/next",
@@ -115,7 +141,7 @@ try {
 } finally {
   const passed = rows.length > 0 && rows.every((row) => row.passed);
   console.log(
-    `PUBLIC_READINESS ${passed ? (quick ? "QUICK_PASS" : "READY") : "BLOCKED"}`,
+    `PUBLIC_READINESS ${passed ? (interfaceOnly ? "INTERFACE_ONLY" : quick ? "QUICK_PASS" : "READY") : "BLOCKED"}`,
   );
   process.exitCode = passed ? 0 : 1;
   if (work) await rm(work, { recursive: true, force: true });

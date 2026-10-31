@@ -2,9 +2,6 @@
 # inventory pin these complete bytes; the broker independently enforces tools.
 model_reasoning_effort = "high"
 
-[tools]
-view_image = false
-
 [features]
 multi_agent = false
 goals = false

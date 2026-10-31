@@ -61,6 +61,7 @@ class TeamReservations(base.budget.Reservations):
             token = projection['tokenOutputCapacity'] < minimum
             money = projection['moneyOutputCapacity'] < minimum
             code = 'token-and-money-capacity' if token and money else 'token-capacity' if token else 'money-capacity'
+        self.refusal_code = code
         value = {'schemaVersion': 'team-broker-refusal.local.v1', 'stage': stage, 'reasonCode': code,
                  'requestCount': len(self.value['requests']), 'maxRequests': self.request['maxRequests'],
                  'maxIterations': self.request['maxIterations'], 'reservedTokens': self.value['reservedTokens'],
@@ -161,7 +162,7 @@ class TeamReservations(base.budget.Reservations):
                 raise ValueError('prohibited team capability')
         body['tools'] = [t for t in tools if t.get('name') != 'request_user_input']
         choice = body.get('tool_choice')
-        if choice not in (None, 'auto', 'none', 'required'):
+        if choice not in (None, 'auto'):
             raise ValueError('unsupported tool selection')
         # History cannot reintroduce a capability omitted from declarations.
         pending = [body.get('input')]
@@ -177,6 +178,16 @@ class TeamReservations(base.budget.Reservations):
                 pending.extend(value.values())
             elif isinstance(value, list):
                 pending.extend(value)
+        # Final response consumes a normal reservation inside every ceiling.
+        if r.get('completionReserveRequests', 0) and len(self.value['requests']) == min(r['maxRequests'], r['maxIterations']) - 1:
+            body['tools'] = []
+            # Meta Responses supports auto, not tool_choice:none. Empty tools
+            # advertise no new calls; returned calls are independently refused.
+            body['tool_choice'] = 'auto'
+            instructions = body.get('instructions')
+            if instructions is None: instructions = ''
+            if not isinstance(instructions, str): raise ValueError('team instructions must be text')
+            body['instructions'] = instructions + '\nFinal admitted request: tools are disabled. Submit a final response and disclose unfinished work; no further call is available.'
         return super().reserve(base.budget.canonical(body))
 
     def observe_verified(self, output, content_type, sent):
@@ -188,6 +199,8 @@ class TeamReservations(base.budget.Reservations):
                 raise ValueError('malformed team output item')
             kind = value.get('type')
             if kind in ('function_call', 'custom_tool_call'):
+                if self.request.get('completionReserveRequests', 0) and len(self.value['requests']) == min(self.request['maxRequests'], self.request['maxIterations']):
+                    raise ValueError('tool call during final response reserve')
                 if value.get('name') not in TOOLS:
                     raise ValueError('prohibited team response capability')
             elif kind not in ('message', 'reasoning'):
@@ -248,7 +261,16 @@ def serve_team(socket_path, reservations, upstream=None):
     # production dispatch accepts no request-selected callable or endpoint.
     if upstream is None:
         upstream = lambda body: team_provider_request(body, reservations.request['deadline'])
-    return _base_serve(socket_path, reservations, upstream, reservations.record_refusal)
+    server = _base_serve(socket_path, reservations, upstream, reservations.record_refusal)
+    handler = server.RequestHandlerClass
+    class TeamHandler(handler):
+        def end_headers(self):
+            code = getattr(reservations, 'refusal_code', None)
+            if code in ('request-count', 'iteration-count', 'token-capacity', 'money-capacity', 'token-and-money-capacity', 'deadline-or-request-bytes'):
+                self.send_header('X-Forecode-Stop', code)
+            super().end_headers()
+    server.RequestHandlerClass = TeamHandler
+    return server
 
 
 base.budget.serve = serve_team
@@ -280,6 +302,10 @@ def preparation_request(request):
         raise ValueError('fixed native rollout guard')
     exact_int(e['spendMicroUsd'], 1, 40_000_000)
     exact_int(r['maxRequests'], 1, 100)
+    completion_reserve = min(3, e['maxIterations'], r['maxRequests'])
+    if 'completionReserveRequests' in e: exact_int(e['completionReserveRequests'], 1, 3)
+    if e.get('completionReserveRequests', completion_reserve) != completion_reserve:
+        raise ValueError('fixed completion reserve')
     exact_int(r['maxOutputTokens'], 16, min(32768, e['tokenLimit']))
     exact_int(resources['outputBytes'], 1024, 8_000_000)
     candidate = request['candidate']
@@ -298,6 +324,7 @@ def preparation_request(request):
         'spendMicroUsd': e['spendMicroUsd'], 'maxSeconds': e['maxSeconds'],
         'maxOutputBytes': resources['outputBytes'], 'maxRequests': r['maxRequests'],
         'maxIterations': e['maxIterations'],
+        'completionReserveRequests': completion_reserve,
         'workerImage': e['runtime']['workerImage'],
         'codexBinarySha256': e['runtime']['agentBinarySha256'],
         'agentConfigSha256': e['agentConfigSha256'], 'workerNodeSha256': e['runtime']['nodeSha256'],
@@ -317,7 +344,7 @@ class TeamSupervisor(base.Supervisor):
     def worker_args(self, run_id, image):
         p, state = self.state(run_id, json.loads(base.read_regular(self.directory(run_id) / 'state.json'))['nonce'])
         task = json.loads(base.read_regular(p / 'task.json'))
-        task.update(teamWorkflow='public-v2', deadline=state.get('deadline', time.time() + state['request']['maxSeconds']), maxRequests=state['request']['maxRequests'])
+        task.update(teamWorkflow='public-v2', deadline=state.get('deadline', time.time() + state['request']['maxSeconds']), maxRequests=min(state['request']['maxRequests'], state['request']['maxIterations']), completionReserveRequests=state['request']['completionReserveRequests'])
         base.budget.atomic(p / 'task.json', task)
         os.chmod(p / 'task.json', 0o444)
         args = super().worker_args(run_id, image)
@@ -377,6 +404,22 @@ class TeamSupervisor(base.Supervisor):
             if self.owned(run_id):
                 raise ValueError('worker resurrection')
             result.update(terminationConfirmed=True, restartAbsenceConfirmed=True)
+            p = self.directory(run_id)
+            refusal = p / 'broker-refusal.json'
+            if refusal.exists() or refusal.is_symlink():
+                info = refusal.lstat()
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_nlink != 1 or stat.S_IMODE(info.st_mode) != 0o400:
+                    raise ValueError('immutable broker refusal required')
+                raw = base.read_regular(refusal, 8192)
+                observation = json.loads(raw)
+                if (observation['schemaVersion'] != 'team-broker-refusal.local.v1'
+                        or observation['maxRequests'] != state['request']['maxRequests']
+                        or observation['maxIterations'] != state['request']['maxIterations']
+                        or type(observation['requestCount']) is not int
+                        or not 0 <= observation['requestCount'] <= min(observation['maxRequests'], observation['maxIterations'])):
+                    raise ValueError('broker refusal binding changed')
+                result['brokerStop'] = {'reasonCode': observation['reasonCode'], 'requestCount': observation['requestCount'],
+                                        'refusalSha256': hashlib.sha256(raw).hexdigest()}
         return result
 
     def finalize(self, run_id, nonce):

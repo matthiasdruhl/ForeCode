@@ -38,6 +38,7 @@ export async function measuredFixture(
     telemetry?: boolean;
     deviation?: boolean;
     noFutureB?: boolean;
+    brokerStop?: boolean;
   } = {},
 ) {
   const fixtureOptions = options.telemetry
@@ -183,6 +184,15 @@ export async function measuredFixture(
       finalManifest:
         options.noFutureB && variant === "B" ? null : finalManifest,
       baselineRunId: baselineId,
+      ...(options.brokerStop && variant === "A"
+        ? {
+            brokerStop: {
+              reasonCode: "request-count",
+              requestCount: 3,
+              refusalSha256: "a".repeat(64),
+            },
+          }
+        : {}),
       deviations:
         options.deviation && variant === "A"
           ? ["OPPOSING_OUTCOME_EXPOSED"]

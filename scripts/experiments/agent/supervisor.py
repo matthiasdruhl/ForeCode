@@ -426,11 +426,11 @@ class Supervisor:
             raise ValueError('supervisor lost; cleanup only')
         return {k: v for k, v in state.items() if k not in ('request',)}
 
-    def finalize(self, run_id, nonce):
+    def finalize(self, run_id, nonce, allow_interrupted=False):
         with self.lock(run_id):
             p, state = self.state(run_id, nonce)
             if (state['stage'] != 'terminated' or state['bootId'] != self.boot()
-                    or state['agent']['reason'] != 'completed' or self.owned(run_id)):
+                    or (not allow_interrupted and state['agent']['reason'] != 'completed') or self.owned(run_id)):
                 raise ValueError('trustworthy termination required')
             first = capture(p / 'source', run_id)
             # Check non-src content against the exact original source transfer.

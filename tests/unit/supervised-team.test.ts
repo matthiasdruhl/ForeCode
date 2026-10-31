@@ -210,6 +210,12 @@ async function fixture() {
         return {
           ...resultIdentity(runId, nonce),
           stage: "sealed",
+          publicReadiness: {
+            status: "READY",
+            reason: "public-checks-passed",
+            candidateSha256: jsonDigest(candidates.get(runId)),
+            outputSha256: "a".repeat(64),
+          },
           candidate: candidates.get(runId),
           candidateSha256: jsonDigest(candidates.get(runId)),
           terminationConfirmed: true,

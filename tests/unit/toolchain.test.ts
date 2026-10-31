@@ -589,6 +589,17 @@ describe("trusted tooling preparation — SYNTHETIC Docker adapter; no image/gue
     const process = vi
       .spyOn(processes, "boundedProcess")
       .mockRejectedValue(new Error("NO PROCESS"));
+    const report = await installationPreflight(
+      destination,
+      configFile,
+      inventoryFile,
+    );
+    expect(report.proposal.inventory).toBe("RECORD_BOUND_INTEGRITY_ONLY");
+    expect(report.proposal.inventorySha256).toBe(jsonDigest(observed));
+    expect(report.proposal.review).toBe("RECORD_VALID_INTEGRITY_ONLY");
+    expect(report.status).toBe("OWNER_ACTION_REQUIRED");
+    expect(report.installedRuntime).toBeNull();
+    expect(report.bookingAcceptance).toBe("NOT_RUN");
     if (defect === "expired-review") {
       await overwrite(reviewFile, {
         ...review,
@@ -601,25 +612,22 @@ describe("trusted tooling preparation — SYNTHETIC Docker adapter; no image/gue
         ...observed,
         files: { ...files, [defect]: "b".repeat(64) },
       });
-    const report = await installationPreflight(
-      destination,
-      configFile,
-      inventoryFile,
-    );
-    if (defect === "valid") {
-      expect(report.proposal.inventory).toBe("RECORD_BOUND_INTEGRITY_ONLY");
-      expect(report.proposal.inventorySha256).toBe(jsonDigest(observed));
-      expect(report.proposal.review).toBe("RECORD_VALID_INTEGRITY_ONLY");
-      expect(report.status).toBe("OWNER_ACTION_REQUIRED");
-    } else {
-      expect(report.proposal.inventory).toBe("INVALID");
+    if (defect !== "valid") {
+      // Re-read the same paths after changing them: a previous successful
+      // preflight must never conceal a later substitution or expiry.
+      const changed = await installationPreflight(
+        destination,
+        configFile,
+        inventoryFile,
+      );
+      expect(changed.proposal.inventory).toBe("INVALID");
       if (defect === "expired-review")
-        expect(report.proposal.reviewIssue).toBe(
+        expect(changed.proposal.reviewIssue).toBe(
           "REVIEW_STALE_OR_INVALID_INTERVAL",
         );
+      expect(changed.installedRuntime).toBeNull();
+      expect(changed.bookingAcceptance).toBe("NOT_RUN");
     }
-    expect(report.installedRuntime).toBeNull();
-    expect(report.bookingAcceptance).toBe("NOT_RUN");
     expect(process).not.toHaveBeenCalled();
   });
   it("matches Python compact ASCII JSON rows including Unicode code-point ordering", () => {

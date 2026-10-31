@@ -344,3 +344,53 @@ with tempfile.TemporaryDirectory() as temp:
     value=supervisor.public_readiness(run,nonce,'a'*64)
     assert value=={'status':'NOT_CHECKED','reason':'deadline','candidateSha256':'a'*64}
 print('expired public readiness retained without guest execution or extra allowance')
+
+# Host cancellation/deadline can bypass finalize entirely. Cleanup must retain
+# the stopped worker's bytes before deleting its source scratch, without
+# executing them or promoting the snapshot to protected experiment evidence.
+with tempfile.TemporaryDirectory() as temp:
+    supervisor = team.TeamSupervisor(pathlib.Path(temp), lambda args: b'', lambda: 'synthetic-boot')
+    with patch.object(team.base.os, 'chown'):
+        supervisor.prepare_team(request, {'inputMicroUsdPerToken':1,'outputMicroUsdPerToken':1})
+    p, state = supervisor.state(run, nonce)
+    (p/'source/src/control.ts').write_text('// interrupted edits, never imported')
+    expected = team.base.capture(p/'source', run)
+    assert supervisor.cleanup(run, nonce)['scratchRemoved']
+    archive = p/'cleanup-source.json'
+    original = archive.read_bytes()
+    record = json.loads(original)
+    assert record['candidate'] == expected
+    assert record['candidateSha256'] == team.base.digest(expected)
+    assert record['kind'] == 'cleanup-source-snapshot.local.v1'
+    assert record['protectedCorrectness'] == 'NOT_ESTABLISHED'
+    assert archive.stat().st_mode & 0o777 == 0o400
+    assert not (p/'source').exists()
+    supervisor.cleanup(run, nonce)
+    assert archive.read_bytes() == original
+print('interrupted source survives cleanup without execution or correctness promotion')
+
+for defect in ['alias', 'storage']:
+    with tempfile.TemporaryDirectory() as temp:
+        supervisor = team.TeamSupervisor(pathlib.Path(temp), lambda args: b'', lambda: 'synthetic-boot')
+        with patch.object(team.base.os, 'chown'):
+            supervisor.prepare_team(request, {'inputMicroUsdPerToken':1,'outputMicroUsdPerToken':1})
+        p, state = supervisor.state(run, nonce)
+        if defect == 'alias':
+            (p/'source/src/alias.ts').symlink_to('/nonexistent-private-target')
+            denied(lambda: supervisor.cleanup(run, nonce))
+        else:
+            original_open = team.os.open
+            def unavailable(file, *args, **kwargs):
+                if str(file).endswith('/cleanup-source.json'):
+                    raise OSError('synthetic archive storage failure')
+                return original_open(file, *args, **kwargs)
+            with patch.object(team.os, 'open', side_effect=unavailable):
+                try:
+                    supervisor.cleanup(run, nonce)
+                except OSError:
+                    pass
+                else:
+                    raise AssertionError('unsafe cleanup must stop')
+        assert (p/'source/src/control.ts').is_file()
+        assert supervisor.state(run, nonce)[1]['stage'] == 'failed'
+print('unsafe source/archive storage failure retains scratch and fails cleanup')

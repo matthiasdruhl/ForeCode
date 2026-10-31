@@ -38,7 +38,7 @@ async function writable(root) {
     else await chmod(file, 0o600);
   }
 }
-function run(id, args, limit = 90_000) {
+function run(id, args, limit = 90_000, completionMarker) {
   const remaining = deadline - Date.now();
   const result =
     remaining > 0
@@ -54,7 +54,12 @@ function run(id, args, limit = 90_000) {
         })
       : null;
   const passed =
-    !!result && !result.error && !result.signal && result.status === 0;
+    !!result &&
+    !result.error &&
+    !result.signal &&
+    result.status === 0 &&
+    (!completionMarker ||
+      result.stdout.toString("utf8").trimEnd().endsWith(completionMarker));
   rows.push({ id, passed });
   console.log(`PUBLIC_CHECK ${id} ${passed ? "PASS" : "FAIL"}`);
   if (!passed && result) {
@@ -82,7 +87,8 @@ try {
     "/run/team-public-session.mjs",
     work,
   ];
-  if (run("adapter-session", session, 15_000) && !quick) {
+  const sessionCompletion = "PUBLIC_SESSION_CHECK_COMPLETED";
+  if (run("adapter-session", session, 15_000, sessionCompletion) && !quick) {
     if (
       run("typegen", [
         "/toolchain/node_modules/next/dist/bin/next",
@@ -98,7 +104,7 @@ try {
         "--webpack",
       ])
     ) {
-      run("session-cookie", session, 15_000);
+      run("session-cookie", session, 15_000, sessionCompletion);
     }
   }
 } catch {

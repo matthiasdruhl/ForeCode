@@ -26,6 +26,65 @@ try {
   syncBuiltinESMExports();
 }
 assert.equal(fs.readFileSync(target, "utf8"), text);
+// An incomplete staging write must not truncate/replace the prior target.
+fs.writeSync = () => 0;
+syncBuiltinESMExports();
+try {
+  assert.throws(() =>
+    write({ path, expectedSha256: hash(text), content: "incomplete" }),
+  );
+} finally {
+  fs.writeSync = original;
+  syncBuiltinESMExports();
+}
+assert.equal(fs.readFileSync(target, "utf8"), text);
+fs.linkSync(target, "/workspace/src/hardlink-control.ts");
+try {
+  assert.throws(() =>
+    write({ path, expectedSha256: hash(text), content: "wrong" }),
+  );
+} finally {
+  fs.unlinkSync("/workspace/src/hardlink-control.ts");
+}
+assert.equal(fs.readFileSync(target, "utf8"), text);
+
+// Deterministically replace a parent after its no-follow descriptor opens.
+// The write stays anchored in the original source directory and cannot follow
+// the replacement symlink into the worker's separate /tmp mount.
+fs.mkdirSync("/workspace/src/race-parent");
+const originalOpen = fs.openSync;
+let replaced = false;
+fs.openSync = (name, ...args) => {
+  const fd = originalOpen(name, ...args);
+  if (!replaced && String(name).endsWith("/race-parent")) {
+    replaced = true;
+    fs.renameSync("/workspace/src/race-parent", "/workspace/src/race-retained");
+    fs.symlinkSync("/tmp", "/workspace/src/race-parent");
+  }
+  return fd;
+};
+syncBuiltinESMExports();
+try {
+  write({
+    path: "src/race-parent/forecode-race-control.ts",
+    expectedSha256: null,
+    content: "// inert race control",
+  });
+  assert.ok(replaced);
+  assert.equal(fs.existsSync("/tmp/forecode-race-control.ts"), false);
+  assert.equal(
+    fs.readFileSync(
+      "/workspace/src/race-retained/forecode-race-control.ts",
+      "utf8",
+    ),
+    "// inert race control",
+  );
+} finally {
+  fs.openSync = originalOpen;
+  syncBuiltinESMExports();
+  fs.unlinkSync("/workspace/src/race-parent");
+  fs.rmSync("/workspace/src/race-retained", { recursive: true });
+}
 assert.throws(() => write({ path, expectedSha256: null, content: "wrong" }));
 assert.throws(() =>
   writeSource('{"path":"src/write-control.ts","content":"partial'),

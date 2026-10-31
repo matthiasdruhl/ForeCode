@@ -196,6 +196,7 @@ export async function collectTeamInventory(input: {
     "team-worker.mjs",
     "team-public-checks.mjs",
     "team-public-session.mjs",
+    "team-public-boundary.mjs",
     "team-workflow.mjs",
     "team-source-write.mjs",
     "team-shell-hook.sh",

@@ -488,7 +488,18 @@ describe("trusted tooling preparation — SYNTHETIC Docker adapter; no image/gue
         .proposal.inventory,
     ).toBe("INVALID");
   });
-  it("preflight accepts bound record integrity without granting runtime authority, and rejects stale/substituted records", async () => {
+  // Every preflight freshly verifies the full source/artifact twice. Keep
+  // independent records in independent cases so six checks do not share one
+  // five-second test deadline on a slower CI filesystem.
+  const preflightCases = [
+    "valid",
+    "/opt/forecode-booking/controller/guest.ts",
+    "runtime_metadata",
+    "executable:docker",
+    "node_modules",
+    "expired-review",
+  ];
+  it.each(preflightCases)("preflight record integrity: %s", async (defect) => {
     const { destination, record } = await verifierFixture();
     const directory = path.dirname(destination),
       configFile = path.join(directory, "offline.json"),
@@ -578,46 +589,37 @@ describe("trusted tooling preparation — SYNTHETIC Docker adapter; no image/gue
     const process = vi
       .spyOn(processes, "boundedProcess")
       .mockRejectedValue(new Error("NO PROCESS"));
+    if (defect === "expired-review") {
+      await overwrite(reviewFile, {
+        ...review,
+        expiresAt: new Date(0).toISOString(),
+      });
+      config.reviewSha256 = sha256(await readFile(reviewFile));
+      await overwrite(configFile, config);
+    } else if (defect !== "valid")
+      await overwrite(inventoryFile, {
+        ...observed,
+        files: { ...files, [defect]: "b".repeat(64) },
+      });
     const report = await installationPreflight(
       destination,
       configFile,
       inventoryFile,
     );
-    expect(report.proposal.inventory).toBe("RECORD_BOUND_INTEGRITY_ONLY");
-    expect(report.proposal.inventorySha256).toBe(jsonDigest(observed));
-    expect(report.proposal.review).toBe("RECORD_VALID_INTEGRITY_ONLY");
-    expect(report.status).toBe("OWNER_ACTION_REQUIRED");
+    if (defect === "valid") {
+      expect(report.proposal.inventory).toBe("RECORD_BOUND_INTEGRITY_ONLY");
+      expect(report.proposal.inventorySha256).toBe(jsonDigest(observed));
+      expect(report.proposal.review).toBe("RECORD_VALID_INTEGRITY_ONLY");
+      expect(report.status).toBe("OWNER_ACTION_REQUIRED");
+    } else {
+      expect(report.proposal.inventory).toBe("INVALID");
+      if (defect === "expired-review")
+        expect(report.proposal.reviewIssue).toBe(
+          "REVIEW_STALE_OR_INVALID_INTERVAL",
+        );
+    }
     expect(report.installedRuntime).toBeNull();
     expect(report.bookingAcceptance).toBe("NOT_RUN");
-    for (const key of [
-      "/opt/forecode-booking/controller/guest.ts",
-      "runtime_metadata",
-      "executable:docker",
-      "node_modules",
-    ]) {
-      await overwrite(inventoryFile, {
-        ...observed,
-        files: { ...files, [key]: "b".repeat(64) },
-      });
-      expect(
-        (await installationPreflight(destination, configFile, inventoryFile))
-          .proposal.inventory,
-      ).toBe("INVALID");
-    }
-    await overwrite(inventoryFile, observed);
-    await overwrite(reviewFile, {
-      ...review,
-      expiresAt: new Date(0).toISOString(),
-    });
-    config.reviewSha256 = sha256(await readFile(reviewFile));
-    await overwrite(configFile, config);
-    const stale = await installationPreflight(
-      destination,
-      configFile,
-      inventoryFile,
-    );
-    expect(stale.proposal.reviewIssue).toBe("REVIEW_STALE_OR_INVALID_INTERVAL");
-    expect(stale.proposal.inventory).toBe("INVALID");
     expect(process).not.toHaveBeenCalled();
   });
   it("matches Python compact ASCII JSON rows including Unicode code-point ordering", () => {

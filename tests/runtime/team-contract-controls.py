@@ -12,6 +12,14 @@ file = ROOT / 'scripts/experiments/agent/team-supervisor.py'
 team = types.ModuleType('contract_controls')
 team.__file__ = str(file)
 exec(compile(file.read_bytes(), str(file), 'exec'), team.__dict__)
+stop_observations = []
+
+
+def keep_stop(root):
+    raw = (root/'broker-refusal.json').read_bytes()
+    refusal = json.loads(raw)
+    stop_observations.append({'reasonCode': refusal['reasonCode'],
+        'requestCount': refusal['requestCount'], 'refusalSha256': hashlib.sha256(raw).hexdigest()})
 
 
 def refused(action):
@@ -147,6 +155,8 @@ for link in (False, True):
         else: path.write_text('original')
         refused(lambda: r.reserve(body()))
         assert r.contract_failed and len(r.value['requests']) == 1
+        assert json.loads((root/'broker-refusal.json').read_bytes())['reasonCode'] == 'invalid-request'
+        keep_stop(root)
         assert target.read_text() == 'original' and path.read_text() == 'original'
         refused(lambda: r.reserve(body()))
 
@@ -155,8 +165,12 @@ with tempfile.TemporaryDirectory() as temp:
     sent = r.reserve(body());calls = []
     (root/'request-0001-upstream-started.json').mkdir()
     fn = upstream(r, lambda b: calls.append(b))
-    refused(lambda: fn(sent))
+    try: fn(sent)
+    except ValueError as error: r.record_refusal(error, 'upstream')
+    else: raise AssertionError('diagnostic failure must prevent send')
     assert calls == [] and r.contract_failed
+    assert json.loads((root/'broker-refusal.json').read_bytes())['reasonCode'] == 'upstream'
+    keep_stop(root)
     refused(lambda: r.reserve(body()))
 
 for stage in ('response-received', 'response-accepted', 'response-rejected'):
@@ -172,6 +186,8 @@ for stage in ('response-received', 'response-accepted', 'response-rejected'):
                 assert str(error) == 'unverified provider outcome'
                 failure = json.loads((root/'provider-failure.json').read_bytes())
                 assert failure['reasonSha256'] == hashlib.sha256(b'tool call during final response reserve').hexdigest()
+            r.record_refusal(error, 'response-validation')
+            keep_stop(root)
         else:
             raise AssertionError('storage failure must not permit delivery')
         assert r.contract_failed and r.value['blockedReason'] == 'provider-outcome-unverified'
@@ -190,3 +206,4 @@ with tempfile.TemporaryDirectory() as temp:
     assert 'private transport' not in (root/'request-0001-upstream-failed.json').read_text()
 
 print('team contract controls passed: canonical shape, bounded privacy, phase timing, JSON/SSE refusal, storage latches; no sockets/runtime/upstream')
+print(json.dumps({'brokerStops': stop_observations}))

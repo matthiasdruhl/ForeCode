@@ -173,7 +173,6 @@ class TeamReservations(base.budget.Reservations):
             'prohibited team capability': 'tool-declaration',
             'prohibited team history capability': 'history-tool',
             'provider outcome requires owner review': 'provider-breaker',
-            'team contract diagnostics unavailable': 'contract-diagnostics',
         }
         projection = error.projection if isinstance(error, base.budget.ReservationCapacityError) else None
         code = codes.get(str(error), 'invalid-request' if stage == 'reservation' else stage)

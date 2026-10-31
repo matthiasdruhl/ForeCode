@@ -10,7 +10,7 @@ import {
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { writeSource } from "./team-source-write.mjs";
-export const orientation = `Public workflow v3 (identical in both arms):
+export const orientation = `Public workflow v4 (identical in both arms):
 The complete task envelope is already in this prompt. Its task is nested inside the prompt string in /run/forecode-task.json.
 Run node /run/team-workflow.mjs task to print the parsed public task and adapter contract once.
 Node, bash, rg, and the readonly /toolchain/node_modules exist; Python and a shell apply_patch executable do not.
@@ -19,8 +19,9 @@ For ALL source edits use atomic whole-file writes, not shell redirection, rm, pa
 ${JSON.stringify({ path: "src/example.ts", expectedSha256: null, content: 'export const example = "text";\n' })}
 FORECODE_JSON
 Use null only for a new file; for replacement use its current SHA256. Send complete file content as JSON. Encode control bytes in JSON; never embed raw NUL in a shell command. Literal source backslashes must be JSON escaped. A rejected write leaves the previous file intact.
-Every safe write returns a digest and a cheap adapter/cookie check. Run node /run/team-public-checks.mjs --quick for cheap public feedback, or node /run/team-public-checks.mjs for compilation, build and session checks in disposable writable scratch.
-Do not invoke tsc/build directly in the readonly workspace. At the next completed shell command after four admitted provider requests, an early interface milestone runs. Full checks begin at a completed shell command after the repair checkpoint (12 admitted provider requests or 240 seconds remaining); unchanged source reuses cached results. Request counts are provider requests, not shell commands. Reserve the final three requests for repairs, validation and submission. The last admitted request has tools disabled for your final response, inside the existing ceiling; it is never extended. A final response must disclose unfinished work and does not establish readiness or correctness.
+Use static imports. Dynamic import(), require, eval, Function and process.getBuiltinModule are forbidden by the public source policy, including dynamic imports of local files. Forbidden host modules and imports outside the source tree are also rejected.
+Every safe write returns a digest and cheap source-boundary and adapter/cookie checks. Run node /run/team-public-checks.mjs --quick for cheap public feedback, or node /run/team-public-checks.mjs for compilation, build and session checks in disposable writable scratch.
+Do not invoke tsc/build directly in the readonly workspace. At the next completed shell command after four admitted provider requests, an early interface milestone runs. Full checks begin at a completed shell command after the repair checkpoint (12 admitted provider requests or 240 seconds remaining); unchanged source reuses cached results. Request counts are provider requests, not shell commands. Reserve the final three requests for repairs, validation and submission. The broker repeats phase-specific wrap-up guidance directly in those model requests even if no shell checkpoint runs. The last admitted request has tools disabled for your final response, inside the existing ceiling; it is never extended. A final response must disclose unfinished work and does not establish readiness or correctness.
 Final source archival, public readiness, native exit, and protected correctness are separate. Failed checks block readiness. Public PASS cannot establish protected correctness.`;
 export function progress() {
   try {

@@ -545,6 +545,20 @@ describe(
       expect(out.attempts).toHaveLength(0);
       expect(f.calls).toEqual([]);
     });
+    it.each(["missing", "changed"])(
+      "refuses a %s public boundary helper before either arm starts",
+      async (defect) => {
+        const f = await fixture();
+        const name = "/opt/forecode-agent/team-public-boundary.mjs";
+        if (defect === "missing") delete f.agentFiles[name];
+        else f.agentFiles[name] = "0".repeat(64);
+        const out = await runPairedTournament(f.input);
+        expect(out.attempts).toHaveLength(0);
+        expect(
+          f.calls.some((call) => call.input?.includes('"operation":"start"')),
+        ).toBe(false);
+      },
+    );
     it("collects real command observations rather than accepting an inventory label", async () => {
       const f = await fixture();
       expect(f.initial.inventory.enforcementObservationSha256).toMatch(
@@ -608,6 +622,9 @@ describe(
       );
       expect(manifest.files.map((f) => f.path)).toContain(
         "team/agent/team-supervisor.py",
+      );
+      expect(manifest.files.map((f) => f.path)).toContain(
+        "team/agent/team-public-boundary.mjs",
       );
       expect(JSON.stringify(manifest)).not.toContain("publicKey");
       expect(JSON.stringify(manifest.files)).not.toContain("team-policy.json");

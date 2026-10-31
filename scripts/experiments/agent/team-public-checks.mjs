@@ -91,6 +91,17 @@ try {
     if (bytes.length > 2_097_152) throw new Error("PROPOSED_SOURCE_BOUND");
     await writeFile(`${work}/src/server/team-benchmark.ts`, bytes);
   }
+  // Inspect copied bytes before loading any candidate module or build tool.
+  // Both quick and full checks include this public policy; no private tests.
+  if (
+    !run(
+      "source-boundary",
+      ["/run/team-public-boundary.mjs", work],
+      20_000,
+      "PUBLIC_BOUNDARY_CHECK_COMPLETED",
+    )
+  )
+    throw new Error("PUBLIC_BOUNDARY_FAILED");
   await symlink("/toolchain/node_modules", `${work}/node_modules`);
   // Dynamic import and documented bootstrap exercise the public interface,
   // including cookies, before build. Source inspection alone cannot pass.
@@ -133,10 +144,12 @@ try {
       run("session-cookie", session, 15_000, sessionCompletion);
     }
   }
-} catch {
+} catch (error) {
   rows.push({ id: "adapter-source", passed: false });
   console.log(
-    "PUBLIC_CHECK adapter-source FAIL (required src/server/team-benchmark.ts missing, empty or source alias)",
+    error.message === "PUBLIC_BOUNDARY_FAILED"
+      ? "PUBLIC_CHECK adapter-source FAIL (public source boundary)"
+      : "PUBLIC_CHECK adapter-source FAIL (required source unavailable, invalid or check interrupted)",
   );
 } finally {
   const passed = rows.length > 0 && rows.every((row) => row.passed);

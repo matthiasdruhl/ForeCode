@@ -12,7 +12,7 @@ for name,raw in r['files'].items():
 rows=[]
 adapter=root/'src/server/team-benchmark.ts'
 positive='export function createTeamBenchmark(){return {domain(){return {};},http(){return Response.json({}, {headers:{"Set-Cookie":"booking_demo_session=synthetic; HttpOnly; SameSite=Strict; Path=/"}});}};}'
-for case in ['missing-adapter','missing-export','unusable-interface','cookie-failure','compile-failure','positive','early-exit']:
+for case in ['missing-adapter','missing-export','unusable-interface','cookie-failure','compile-failure','positive','early-exit','static-local-import','dynamic-local-import']:
  if adapter.exists(): adapter.unlink()
  if case=='missing-export':adapter.write_text('export const somethingElse = 1;')
  elif case=='unusable-interface':adapter.write_text('export function createTeamBenchmark(){return {domain:1,http:1};}')
@@ -22,16 +22,21 @@ for case in ['missing-adapter','missing-export','unusable-interface','cookie-fai
  if case=='compile-failure':
   (root/'src/public-control.ts').write_text('export const wrong: string = 1;')
  if case=='positive': (root/'src/public-control.ts').unlink()
+ if case=='static-local-import':adapter.write_text('import { CreateBookingInputSchema } from "../domain/booking";\n'+positive)
+ if case=='dynamic-local-import':adapter.write_text(positive+'\nasync function publicControl(){return import("../domain/booking");}')
  name='forecode-public-control-'+str(uuid.uuid4())
  args=['docker','run','--name',name,'--label','forecode.public.control=case09','--pull=never','--network=none','--read-only','--cap-drop=ALL','--security-opt=no-new-privileges','--user','1000:1000','--cpus','1','--memory','768m','--memory-swap','768m','--pids-limit','128','--ulimit','nofile=256:256','--log-driver=none','--tmpfs','/tmp:rw,nosuid,nodev,size=32m,mode=1777','--tmpfs','/work:rw,nosuid,nodev,size=256m,mode=1777','--mount','type=bind,src='+str(root)+',dst=/workspace,readonly']
- for n in ['team-public-checks.mjs','team-public-session.mjs']:args+=['--mount','type=bind,src=/opt/forecode-agent/'+n+',dst=/run/'+n+',readonly']
+ for n in ['team-public-checks.mjs','team-public-session.mjs', 'team-public-boundary.mjs']:args+=['--mount','type=bind,src=/opt/forecode-agent/'+n+',dst=/run/'+n+',readonly']
  args+=['--entrypoint','/usr/local/bin/node',r['image'],'/run/team-public-checks.mjs']
  try:
   p=subprocess.run(args,capture_output=True,timeout=185)
   row={'case':case,'exitCode':p.returncode,'stdout':p.stdout.decode(),'stderr':p.stderr.decode()};rows.append(row)
-  assert (p.returncode==0)==(case=='positive'),row
+  assert (p.returncode==0)==(case in ['positive','static-local-import']),row
   if case in ['missing-adapter','missing-export','unusable-interface','cookie-failure']:assert 'PUBLIC_CHECK build' not in row['stdout'],row
-  assert 'PUBLIC_READINESS '+('READY' if case=='positive' else 'BLOCKED') in row['stdout'],row
+  assert 'PUBLIC_READINESS '+('READY' if case in ['positive','static-local-import'] else 'BLOCKED') in row['stdout'],row
+  if case=='dynamic-local-import':
+   assert 'DYNAMIC_IMPORT_USE_STATIC_IMPORT' in row['stdout'],row
+   assert 'PUBLIC_CHECK adapter-session' not in row['stdout'] and 'PUBLIC_CHECK build' not in row['stdout'],row
  finally:
   subprocess.run(['docker','rm','-f',name],check=True,stdout=subprocess.DEVNULL)
 shutil.rmtree(root)

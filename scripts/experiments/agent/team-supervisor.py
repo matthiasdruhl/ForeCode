@@ -178,16 +178,27 @@ class TeamReservations(base.budget.Reservations):
                 pending.extend(value.values())
             elif isinstance(value, list):
                 pending.extend(value)
+        # Visible on every closing request, even without another shell exit.
+        # Guidance consumes the same conservative reservation; it grants no
+        # additional requests, tools, time, tokens or spending authority.
+        remaining = min(r['maxRequests'], r['maxIterations']) - len(self.value['requests'])
+        closing = min(3, r.get('completionReserveRequests', 0))
+        if remaining <= closing:
+            instructions = body.get('instructions')
+            if instructions is None: instructions = ''
+            if not isinstance(instructions, str): raise ValueError('team instructions must be text')
+            guidance = {
+                3: 'Completion phase: 3 admitted requests remain including this one. Finish essential repairs only; do not start a rewrite. Run public checks, then submit a final response within the remaining requests. The last request has tools disabled.',
+                2: 'Validation phase: 2 admitted requests remain including this one. Use this last tool-enabled request for necessary validation or a minimal repair, then submit your final response. Disclose unchecked or unfinished work. No extra request is available.',
+                1: 'Final admitted request: tools are disabled. Submit a final response and disclose unfinished work; no further call is available.',
+            }[remaining]
+            body['instructions'] = instructions + '\n' + guidance
         # Final response consumes a normal reservation inside every ceiling.
-        if r.get('completionReserveRequests', 0) and len(self.value['requests']) == min(r['maxRequests'], r['maxIterations']) - 1:
+        if closing and remaining == 1:
             body['tools'] = []
             # Meta Responses supports auto, not tool_choice:none. Empty tools
             # advertise no new calls; returned calls are independently refused.
             body['tool_choice'] = 'auto'
-            instructions = body.get('instructions')
-            if instructions is None: instructions = ''
-            if not isinstance(instructions, str): raise ValueError('team instructions must be text')
-            body['instructions'] = instructions + '\nFinal admitted request: tools are disabled. Submit a final response and disclose unfinished work; no further call is available.'
         return super().reserve(base.budget.canonical(body))
 
     def observe_verified(self, output, content_type, sent):
@@ -349,7 +360,7 @@ class TeamSupervisor(base.Supervisor):
         os.chmod(p / 'task.json', 0o444)
         args = super().worker_args(run_id, image)
         at = args.index('--entrypoint')
-        for name in ['team-worker.mjs', 'team-public-checks.mjs', 'team-public-session.mjs', 'team-workflow.mjs', 'team-source-write.mjs', 'team-shell-hook.sh']:
+        for name in ['team-worker.mjs', 'team-public-checks.mjs', 'team-public-session.mjs', 'team-public-boundary.mjs', 'team-workflow.mjs', 'team-source-write.mjs', 'team-shell-hook.sh']:
             args[at:at] = ['--mount', 'type=bind,src=' + str(HERE / name) + ',dst=/run/' + name + ',readonly']
             at += 2
         args[at:at] = ['--tmpfs', '/work:rw,nosuid,nodev,size=256m,mode=1777']
@@ -470,7 +481,7 @@ class TeamSupervisor(base.Supervisor):
         args[args.index('--name') + 1] = 'forecode-public-ready-' + run_id
         args[args.index('--label') + 1] = 'forecode.booking.team.public=' + run_id
         at = args.index('--entrypoint')
-        for name in ['team-public-checks.mjs', 'team-public-session.mjs']:
+        for name in ['team-public-checks.mjs', 'team-public-session.mjs', 'team-public-boundary.mjs']:
             args[at:at] = ['--mount', 'type=bind,src=' + str(HERE / name) + ',dst=/run/' + name + ',readonly']
             at += 2
         args[at:at] = ['--tmpfs', '/work:rw,nosuid,nodev,size=256m,mode=1777',

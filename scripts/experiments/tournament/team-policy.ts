@@ -142,6 +142,11 @@ export function teamEnforcementPlan(raw: unknown) {
     nativeRolloutTokenLimit: Math.min(c.budget.tokenLimit!, 1_000_000),
     spendMicroUsd,
     maxIterations: c.budget.maxIterations,
+    completionReserveRequests: Math.min(
+      3,
+      c.budget.maxIterations,
+      d.restrictions.maxRequests,
+    ),
     iterationUnit: "upstream_responses_request" as const,
     resources: e.resources,
     vm: {

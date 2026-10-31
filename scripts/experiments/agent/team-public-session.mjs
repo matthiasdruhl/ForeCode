@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 const root = process.argv[2];
+const interfaceOnly = process.argv.includes("--interface-only");
 const load = (name) => import(pathToFileURL(`${root}/${name}`).href);
 const origin = "http://127.0.0.1:3006";
 const request = () =>
@@ -14,17 +15,19 @@ function cookie(response) {
     assert.ok(value.includes(flag));
   return value.split(";")[0];
 }
-const route = await load("src/app/api/session/route.ts");
-const session = cookie(await route.POST(request()));
-const runtime = await load("src/server/runtime.ts");
-assert.equal(
-  (
-    await runtime.bookingHttp.collection(
-      new Request(origin + "/api/bookings", { headers: { cookie: session } }),
-    )
-  ).status,
-  200,
-);
+if (!interfaceOnly) {
+  const route = await load("src/app/api/session/route.ts");
+  const session = cookie(await route.POST(request()));
+  const runtime = await load("src/server/runtime.ts");
+  assert.equal(
+    (
+      await runtime.bookingHttp.collection(
+        new Request(origin + "/api/bookings", { headers: { cookie: session } }),
+      )
+    ).status,
+    200,
+  );
+}
 const seed = Object.freeze({
   organizations: [
     { id: "team-red", name: "Red" },
@@ -84,7 +87,11 @@ assert.ok(
     typeof subject.http === "function",
   "public domain/http interface required",
 );
-cookie(await subject.http(request(), "u-alice"));
+if (!interfaceOnly) cookie(await subject.http(request(), "u-alice"));
 // A candidate may terminate its importing process with exit(0). The parent
 // must observe completion of these public assertions as well as a zero exit.
-process.stdout.write("PUBLIC_SESSION_CHECK_COMPLETED\n");
+process.stdout.write(
+  interfaceOnly
+    ? "PUBLIC_INTERFACE_CHECK_COMPLETED\n"
+    : "PUBLIC_SESSION_CHECK_COMPLETED\n",
+);

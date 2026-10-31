@@ -1,0 +1,17 @@
+{
+  "status": "UNREGISTERED_PROPOSAL_NOT_SPENDING_AUTHORITY",
+  "model": "muse-spark-1.3-contributor",
+  "order": "A_then_B",
+  "maxRequestsPerArm": 60,
+  "maxIterationsPerArm": 60,
+  "completionReserveRequests": 3,
+  "maxSecondsPerArm": 600,
+  "conservativeTokensPerArm": 32000000,
+  "reservedUsdPerArm": 32,
+  "maxOutputTokensPerRequest": 32768,
+  "nativeRolloutTokenLimit": 1000000,
+  "attemptsPerArm": 1,
+  "automaticRetry": false,
+  "fallback": false,
+  "limitation": "Other ceilings may bind before 60 requests. Requires a new source-bound frozen study, preparation, isolated controls and exact current admissions; never updates or replays case-12."
+}

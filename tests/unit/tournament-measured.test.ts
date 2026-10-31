@@ -41,6 +41,23 @@ const metadata = {
   publishSourcePaths: ["src/service.ts"],
 };
 describe("authenticated private tournament reports — synthetic signed originals only", () => {
+  it("keeps authenticated local broker stops private and never promotes a failed native attempt", async () => {
+    const f = await fixture({
+        installedRuntime: true,
+        failedAgent: true,
+        brokerStop: true,
+      }),
+      r = report(f);
+    expect(r.arms[0]!.brokerStop).toMatchObject({
+      reasonCode: "request-count",
+      requestCount: 3,
+    });
+    expect(r.arms[0]!.status).toBe("failed");
+    expect(r.correctness).toBe("INCONCLUSIVE");
+    const proposal = prepareTournamentPublication(r, metadata);
+    expect(JSON.stringify(proposal)).not.toContain("brokerStop");
+    expect(JSON.stringify(proposal)).not.toContain("refusalSha256");
+  });
   it.each([
     [false, false, "BOTH_VERIFIED"],
     [true, false, "B_ONLY_VERIFIED"],

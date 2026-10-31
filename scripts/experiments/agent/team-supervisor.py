@@ -36,6 +36,43 @@ def exact_int(value, lower, upper):
 
 
 class TeamReservations(base.budget.Reservations):
+    def completion_metadata(self, sent, remaining):
+        # Derive only from the final canonical reservation, after all broker
+        # transformations. This is admission evidence, not proof of delivery.
+        body = json.loads(sent)
+        instructions = body.get('instructions', '')
+        history = body['input']
+        counts = {}
+        for value in history if isinstance(history, list) else []:
+            kind = value.get('type') if isinstance(value, dict) else None
+            kind = kind if kind in ('message', 'reasoning', 'function_call',
+                                   'function_call_output', 'custom_tool_call',
+                                   'custom_tool_call_output') else 'other'
+            counts[kind] = counts.get(kind, 0) + 1
+        return {
+            'requestNumber': len(self.value['requests']),
+            'requestSha256': hashlib.sha256(sent).hexdigest(),
+            'phase': {3: 'completion', 2: 'validation', 1: 'final'}[remaining],
+            'remainingIncludingThis': remaining,
+            'toolCount': len(body.get('tools', [])),
+            'toolTypes': sorted({tool['type'] for tool in body.get('tools', [])}),
+            'toolNames': sorted({tool['name'] for tool in body.get('tools', [])}),
+            'toolChoice': body.get('tool_choice', 'omitted'),
+            'instructionsBytes': len(instructions.encode()),
+            'instructionsSha256': hashlib.sha256(instructions.encode()).hexdigest(),
+            'inputShape': 'list' if isinstance(history, list) else 'text',
+            'historyItemTypeCounts': counts,
+            'responseObservation': None,
+        }
+
+    def save_completion_contracts(self):
+        # Existing private atomic storage; fixed three-record bound, no bodies,
+        # tool arguments, IDs, secrets or arbitrary type/name strings.
+        base.budget.atomic(self.file.parent / 'completion-contract.json', {
+            'schemaVersion': 'team-completion-contract.local.v1',
+            'requests': self.completion_contracts,
+        })
+
     def record_refusal(self, error, stage, raw=None):
         # First refusal wins. Latch before disk I/O: a logging failure must not
         # authorize a later send. Parent is supervisor-owned, outside mounts.
@@ -199,9 +236,54 @@ class TeamReservations(base.budget.Reservations):
             # Meta Responses supports auto, not tool_choice:none. Empty tools
             # advertise no new calls; returned calls are independently refused.
             body['tool_choice'] = 'auto'
-        return super().reserve(base.budget.canonical(body))
+        sent = super().reserve(base.budget.canonical(body))
+        if closing and remaining <= closing:
+            if not hasattr(self, 'completion_contracts'):
+                self.completion_contracts = []
+            self.completion_contracts.append(self.completion_metadata(sent, remaining))
+            self.save_completion_contracts()
+        return sent
 
     def observe_verified(self, output, content_type, sent):
+        records = getattr(self, 'completion_contracts', [])
+        if records:
+            record = records[-1]
+            if record['requestSha256'] != hashlib.sha256(sent).hexdigest():
+                raise ValueError('unreserved completion response')
+            # Count terminal items once for SSE, rather than counting both
+            # added/done echoes. Event-only failures retain separate counts.
+            terminal, events = [], []
+            media = content_type.split(';', 1)[0].strip().lower()
+            parsed = True
+            try:
+                if media == 'application/json':
+                    value = json.loads(output)
+                    terminal = value.get('output', []) if isinstance(value, dict) else []
+                elif media == 'text/event-stream':
+                    for line in output.splitlines():
+                        if line.startswith(b'data:') and line[5:].strip() not in (b'', b'[DONE]'):
+                            value = json.loads(line[5:].strip())
+                            if isinstance(value, dict):
+                                if value.get('type') == 'response.output_item.added':
+                                    events.append(value.get('item'))
+                                response = value.get('response')
+                                if value.get('type') == 'response.completed' and isinstance(response, dict):
+                                    terminal.extend(response.get('output', []))
+                else:
+                    parsed = False
+                def types(items):
+                    counts = {}
+                    for value in items:
+                        kind = value.get('type') if isinstance(value, dict) else None
+                        kind = kind if kind in ('message', 'reasoning', 'function_call', 'custom_tool_call') else 'other'
+                        counts[kind] = counts.get(kind, 0) + 1
+                    return counts
+                observation = {'parsed': parsed, 'terminalTypeCounts': types(terminal),
+                               'addedEventTypeCounts': types(events)}
+            except (ValueError, TypeError):
+                observation = {'parsed': False, 'terminalTypeCounts': {}, 'addedEventTypeCounts': {}}
+            record['responseObservation'] = observation
+            self.save_completion_contracts()
         # Enforce responses independently of advertised tools: a hallucinated
         # or substituted call never reaches the confined CLI. Base observe()
         # durably blocks subsequent sends when this validation raises.

@@ -202,3 +202,69 @@ for changes, body, path, expected, calls in [
             assert (pathlib.Path(temp) / 'broker-refusal.json').is_file()
             assert response.getheader('X-Forecode-Stop') == ('token-capacity' if changes else None)
 print('durable numeric refusal diagnostics, latch, fixed envelope and zero-send negative controls passed')
+
+# Exercise the actual HTTP admission boundary after twenty successful local
+# sends, independently of whether the native CLI chooses to stop at its final.
+for limit in ['maxRequests', 'maxIterations']:
+    with tempfile.TemporaryDirectory() as temp:
+        broker = team.TeamReservations(pathlib.Path(temp), request(
+            maxRequests=20 if limit == 'maxRequests' else 21,
+            maxIterations=20 if limit == 'maxIterations' else 21,
+            completionReserveRequests=3))
+        seen = []
+        def upstream(sent):
+            seen.append(sent)
+            return team.base.budget.canonical({'object': 'response', 'model': broker.request['model'],
+                'service_tier': 'auto', 'status': 'completed', 'output': [],
+                'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}), 'application/json'
+        socket_path = pathlib.Path(temp) / 'gateway.sock'
+        server = team.serve_team(socket_path, broker, upstream)
+        for index in range(21):
+            thread = threading.Thread(target=server.handle_request); thread.start()
+            client = UnixHTTP(socket_path)
+            client.request('POST', '/v1/responses', raw(), {'Content-Type': 'application/json'})
+            response = client.getresponse(); response.read(); client.close(); thread.join()
+            assert response.status == (200 if index < 20 else 403)
+        server.server_close()
+        assert len(seen) == len(broker.value['requests']) == 20
+        assert json.loads((pathlib.Path(temp) / 'broker-refusal.json').read_bytes())['reasonCode'] == (
+            'request-count' if limit == 'maxRequests' else 'iteration-count')
+        assert broker.value['reservedTokens'] == sum(x['inputTokenUpperBound'] + x['maximumOutputTokens'] for x in broker.value['requests'])
+print('HTTP request21 and independent iteration21 refused before local upstream; reservations retained')
+
+for failure_stage in ['admission', 'observation']:
+    with tempfile.TemporaryDirectory() as temp:
+        broker = team.TeamReservations(pathlib.Path(temp), request(
+            maxRequests=2, maxIterations=2, completionReserveRequests=2))
+        seen = []
+        def upstream(sent):
+            seen.append(sent)
+            return team.base.budget.canonical({'object': 'response', 'model': broker.request['model'],
+                'service_tier': 'auto', 'status': 'completed', 'output': [],
+                'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}), 'application/json'
+        save = broker.save_completion_contracts
+        saves = []
+        def fail_storage():
+            saves.append(True)
+            if failure_stage == 'admission' or len(saves) == 2:
+                raise OSError('synthetic diagnostic storage failure')
+            save()
+        socket_path = pathlib.Path(temp) / 'gateway.sock'
+        server = team.serve_team(socket_path, broker, upstream)
+        with patch.object(broker, 'save_completion_contracts', side_effect=fail_storage):
+            thread = threading.Thread(target=server.handle_request); thread.start()
+            client = UnixHTTP(socket_path)
+            client.request('POST', '/v1/responses', raw(), {'Content-Type': 'application/json'})
+            response = client.getresponse(); response.read(); client.close(); thread.join()
+            assert response.status == 403
+        server.server_close()
+        assert len(seen) == int(failure_stage == 'observation')
+        assert len(broker.value['requests']) == 1
+        assert 'observedUsage' not in broker.value['requests'][0]
+        assert broker.value['reservedTokens'] > 0 and broker.value['reservedMicroUsd'] > 0
+        if failure_stage == 'observation':
+            assert (pathlib.Path(temp) / 'unverified-response.bin').is_file()
+        try: broker.reserve(raw())
+        except ValueError: pass
+        else: raise AssertionError('storage recovery must not reopen admission')
+print('HTTP diagnostic-storage failures refuse before delivery, retain unknown usage and latch admission')

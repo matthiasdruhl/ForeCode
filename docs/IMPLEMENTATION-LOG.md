@@ -1,5 +1,128 @@
 # Implementation log
 
+## Publication preparation — October 31, 2026
+
+The owner authorized pushing this branch and opening its implementation PR.
+The publication review verified the runtime/tests against the retained validated
+source, limited the change to eight code/test/documentation paths, and excluded
+all private reports, diagnostic archives and environment material. Only public
+infrastructure observations are included. GitHub CI and review remain required
+before merge; operational installation/admission and provider evidence remain
+separate gates.
+
+## Credential-free final-response readiness — October 31, 2026
+
+Completed the authorized local source review and disposable Linux controls for
+`codex/final-response-contract-observability`. The prior local-only checkpoint
+below is superseded by these actual credential-free observations. No historical
+attempt, protected assertion, grading policy, task, operational sandbox, provider
+route or experimental limit was changed. No inference, A/B run, operational signing,
+registration, merge or publication was performed.
+
+Added only allowlisted tool names/types to the private canonical completion
+projection. Fixed the new full-history harness's cookie-failure assertion: quick
+feedback correctly reports `adapter-session FAIL`, before the later build-stage
+`session-cookie` check. Strengthened native assertions for exactly nineteen tool
+results, public task discovery/failure/repair, canonical budget hashes, private
+bounded metadata, reservations, source retention, independent sealed-source public
+checks and owned process/container cleanup. Added actual HTTP request21 and
+independent iteration21 controls, admission/observation diagnostic-storage failures,
+a pinned-native rollout guard control and fixed PID/tmpfs/OOM resource probes.
+Existing enforcement and public task conditions remain unchanged.
+
+The final executable source closure is
+`47333a1a38b66eb4bf286368d03c4a2c820e60bbd5378b510bb90931c469959d`.
+The disposable environment used the immutable shell template
+`sha256:b178ca62ec2e79af2a044e3ec321bdb72188690e1c15d573ea5524b397554d3d`
+and public worker image
+`sha256:221a51713e8c22e5852d8d587d60322c4ff2ac4235437eb268ae95c8d88fafd5`,
+Codex CLI 0.165.0, Node 24.16.0, two outer CPUs/4GiB and deny-all policy.
+Actual worker readbacks retained UID1000, network-none, readonly root, one CPU,
+768MiB, 128 PIDs and unchanged tmpfs bounds. Private records bind exact source,
+binary, configuration, dependency closure, image and command identities.
+
+Every final guest invocation synchronously applied/read back the existing
+512-task/64GiB team outer ceiling and required a stable boot through the
+control. Earlier cross-invocation boot changes made a one-time readback inadequate;
+all readiness controls were repeated in fresh attempts with this guard. The test operator also narrowed the older supervised 4096-task ceiling to the team profile’s 512-task ceiling and corrected the synthetic disk declaration to its actual 64GiB VM envelope before the final repeat. All five
+full-history modes passed on the final runtime bytes: valid final response, and
+JSON/SSE call-only and mixed-message/call refusal. All short native repair/writer
+and completion regressions, actual native token guard, resource probes, 11 team
+lifecycle controls, 16 supervisor controls, 2 launcher controls, 9 public preparation
+cases and guest broker/unit controls passed. Failed responses/source, unknown
+unvalidated usage and full reservations were retained. Real restart, removal and
+evidence-transfer results are bound in the private closure record.
+
+Repository commands exited0 after the code changes:
+`META_CALLS_ENABLED=false META_SPENDING_APPROVED=false NEXT_TELEMETRY_DISABLED=1 UV_THREADPOOL_SIZE=1 npm run check`
+(1041 tests/56 files, lint, strict typechecks and both production builds),
+`npm run test:e2e` 60, `npm run test:fixture-e2e` 2,
+`PLAN_REFERENCE_ROOT=<reviewed planning checkout> npm run test:plan` 128,
+Python supervisor/reservation controls, Python compilation, formatting and
+`git diff --check`. Commands, exits, exact bytes, initial failed invocations and
+successful fresh reruns remain outside Git. Retained operator failures include a
+TCP-handshake-only denial assertion, omitted test directories/dependencies,
+superseded test-manifest pin, unsupported metadata/UUID-stop CLI forms and an
+archive exclusion-order error. None was converted into a passing control.
+
+Credential-free infrastructure readiness is complete for this exact test-owned
+configuration. The evidence archive was hash-verified before cleanup; a real
+controlled restart preserved the retained files and native closure, removed workers
+could not restart, and all owned scratch, installation, image and sandbox resources
+were removed. Pre-existing sandbox metadata is unchanged and the owned test lease
+was released. No credential-free check remains blocked. Private diagnostic and
+experimental outcomes remain outside Git.
+
+These scripted controls establish infrastructure behavior in this test-owned
+configuration. CPU quota readback is not a performance benchmark; synthetic
+native usage does not establish truthful provider accounting, and fixed Node OOM
+controls do not attribute a native/model failure. Provider latency, real-model
+completion compliance, autonomous source correctness and protected correctness
+remain untested. Operational installation/admission and real-provider evidence
+remain separately gated; no further model run is authorized by this entry.
+
+## Local final-response observability and full-history controls — October 31, 2026
+
+Owner authorized implementing the proposed PR locally after source review.
+Branch: `codex/final-response-contract-observability`. Private report contents
+and historical records were not copied into this change.
+
+`TeamReservations` now retains bounded private completion/validation/final
+metadata derived from the exact canonical reserved request after all existing
+transformations. The request hash matches the budget record; instruction hashes,
+tool count/choice and top-level history type counts contain no raw context.
+Response type observations are explicitly unvalidated. SSE terminal and added
+events have separate counts. Private storage failures refuse further sends;
+failed output, full reservations and unknown usage retain their existing meaning.
+This is admission observability, not a delivery receipt or a compliance fix.
+
+Extended the existing guest-only actual-native harness with full twenty-request
+valid-final, final-tool-refusal and mixed-message/tool-refusal modes, including
+JSON/SSE refusal cases. Each scripts public task discovery, missing-cookie
+failure, atomic repair and nineteen tool-result history items before the final
+response. Assertions cover final contract/hash, unchanged source after refusal,
+native exit, unknown usage, retained failures, sealed public readiness and owned
+cleanup. The original shorter controls remain available. Existing identity,
+resource, deadline, request, token, spend and capability enforcement is unchanged.
+
+Validation: direct `python3 -I -B tests/runtime/team-supervisor-unit.py` exit 0;
+new coverage includes mixed JSON/SSE refusal, metadata binding/privacy/mode,
+storage failure and no twenty-first admission. Python source compilation exit 0.
+The first `npm run check` exited 1: lint/typechecks passed, 1,039/1,041 tests
+passed, two existing Unix-socket controls were denied by the desktop sandbox.
+A repeat with local socket permission exited 0: all 1,041 tests/56 files, lint,
+both strict typechecks and both production builds passed. Changed Markdown
+formatting (`npx prettier --check`) exited 0. `npm run test:e2e` with local
+browser/server permission exited 0: all 60 checks passed (14.9s).
+Final Python syntax and `git diff --check` also exited 0.
+
+Guest controls are implemented but have not been executed on this source.
+No guest installation/operation, native coding-agent launch, provider request,
+protected grading, registration, policy change, publication or merge occurred.
+Next ticket: review these exact bytes, execute the expanded credential-free
+native modes in the admitted pinned Linux environment, verify inventories and
+retained cleanup, then separately authorize provider conformance evidence.
+
 ## Controlled case-14 execution and private closure — October 31, 2026
 
 PR40 integrated the complete PR39 implementation into main `64030c551b96c0327b211d147effcce6e3755c66` after separate source review and both required CI runs passed. Both PR38 and reviewed PR39 head are reachable. Actual execution used the archived exact source `e55f505987a646cc5188690e5f22be20ea5dc591`, with the same trusted closure `e077151ec7c327bd4734e4d455e970ccf22c3ee672d926c0cb089dfcc309d0a7`. The documentation-only integration differences do not change that closure.

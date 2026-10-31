@@ -305,7 +305,7 @@ print('team summary omission and actual-shape over-reservation refusal passed; n
 # twentieth, final-response reservation. Replay synthetic bytes only; never
 # invoke a tool/provider, refund a reservation or grant a twenty-first call.
 for streaming in [False, True]:
-    for final_call in [False, True]:
+    for final_call in [False, True, 'mixed']:
         with tempfile.TemporaryDirectory() as temp:
             r = team.preparation_request(request)
             r.update(deadline=time.time()+60, maxRequests=20, maxIterations=20,
@@ -332,6 +332,9 @@ for streaming in [False, True]:
                 response = {'object': 'response', 'model': r['model'], 'service_tier': 'auto',
                     'status': 'completed', 'output': [{'type': 'reasoning'}, item],
                     'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}
+                if index == 19 and final_call == 'mixed':
+                    response['output'].insert(1, {'type': 'message', 'role': 'assistant',
+                        'content': [{'type': 'output_text', 'text': 'Cannot excuse the following call.'}]})
                 output, content_type = json.dumps(response).encode(), 'application/json'
                 if streaming:
                     events = [{'type': 'response.output_item.added', 'item': item},
@@ -351,9 +354,70 @@ for streaming in [False, True]:
                     reservations.observe(output, content_type, sent)
                     assert reservations.value['requests'][-1]['observedUsage']['totalTokens'] == 2
                 assert (reservations.value['reservedTokens'], reservations.value['reservedMicroUsd']) == reserved
+                if index >= 17:
+                    file = pathlib.Path(temp) / 'completion-contract.json'
+                    assert file.stat().st_mode & 0o777 == 0o600
+                    metadata = json.loads(file.read_bytes())['requests']
+                    assert len(metadata) == index - 16
+                    record = metadata[-1]
+                    assert record['requestSha256'] == reservations.value['requests'][-1]['requestSha256']
+                    assert record['requestSha256'] == team.hashlib.sha256(sent).hexdigest()
+                    assert record['instructionsSha256'] == team.hashlib.sha256(body['instructions'].encode()).hexdigest()
+                    assert record['instructionsBytes'] == len(body['instructions'].encode())
+                    assert record['toolCount'] == len(body['tools'])
+                    assert record['toolTypes'] == sorted({t['type'] for t in body['tools']})
+                    assert record['toolNames'] == sorted({t['name'] for t in body['tools']})
+                    assert record['inputShape'] == 'text' and record['historyItemTypeCounts'] == {}
+                    assert record['phase'] == ['completion', 'validation', 'final'][index-17]
+                    types = record['responseObservation']['terminalTypeCounts']
+                    assert types['reasoning'] == 1
+                    assert types.get('function_call', 0) == int(index < 19 or bool(final_call))
+                    assert types.get('message', 0) == int(index == 19 and (not final_call or final_call == 'mixed'))
+                    assert 'Unchanged common task.' not in file.read_text()
             denied(lambda: reservations.reserve(json.dumps({'model': r['model'], 'input': 'extra'}).encode()))
             assert len(reservations.value['requests']) == 20
 print('team final-three guidance and JSON/SSE twentieth-request refusal passed; no runtime or inference')
+
+# Metadata uses the actual transformed body, and failed private storage cannot
+# permit a send/retry. No process, provider or source execution is involved.
+with tempfile.TemporaryDirectory() as temp:
+    r = team.preparation_request(request)
+    r.update(deadline=time.time()+60, completionReserveRequests=1, provider={
+        'endpoint': 'https://api.meta.ai/v1/responses', 'maxOutputTokens': 16,
+        'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+    reservations = team.TeamReservations(pathlib.Path(temp), r)
+    raw = json.dumps({'model': r['model'], 'input': [
+        {'type': 'function_call', 'name': 'exec_command', 'arguments': 'PRIVATE_ARGUMENT'},
+        {'type': 'function_call_output', 'output': 'PRIVATE_OUTPUT'},
+        {'role': 'user', 'content': 'PRIVATE_TASK'}],
+        'client_metadata': {'secret': 'PRIVATE_METADATA'},
+        'tools': [{'type': 'function', 'name': 'exec_command'}]}).encode()
+    sent = reservations.reserve(raw)
+    record = json.loads((pathlib.Path(temp)/'completion-contract.json').read_bytes())['requests'][0]
+    assert record['historyItemTypeCounts'] == {'function_call': 1, 'function_call_output': 1, 'other': 1}
+    assert record['requestSha256'] == team.hashlib.sha256(sent).hexdigest()
+    assert record['requestSha256'] != team.hashlib.sha256(raw).hexdigest()
+    assert 'PRIVATE_' not in (pathlib.Path(temp)/'completion-contract.json').read_text()
+
+for stage in ['admission', 'observation']:
+    with tempfile.TemporaryDirectory() as temp:
+        r = team.preparation_request(request)
+        r.update(deadline=time.time()+60, completionReserveRequests=1, provider={
+            'endpoint': 'https://api.meta.ai/v1/responses', 'maxOutputTokens': 16,
+            'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+        reservations = team.TeamReservations(pathlib.Path(temp), r)
+        raw = json.dumps({'model': r['model'], 'input': 'inert'}).encode()
+        if stage == 'observation': sent = reservations.reserve(raw)
+        with patch.object(reservations, 'save_completion_contracts', side_effect=OSError('synthetic private storage failure')):
+            try:
+                if stage == 'admission': reservations.reserve(raw)
+                else: reservations.observe(b'{"output":[]}', 'application/json', sent)
+            except (OSError, ValueError): pass
+            else: raise AssertionError('metadata storage failure accepted')
+        assert len(reservations.value['requests']) == 1
+        assert 'observedUsage' not in reservations.value['requests'][0]
+        denied(lambda: reservations.reserve(raw))
+print('completion metadata privacy, transformed binding and storage-failure refusal passed; no upstream')
 
 with tempfile.TemporaryDirectory() as temp:
     body = json.loads(json.dumps(request))

@@ -32,3 +32,58 @@ For real restart coverage, hash all sealed copies in the test-owned volume, reco
 Capture commands, exit codes and output privately. Do not copy source/diagnostic artifacts into Git. Clean up only the exact created controller IDs, test-labelled workers, volume and shell after confirming their identity and absence. No global prune, lease theft, existing-sandbox reset, production registration or paid smoke is permitted by these controls. Safe CLI refusal or synthetic transport success is never reported as actual sandbox admission.
 
 Team public preparation controls: run `team-public-controls.py` only as root in the dedicated no-inference guest, with an envelope containing the reviewed fixture files and the audited immutable public-tooling image. It checks a harmless positive adapter, a TypeScript error and an omitted bootstrap cookie. It copies no private oracle or protected bridge. The team worker mounts only its three public bridge/check files; both coding arms receive the same command and dependencies. Checks use the existing 768MiB/one-CPU worker bounds, a 256MiB ephemeral work directory, and the same supervisor wall-clock deadline. Public preparation output cannot stand in for an authenticated protected grade.
+
+The guest-only `team-native-workflow-controls.py` also accepts these full-history
+`controlMode` values through its existing private stdin envelope:
+
+- `full-final-response`: nineteen tool rounds, then a valid final message.
+- `full-final-tool-refused` and `full-final-mixed-refused`: nineteen tool rounds,
+  then a prohibited call alone or alongside a message, using SSE.
+- `full-final-tool-refused-json` and `full-final-mixed-refused-json`: the same
+  refusal controls using JSON responses.
+
+Each full-history control discovers the public task, writes an adapter with a
+missing cookie, observes public failure, repairs through the atomic writer and
+uses the remaining requests before the reserved twentieth response. It asserts
+the replay includes nineteen tool results, final declarations/instructions,
+native exit, unchanged repaired source after refusal, unknown refused usage,
+retained raw failure, sealed public READY and owned cleanup. Existing exact
+binary/config/image enforcement still applies. Supply freshly reviewed pins;
+this script does not install or admit changed source. Run every mode in a fresh
+attempt. Check the observed VM boot ID for each invocation: a stable sandbox
+name/ID does not establish a stable kernel boot. Before each control, run the
+reviewed `scripts/experiments/isolation/vm-resources.py` in the test-owned guest,
+using the team profile’s existing 512-task and 64GiB backing-device ceilings, then retain its
+numeric readback and verify the boot remains unchanged through that control.
+Recheck the exact installed source, configuration and immutable worker image
+before executing the control. An earlier boot's resource readback is insufficient.
+
+The supervisor retains `completion-contract.json` outside worker mounts using
+the existing private atomic writer (0600 inside the private run directory).
+It contains at most the last three admitted request hashes, phases, tool counts,
+allowlisted names/types and choice, instruction hashes/byte lengths, history type counts and
+unvalidated response type observations. SSE terminal and added-event counts are
+separate to avoid counting added/done echoes as multiple output items. No raw
+instructions, history, tool arguments or provider bodies appear in this file.
+Admission is not proof of upstream delivery; parsed observations do not validate
+usage or success. Existing failed-response retention and budget validation remain
+authoritative. Storage failure refuses further sends. Cleanup retains this file.
+
+`team-native-limit-controls.py` takes the same public-fixture/enforcement stdin
+envelope and exercises the actual pinned CLI's unchanged 1M native rollout guard
+with synthetic usage, while the broker keeps its 32M reservation and 20-request
+ceilings. It requires a native budget error before either broker ceiling, retains
+source/usage records and removes the worker. Synthetic token counts do not
+validate provider accounting.
+
+`resource-controls.py <IMMUTABLE_PUBLIC_WORKER_IMAGE>` uses only fixed harmless
+Node code in separate disposable containers. It requires actual ENOSPC at the
+32MiB tmpfs limit, EAGAIN at the 128-PID limit, and an inspected OOM kill at the
+768MiB memory limit. CPU enforcement is checked through the actual Docker quota;
+this is not a CPU performance benchmark or an attribution test for native OOMs.
+Run only in the authorized test-owned Linux environment. Retain failed invocations
+and expected negative results before removing owned containers or scratch.
+
+Passing scripted controls establishes mechanisms only. A fresh zero-upstream
+installed gate, independent source/inventory review and separately authorized
+provider conformance evidence remain required before another experimental pair.

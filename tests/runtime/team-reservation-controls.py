@@ -102,11 +102,11 @@ with tempfile.TemporaryDirectory() as temp:
         raise AssertionError('logging failure cannot enable a later send')
 
 
-def growth(token_limit, spend, near_envelope=False):
+def growth(token_limit, spend, near_envelope=False, maximum=20, opaque=True):
     with tempfile.TemporaryDirectory() as temp:
-        broker = team.TeamReservations(pathlib.Path(temp), request(tokenLimit=token_limit, spendMicroUsd=spend))
+        broker = team.TeamReservations(pathlib.Path(temp), request(tokenLimit=token_limit, spendMicroUsd=spend, maxRequests=maximum, maxIterations=maximum))
         history = [{'role': 'user', 'content': 'harmless ' * 2700}]
-        for index in range(20):
+        for index in range(maximum):
             body = raw(history)
             if near_envelope:
                 # Exercise almost the full byte envelope while accumulating one
@@ -117,16 +117,17 @@ def growth(token_limit, spend, near_envelope=False):
             except ValueError:
                 return {'completedRequests': index, 'reservedTokens': broker.value['reservedTokens'],
                         'refusal': json.loads((pathlib.Path(temp) / 'broker-refusal.json').read_bytes())['reasonCode']}
-            assert json.loads(sent)['max_output_tokens'] == 32768
+            output_cap = json.loads(sent)['max_output_tokens']
+            assert 16 <= output_cap <= 32768
             item = {'id': f'inert-{index}', 'type': 'reasoning', 'encrypted_content': f'{index}:' + 'c' * 4096}
             output = {'object': 'response', 'model': broker.request['model'], 'service_tier': 'auto',
                       'status': 'completed', 'output': [item], 'usage': {
                           'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}
             broker.observe(team.base.budget.canonical(output), 'application/json', sent)
             # Even with observed output=1, every replay remains bound to32768.
-            assert set(broker.value['opaqueInputs'].values()) == {32768}
-            history += [item, {'type': 'function_call_output', 'call_id': f'inert-{index}', 'output': 'r' * 12000}]
-        return {'completedRequests': 20, 'reservedTokens': broker.value['reservedTokens'],
+            assert broker.value['opaqueInputs'][hashlib.sha256(item['encrypted_content'].encode()).hexdigest()] == output_cap
+            if opaque: history += [item, {'type': 'function_call_output', 'call_id': f'inert-{index}', 'output': 'r' * 12000}]
+        return {'completedRequests': maximum, 'reservedTokens': broker.value['reservedTokens'],
                 'reservedMicroUsd': broker.value['reservedMicroUsd'], 'refusal': None}
 
 old = growth(4_000_000, 6_000_000)
@@ -136,6 +137,31 @@ assert old['completedRequests'] < 20 and old['refusal'] == 'token-capacity'
 assert new['completedRequests'] == envelope['completedRequests'] == 20
 assert new['reservedTokens'] < 32_000_000 and envelope['reservedTokens'] < 32_000_000
 print(json.dumps({'origin': 'synthetic-no-upstream', 'old': old, 'new': new, 'nearByteEnvelope': envelope}))
+compact60 = growth(32_000_000, 32_000_000, maximum=60, opaque=False)
+growing60 = growth(32_000_000, 32_000_000, maximum=60)
+assert compact60['completedRequests'] == 60
+assert growing60['completedRequests'] < 60 and growing60['refusal'] in ('token-capacity', 'token-and-money-capacity'), growing60
+print(json.dumps({'unregistered60RequestProposal': {'compact': compact60, 'growingReplay': growing60}, 'otherCeilingsRemainBinding': True}))
+
+# Last round is an ordinary paid reservation, with no tools and no hidden21st
+# send. Uncooperative tool output is still refused rather than executed.
+with tempfile.TemporaryDirectory() as temp:
+    broker = team.TeamReservations(pathlib.Path(temp), request(maxRequests=2, maxIterations=2, completionReserveRequests=2))
+    first = broker.reserve(raw(tools=[{'type': 'function', 'name': 'exec_command'}]))
+    assert json.loads(first)['tools']
+    final = broker.reserve(raw(tools=[{'type': 'function', 'name': 'exec_command'}], instructions=None))
+    assert json.loads(final)['tool_choice'] == 'auto' and json.loads(final)['tools'] == []
+    assert isinstance(json.loads(final)['instructions'], str)
+    assert len(broker.value['requests']) == 2
+    refusal(broker, raw(), 'request-count')
+with tempfile.TemporaryDirectory() as temp:
+    broker = team.TeamReservations(pathlib.Path(temp), request(maxRequests=1, maxIterations=1, completionReserveRequests=1))
+    sent = broker.reserve(raw())
+    response = {'object': 'response', 'model': broker.request['model'], 'service_tier': 'auto', 'status': 'completed', 'output': [{'type': 'function_call', 'name': 'exec_command', 'arguments': '{}'}], 'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}
+    try: broker.observe(team.base.budget.canonical(response), 'application/json', sent)
+    except ValueError: pass
+    else: raise AssertionError('final-round tools must never execute')
+    assert broker.value['blockedReason'] == 'provider-outcome-unverified'
 
 # Actual fixed HTTP path: refused reservation, malformed HTTP and valid local
 # response. No networking except one private AF_UNIX test socket.
@@ -174,4 +200,5 @@ for changes, body, path, expected, calls in [
         if expected == 403:
             assert payload == b'{"error":{"message":"Bounded provider request unavailable"}}'
             assert (pathlib.Path(temp) / 'broker-refusal.json').is_file()
+            assert response.getheader('X-Forecode-Stop') == ('token-capacity' if changes else None)
 print('durable numeric refusal diagnostics, latch, fixed envelope and zero-send negative controls passed')

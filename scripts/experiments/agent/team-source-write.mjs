@@ -3,7 +3,11 @@
 // concurrent symlink replacement. No shell evaluation or code normalization.
 import * as fs from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
-export function writeSource(raw, root = "/workspace/src") {
+export function writeSource(
+  raw,
+  root = "/workspace/src",
+  beforeCommit = () => {},
+) {
   const value = JSON.parse(raw);
   if (
     Object.keys(value).sort().join() !== "content,expectedSha256,path" ||
@@ -26,76 +30,115 @@ export function writeSource(raw, root = "/workspace/src") {
   const descriptors = [];
   let temporary;
   let parent;
+  let lock;
+  let lockIdentity;
+  let committed = false;
+  const lockPath = `/tmp/forecode-source-write-${hash(Buffer.from(root))}.lock`;
   try {
-    const flags =
-      fs.constants.O_RDONLY |
-      fs.constants.O_DIRECTORY |
-      fs.constants.O_NOFOLLOW;
-    let directory = fs.openSync(root, flags);
-    descriptors.push(directory);
-    const parts = value.path.split("/").slice(1);
-    for (const part of parts.slice(0, -1)) {
-      const next = `/proc/self/fd/${directory}/${part}`;
-      try {
-        fs.mkdirSync(next, { mode: 0o700 });
-      } catch (error) {
-        if (error.code !== "EEXIST") throw error;
-      }
-      directory = fs.openSync(next, flags);
-      descriptors.push(directory);
-    }
-    parent = `/proc/self/fd/${directory}`;
-    const target = `${parent}/${parts.at(-1)}`;
-    function current() {
-      let fd;
-      try {
-        fd = fs.openSync(
-          target,
-          fs.constants.O_RDONLY |
-            fs.constants.O_NOFOLLOW |
-            fs.constants.O_NONBLOCK,
-        );
-        const stat = fs.fstatSync(fd);
-        if (!stat.isFile() || stat.nlink !== 1 || stat.size > 2_097_152)
-          throw new Error("INVALID_WRITE_TARGET");
-        return hash(fs.readFileSync(fd));
-      } catch (error) {
-        if (error.code === "ENOENT") return null;
-        throw error;
-      } finally {
-        if (fd !== undefined) fs.closeSync(fd);
-      }
-    }
-    if (current() !== value.expectedSha256)
-      throw new Error("SOURCE_WRITE_CONFLICT");
-    temporary = `${parent}/.forecode-write-${randomUUID()}`;
-    const fd = fs.openSync(
-      temporary,
-      fs.constants.O_WRONLY |
-        fs.constants.O_CREAT |
-        fs.constants.O_EXCL |
-        fs.constants.O_NOFOLLOW,
-      0o600,
-    );
     try {
-      let offset = 0;
-      while (offset < bytes.length) {
-        const count = fs.writeSync(fd, bytes, offset, bytes.length - offset);
-        if (count <= 0) throw new Error("INCOMPLETE_SOURCE_WRITE");
-        offset += count;
+      // Serialize cooperating writer calls; arbitrary confined source-shell
+      // processes remain outside this guarantee. An abandoned lock fails closed.
+      lock = fs.openSync(
+        lockPath,
+        fs.constants.O_WRONLY |
+          fs.constants.O_CREAT |
+          fs.constants.O_EXCL |
+          fs.constants.O_NOFOLLOW,
+        0o600,
+      );
+      lockIdentity = fs.fstatSync(lock);
+      const flags =
+        fs.constants.O_RDONLY |
+        fs.constants.O_DIRECTORY |
+        fs.constants.O_NOFOLLOW;
+      let directory = fs.openSync(root, flags);
+      descriptors.push(directory);
+      const parts = value.path.split("/").slice(1);
+      for (const part of parts.slice(0, -1)) {
+        const next = `/proc/self/fd/${directory}/${part}`;
+        try {
+          fs.mkdirSync(next, { mode: 0o700 });
+        } catch (error) {
+          if (error.code !== "EEXIST") throw error;
+        }
+        directory = fs.openSync(next, flags);
+        descriptors.push(directory);
       }
-      fs.fsyncSync(fd);
+      parent = `/proc/self/fd/${directory}`;
+      const target = `${parent}/${parts.at(-1)}`;
+      function current() {
+        let fd;
+        try {
+          fd = fs.openSync(
+            target,
+            fs.constants.O_RDONLY |
+              fs.constants.O_NOFOLLOW |
+              fs.constants.O_NONBLOCK,
+          );
+          const stat = fs.fstatSync(fd);
+          if (!stat.isFile() || stat.nlink !== 1 || stat.size > 2_097_152)
+            throw new Error("INVALID_WRITE_TARGET");
+          return hash(fs.readFileSync(fd));
+        } catch (error) {
+          if (error.code === "ENOENT") return null;
+          throw error;
+        } finally {
+          if (fd !== undefined) fs.closeSync(fd);
+        }
+      }
+      if (current() !== value.expectedSha256)
+        throw new Error("SOURCE_WRITE_CONFLICT");
+      beforeCommit(value);
+      temporary = `${parent}/.forecode-write-${randomUUID()}`;
+      const fd = fs.openSync(
+        temporary,
+        fs.constants.O_WRONLY |
+          fs.constants.O_CREAT |
+          fs.constants.O_EXCL |
+          fs.constants.O_NOFOLLOW,
+        0o600,
+      );
+      try {
+        let offset = 0;
+        while (offset < bytes.length) {
+          const count = fs.writeSync(fd, bytes, offset, bytes.length - offset);
+          if (count <= 0) throw new Error("INCOMPLETE_SOURCE_WRITE");
+          offset += count;
+        }
+        fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+      if (current() !== value.expectedSha256)
+        throw new Error("SOURCE_WRITE_CONFLICT");
+      const held = fs.lstatSync(lockPath);
+      if (held.ino !== lockIdentity.ino || held.dev !== lockIdentity.dev)
+        throw new Error("SOURCE_WRITE_LOCK_CHANGED");
+      fs.renameSync(temporary, target);
+      committed = true;
+      temporary = undefined;
+      fs.fsyncSync(directory);
+      return { path: value.path, bytes: bytes.length, sha256: hash(bytes) };
     } finally {
-      fs.closeSync(fd);
+      if (temporary) fs.rmSync(temporary, { force: true });
+      for (const fd of descriptors.reverse()) fs.closeSync(fd);
+      if (lock !== undefined) {
+        fs.closeSync(lock);
+        const identity = fs.lstatSync(lockPath);
+        if (
+          identity.ino !== lockIdentity.ino ||
+          identity.dev !== lockIdentity.dev
+        )
+          throw new Error("SOURCE_WRITE_LOCK_CHANGED");
+        fs.unlinkSync(lockPath);
+      }
     }
-    if (current() !== value.expectedSha256)
-      throw new Error("SOURCE_WRITE_CONFLICT");
-    fs.renameSync(temporary, target);
-    temporary = undefined;
-    fs.fsyncSync(directory);
-    return { path: value.path, bytes: bytes.length, sha256: hash(bytes) };
-  } finally {
-    if (temporary) fs.rmSync(temporary, { force: true });
-    for (const fd of descriptors.reverse()) fs.closeSync(fd);
+  } catch (error) {
+    if (committed)
+      throw Object.assign(
+        new Error("SOURCE_COMMITTED_STORAGE_OR_CLEANUP_FAILURE"),
+        { sourceCommitted: true },
+      );
+    throw error;
   }
 }

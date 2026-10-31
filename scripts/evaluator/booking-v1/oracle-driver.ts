@@ -8,6 +8,7 @@ import { teamOnlyCheckIds, validateTeamProfile } from "./grade-profile";
 import { runInstalledTeamCheck } from "./team-installation";
 import { decodeBehaviorReply, parseBehaviorRpc } from "./team-rpc.mjs";
 import { AssertionError } from "node:assert";
+import { privateTeamFailure } from "./team-diagnostics";
 function boundary(files: { path: string; base64: string }[]): boolean {
   return files
     .filter((f) => /\.[cm]?[jt]sx?$/.test(f.path))
@@ -89,9 +90,18 @@ if (kind === "boundary") {
       JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
     );
   }
+  const context = {
+    kind: kind!,
+    teamNewOrdinal: 0,
+    rpcOrdinal: 0,
+    lastOp: null as string | null,
+  };
   const rpc = (data: unknown) => {
     const input = JSON.stringify(data);
-    parseBehaviorRpc(input, future);
+    const parsed = parseBehaviorRpc(input, future);
+    context.lastOp = String(parsed.op);
+    context.rpcOrdinal++;
+    if (parsed.op === "team-new") context.teamNewOrdinal++;
     const result = spawnSync(
       "docker",
       ["exec", "-i", name!, "/usr/local/bin/node", "/bridge/client.mjs"],
@@ -118,6 +128,9 @@ if (kind === "boundary") {
       process.stdout.write("Protected team check completed.");
       process.exitCode = 0;
     } catch (error) {
+      // This child is outside every worker. guest.ts retains stderr privately;
+      // public receipts and behavior RPCs keep their fixed safe envelopes.
+      process.stderr.write(privateTeamFailure(error, context));
       process.stdout.write("Protected team check did not pass.");
       process.exitCode = error instanceof AssertionError ? 1 : 2;
     }

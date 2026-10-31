@@ -26,6 +26,47 @@ try {
   syncBuiltinESMExports();
 }
 assert.equal(fs.readFileSync(target, "utf8"), text);
+// Post-rename storage failure must report that replacement already happened.
+const originalFsync = fs.fsyncSync;
+fs.fsyncSync = (fd) => {
+  if (fs.fstatSync(fd).isDirectory())
+    throw new Error("synthetic directory fsync failure");
+  return originalFsync(fd);
+};
+syncBuiltinESMExports();
+try {
+  assert.throws(
+    () =>
+      write({ path, expectedSha256: hash(text), content: "// committed\n" }),
+    (error) => error.sourceCommitted === true,
+  );
+} finally {
+  fs.fsyncSync = originalFsync;
+  syncBuiltinESMExports();
+}
+assert.equal(fs.readFileSync(target, "utf8"), "// committed\n");
+write({ path, expectedSha256: hash("// committed\n"), content: text });
+// Validation failures and cooperating writer contention leave prior source.
+assert.throws(() =>
+  writeSource(
+    JSON.stringify({ path, expectedSha256: hash(text), content: "broken" }),
+    "/workspace/src",
+    () => {
+      throw new Error("synthetic interface rejection");
+    },
+  ),
+);
+assert.equal(fs.readFileSync(target, "utf8"), text);
+writeSource(
+  JSON.stringify({ path, expectedSha256: hash(text), content: text }),
+  "/workspace/src",
+  () => {
+    assert.throws(() =>
+      write({ path, expectedSha256: hash(text), content: "overlap" }),
+    );
+  },
+);
+assert.equal(fs.readFileSync(target, "utf8"), text);
 // An incomplete staging write must not truncate/replace the prior target.
 fs.writeSync = () => 0;
 syncBuiltinESMExports();
@@ -143,6 +184,24 @@ const expired = spawnSync(
 );
 assert.notEqual(expired.status, 0);
 assert.equal(fs.readFileSync(target, "utf8"), text);
+// A real proposed adapter missing its factory cannot replace the saved one.
+const adapterPath = "/workspace/src/server/team-benchmark.ts";
+const adapterBefore = fs.readFileSync(adapterPath, "utf8");
+const rejected = spawnSync(
+  "/usr/local/bin/node",
+  ["/run/team-workflow.mjs", "write"],
+  {
+    input: JSON.stringify({
+      path: "src/server/team-benchmark.ts",
+      expectedSha256: hash(adapterBefore),
+      content: "export const partial = 1;\n",
+    }),
+    env: { PATH: "/usr/local/bin:/usr/bin:/bin" },
+  },
+);
+assert.notEqual(rejected.status, 0);
+assert.match(rejected.stdout.toString(), /SOURCE_WRITE_BLOCKED/);
+assert.equal(fs.readFileSync(adapterPath, "utf8"), adapterBefore);
 assert.throws(() => fs.writeFileSync("/workspace/package.json", "wrong"));
 write({
   path,

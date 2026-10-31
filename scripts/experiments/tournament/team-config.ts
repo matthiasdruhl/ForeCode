@@ -63,7 +63,7 @@ export type TeamRuntimeLocation = Readonly<{
 export const configuredTeamRuntimes: ReadonlyMap<string, TeamRuntimeLocation> =
   new Map([
     [
-      "forecode-team-20261031-case-13",
+      "forecode-team-20261031-case-14",
       {
         // Owner explicitly delegated technical review/operator work to AI.
         // Public trust anchor only. Private key/data stay outside this repo.
@@ -74,7 +74,7 @@ export const configuredTeamRuntimes: ReadonlyMap<string, TeamRuntimeLocation> =
           "share",
           "forecode-tournament",
           "registration",
-          "completion-remediation-case13",
+          "boundary-completion-case14",
         ),
         publicKeyPem: [
           "-----BEGIN PUBLIC KEY-----",

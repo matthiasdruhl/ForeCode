@@ -301,6 +301,60 @@ with tempfile.TemporaryDirectory() as temp:
     denied(lambda: reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert'}).encode()))
 print('team summary omission and actual-shape over-reservation refusal passed; no upstream')
 
+# Actual-shape failure: the model can return a call even when tools=[] on the
+# twentieth, final-response reservation. Replay synthetic bytes only; never
+# invoke a tool/provider, refund a reservation or grant a twenty-first call.
+for streaming in [False, True]:
+    for final_call in [False, True]:
+        with tempfile.TemporaryDirectory() as temp:
+            r = team.preparation_request(request)
+            r.update(deadline=time.time()+60, maxRequests=20, maxIterations=20,
+                     completionReserveRequests=3, provider={
+                'endpoint': 'https://api.meta.ai/v1/responses', 'maxOutputTokens': 16,
+                'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+            reservations = team.TeamReservations(pathlib.Path(temp), r)
+            for index in range(20):
+                sent = reservations.reserve(json.dumps({'model': r['model'], 'input': 'synthetic history',
+                    'instructions': 'Unchanged common task.',
+                    'tools': [{'type': 'function', 'name': 'exec_command'}]}).encode())
+                body = json.loads(sent)
+                assert body['instructions'].startswith('Unchanged common task.')
+                if index < 17: assert body['instructions'] == 'Unchanged common task.'
+                if index == 17: assert 'Completion phase: 3' in body['instructions']
+                if index == 18: assert 'Validation phase: 2' in body['instructions']
+                if index == 19:
+                    assert body['tools'] == [] and body['tool_choice'] == 'auto'
+                    assert 'Final admitted request: tools are disabled.' in body['instructions']
+                else: assert body['tools'] == [{'type': 'function', 'name': 'exec_command'}]
+                item = {'type': 'message', 'role': 'assistant', 'content': [{'type': 'output_text', 'text': 'Synthetic final response.'}]}
+                if index < 19 or final_call:
+                    item = {'type': 'function_call', 'name': 'exec_command', 'call_id': 'synthetic', 'arguments': '{"cmd":"true"}'}
+                response = {'object': 'response', 'model': r['model'], 'service_tier': 'auto',
+                    'status': 'completed', 'output': [{'type': 'reasoning'}, item],
+                    'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}
+                output, content_type = json.dumps(response).encode(), 'application/json'
+                if streaming:
+                    events = [{'type': 'response.output_item.added', 'item': item},
+                              {'type': 'response.output_item.done', 'item': item},
+                              {'type': 'response.completed', 'response': response}]
+                    output = b''.join(b'data: ' + json.dumps(event).encode() + b'\n\n' for event in events)
+                    content_type = 'text/event-stream'
+                reserved = (reservations.value['reservedTokens'], reservations.value['reservedMicroUsd'])
+                if index == 19 and final_call:
+                    denied(lambda: reservations.observe(output, content_type, sent))
+                    assert reservations.value['blockedReason'] == 'provider-outcome-unverified'
+                    assert 'observedUsage' not in reservations.value['requests'][-1]
+                    assert (pathlib.Path(temp) / 'unverified-response.bin').read_bytes() == output
+                    diagnostic = json.loads((pathlib.Path(temp) / 'provider-failure.json').read_bytes())
+                    assert diagnostic['reasonSha256'] == team.hashlib.sha256(b'tool call during final response reserve').hexdigest()
+                else:
+                    reservations.observe(output, content_type, sent)
+                    assert reservations.value['requests'][-1]['observedUsage']['totalTokens'] == 2
+                assert (reservations.value['reservedTokens'], reservations.value['reservedMicroUsd']) == reserved
+            denied(lambda: reservations.reserve(json.dumps({'model': r['model'], 'input': 'extra'}).encode()))
+            assert len(reservations.value['requests']) == 20
+print('team final-three guidance and JSON/SSE twentieth-request refusal passed; no runtime or inference')
+
 with tempfile.TemporaryDirectory() as temp:
     body = json.loads(json.dumps(request))
     body['enforcement']['tokenLimit'] = 32_000_000

@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { teamGradeData } from "../support/team-grade-data";
+import ts from "typescript";
+import { publicBoundaryDiagnostics } from "../../scripts/experiments/agent/team-public-boundary.mjs";
 
 // Reviewed driver only, with inert synthetic private-module and Docker seams.
 const state = vi.hoisted(() => ({
@@ -90,6 +92,52 @@ afterEach(() => {
 const run = () => import("../../scripts/evaluator/booking-v1/oracle-driver");
 
 describe("fixed protected oracle driver; synthetic module/worker transport", () => {
+  it.each([
+    ['import { value } from "../domain/booking";', true],
+    ['const value = await import("../domain/booking");', false],
+    ['export * from "node:fs/promises";', false],
+    ['import fs from "fs";', false],
+    ['import x from "../../evaluator/hidden";', false],
+    ['import x from "../../../outside";', false],
+    ['require("local");', false],
+    ['eval("1");', false],
+    ['Function("return 1");', false],
+    ['new Function("return 1");', false],
+    ['process.getBuiltinModule("fs");', false],
+    ['// import("local")\nconst example = "eval(1)";', true],
+  ])(
+    "matches public boundary feedback to the frozen checker: %s",
+    async (source, safe) => {
+      const file = "src/server/public-control.ts";
+      const diagnostics = publicBoundaryDiagnostics(file, source, ts);
+      expect(diagnostics.length === 0).toBe(safe);
+      process.argv[2] = "boundary";
+      state.input = JSON.stringify([
+        { path: file, base64: Buffer.from(source).toString("base64") },
+      ]);
+      await run();
+      expect(process.exitCode).toBe(safe ? 0 : 1);
+      expect(state.privateKinds).toEqual([]);
+      expect(state.calls).toEqual([]);
+    },
+  );
+  it("returns bounded public file/line diagnostics without source snippets", () => {
+    const diagnostics = publicBoundaryDiagnostics(
+      "src/server/control.ts",
+      '\nawait import("./local");\n'.repeat(40),
+      ts,
+    );
+    expect(diagnostics).toHaveLength(20);
+    expect(diagnostics[0]).toEqual({
+      file: "src/server/control.ts",
+      line: 2,
+      column: 7,
+      rule: "DYNAMIC_IMPORT_USE_STATIC_IMPORT",
+    });
+    expect(
+      publicBoundaryDiagnostics("notes.json", 'import("local")', ts),
+    ).toEqual([]);
+  });
   it.each([
     "team-permissions-domain",
     "team-permissions-http",

@@ -132,6 +132,7 @@ with tempfile.TemporaryDirectory() as temp:
     r = team.preparation_request(request)
     r.update(deadline=time.time()+10, provider={'endpoint': 'https://api.meta.ai/v1/responses',
              'maxOutputTokens': 16, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+    r.update(maxRequests=2, maxIterations=2)
     reservations = team.TeamReservations(pathlib.Path(temp), r)
     sent = reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert', 'tools': [
         {'type': 'function', 'name': 'request_user_input', 'parameters': {'type': 'object'}},
@@ -154,6 +155,7 @@ for name in ['exec_command', 'apply_patch', 'request_user_input', 'view_image', 
             r = team.preparation_request(request)
             r.update(deadline=time.time()+10, provider={'endpoint': 'https://api.meta.ai/v1/responses',
                      'maxOutputTokens': 16, 'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+            r.update(maxRequests=2, maxIterations=2)
             reservations = team.TeamReservations(pathlib.Path(temp), r)
             sent = reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert'}).encode())
             call = {'type': 'function_call', 'name': name, 'call_id': 'inert', 'arguments': '{}'}

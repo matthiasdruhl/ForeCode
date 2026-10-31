@@ -59,6 +59,8 @@ const server = createServer((req, res) => {
     (reply) => {
       if (reply.statusCode === 200)
         workflow?.updateProgress(input, ++admittedRequests);
+      if (reply.statusCode === 403)
+        workflow?.reportStop(reply.headers["x-forecode-stop"]);
       res.writeHead(reply.statusCode ?? 502, {
         "content-type": reply.headers["content-type"] ?? "application/json",
       });

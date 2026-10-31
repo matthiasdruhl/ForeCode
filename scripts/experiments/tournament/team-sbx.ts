@@ -58,6 +58,7 @@ import {
 import { teamEnforcementPlan } from "./team-policy";
 import { collectTeamInventory, teamInventoryProgram } from "./team-inventory";
 import { retainTeamControlFailure } from "./team-control-diagnostics";
+import { BrokerStopSchema } from "./team-termination";
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const uuid = z.string().uuid();
 const processSchema = z.strictObject({
@@ -90,6 +91,7 @@ const stateSchema = z.object({
     "cleaned",
   ]),
   agent: processSchema.optional(),
+  brokerStop: BrokerStopSchema.optional(),
   terminationConfirmed: z.boolean().optional(),
   restartAbsenceConfirmed: z.boolean().optional(),
 });
@@ -101,6 +103,7 @@ type RunState = {
   bootId: string;
   containerId?: string;
   observed: boolean;
+  brokerStop?: z.infer<typeof BrokerStopSchema>;
   startRequested?: boolean;
   cancelled?: boolean;
   cleaned: boolean;
@@ -500,6 +503,12 @@ function buildControls(
       );
       s.containerId = value.containerId;
     }
+    if (value.brokerStop)
+      invariant(
+        value.brokerStop.requestCount <=
+          Math.min(plan.maxIterations, plan.restrictions.maxRequests),
+        "Broker stop exceeds frozen request limits.",
+      );
     return value;
   }
   async function gradeFixed(input: GradeInput, signal: AbortSignal) {
@@ -788,6 +797,7 @@ function buildControls(
               "Real termination observation incomplete.",
             );
             s.observed = mode === "production";
+            s.brokerStop = value.brokerStop;
             return {
               runId,
               nonce,
@@ -1028,6 +1038,7 @@ function buildControls(
           initialManifest: initial.files,
           finalManifest,
           baselineRunId: baseline.receipt.runId,
+          ...(s.brokerStop ? { brokerStop: s.brokerStop } : {}),
           deviations: [],
           finalization: {
             terminationConfirmed: attempt.finalizationConfirmed,

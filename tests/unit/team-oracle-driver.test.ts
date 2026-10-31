@@ -5,6 +5,7 @@ import { teamGradeData } from "../support/team-grade-data";
 const state = vi.hoisted(() => ({
   input: "",
   output: "",
+  diagnostics: "",
   outcome: "pass",
   calls: [] as string[],
   privateKinds: [] as string[],
@@ -58,6 +59,7 @@ vi.mock("../../scripts/evaluator/booking-v1/team-installation", () => ({
 beforeEach(() => {
   vi.resetModules();
   state.output = "";
+  state.diagnostics = "";
   state.calls = [];
   state.privateKinds = [];
   state.outcome = "pass";
@@ -73,6 +75,10 @@ beforeEach(() => {
   ];
   vi.spyOn(process.stdout, "write").mockImplementation((value) => {
     state.output += value.toString();
+    return true;
+  });
+  vi.spyOn(process.stderr, "write").mockImplementation((value) => {
+    state.diagnostics += value.toString();
     return true;
   });
 });
@@ -98,6 +104,7 @@ describe("fixed protected oracle driver; synthetic module/worker transport", () 
       expect(state.calls).toEqual(['{"op":"team-new"}']);
       expect(state.calls.join("")).not.toContain("policy");
       expect(state.output).toBe("Protected team check completed.");
+      expect(state.diagnostics).toBe("");
     },
   );
   it.each([
@@ -112,6 +119,13 @@ describe("fixed protected oracle driver; synthetic module/worker transport", () 
       expect(process.exitCode).toBe(exit);
       expect(state.output).toBe("Protected team check did not pass.");
       expect(state.calls).toEqual([]);
+      expect(JSON.parse(state.diagnostics)).toMatchObject({
+        category: outcome === "assert" ? "assertion" : "runtime",
+        teamNewOrdinal: 0,
+        rpcOrdinal: 0,
+        lastOp: null,
+      });
+      expect(state.output).not.toContain("synthetic private expectation");
     },
   );
   it("refuses unknown operations and malformed profile input before a transport or private check", async () => {

@@ -87,6 +87,7 @@ for streaming in (False, True):
                 assert contract['maxOutputTokens'] == 16
                 assert contract['phase'] == ({18: 'completion', 19: 'validation', 20: 'final'}.get(ordinal, 'work'))
                 assert contract['toolNames'] == ([] if ordinal == 20 else ['exec_command'])
+                assert contract['toolTypes'] == ([] if ordinal == 20 else ['function'])
                 assert contract['requestsRemainingAfterAdmission'] == 20-ordinal
                 response = reply(call=ordinal < 20, mixed=ordinal == 20 and final_call,
                                  streaming=streaming, sent=sent)

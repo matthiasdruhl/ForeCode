@@ -107,6 +107,7 @@ class TeamReservations(base.budget.Reservations):
         return {
             'phase': phase, 'requestsRemainingAfterAdmission': ceiling - ordinal,
             'toolCount': len(tools), 'toolNames': sorted({t['name'] for t in tools}),
+            'toolTypes': sorted({t['type'] for t in tools}),
             'toolChoice': body.get('tool_choice'),
             'inputKind': 'items' if isinstance(body['input'], list) else 'text',
             'inputItemCount': len(items), 'inputItemKinds': self.kind_counts(items),

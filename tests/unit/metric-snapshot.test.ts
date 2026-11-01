@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { chmod, mkdir, mkdtemp, realpath, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  lstat,
+  mkdir,
+  mkdtemp,
+  realpath,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { collectSealedMetricSnapshot } from "../../scripts/evaluator/booking-v1/metric-snapshot";
@@ -208,6 +215,45 @@ describe("v3 exact static assets with full reviewed fixture inventory", () => {
         ).boundary.complete,
       ).toBe(false);
     }
+  });
+  it("freezes the actual full fixture with every nested parent sealed, without repair sealing", async () => {
+    const { captureReviewedTree, freezeCandidate } =
+      await import("../../scripts/experiments/artifacts/files");
+    const { original, p } = await complete();
+    const runId = "12345678-1234-4234-8234-123456789012";
+    const parent = await realpath(
+      await mkdtemp(path.join(tmpdir(), "forecode-full-freeze-")),
+    );
+    roots.push(parent);
+    const envelope = await captureReviewedTree(
+      path.resolve("fixtures/booking-v1"),
+      runId,
+    );
+    expect(envelope.files).toHaveLength(22);
+    const frozen = await freezeCandidate(
+      envelope,
+      runId,
+      path.join(parent, "frozen"),
+      envelope,
+    );
+    expect(frozen.manifest).toEqual(original.manifest);
+    const directories = new Set(["."]);
+    for (const entry of original.manifest) {
+      let relative = path.dirname(entry.path);
+      while (relative !== ".") {
+        directories.add(relative);
+        relative = path.dirname(relative);
+      }
+    }
+    expect(directories.has("src/app/api/bookings")).toBe(true);
+    for (const directory of directories)
+      expect(
+        (await lstat(path.join(frozen.directory, directory))).mode & 0o777,
+      ).toBe(0o500);
+    expect((await lstat(parent)).mode & 0o777).toBe(0o700);
+    expect(
+      (await collectSealedMetricSnapshot({ ...frozen, protocol: p })).boundary,
+    ).toMatchObject({ complete: true, unresolvedImports: 0 });
   });
   it.each([
     "changed-svg",

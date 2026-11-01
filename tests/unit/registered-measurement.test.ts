@@ -272,6 +272,36 @@ describe("registered measurement release lifecycle (synthetic originals only)", 
         await (await createStudyCustodyStore(x.f.config)).load(ref.custodyId),
       ).not.toBeNull();
     }
+    x.h.advance(5 * 60_000);
+    const original = x.f.observations[0]!,
+      runId = original.run.id;
+    const envelope = await captureReviewedTree(x.f.sources.A, runId);
+    const final = await freezeCandidate(
+      envelope,
+      runId,
+      path.join(x.f.parent, "v3-full-final-A"),
+      envelope,
+    );
+    const future = x.f.evaluations.get(runId)!;
+    await session.captureFinal(
+      {
+        variant: "A",
+        directory: final.directory,
+        manifest: final.manifest,
+        treeSha256: final.treeSha256,
+        evaluation: future.loaded!,
+        reloadEvaluation: () => future.store.load(runId),
+        authorizationExport: x.exported(future.loaded!),
+        runEndedAt: original.run.endedAt,
+        runtimeOriginalSha256: jsonDigest(original),
+      },
+      signal,
+    );
+    expect(session.references().final[0]?.original).toMatchObject({
+      schemaVersion: "protected-metric-snapshot.local.v1",
+      boundary: { complete: true, unresolvedImports: 0 },
+    });
+    expect(session.references().final[0]?.original.manifest).toHaveLength(22);
   });
   it.each(["wrong", "legacy"] as const)(
     "retains a genuinely held but rejected full-fixture %s snapshot without granting release",
@@ -346,7 +376,6 @@ describe("registered measurement release lifecycle (synthetic originals only)", 
       path.join(x.f.parent, "dispatch-final-A"),
       initial,
     );
-    await seal(sealed.directory);
     const future = x.f.evaluations.get(finalRun)!;
     await session.captureFinal(
       {
@@ -489,7 +518,6 @@ describe("registered measurement release lifecycle (synthetic originals only)", 
         path.join(x.f.parent, `batch-final-${variant}`),
         source,
       );
-      await seal(sealed.directory);
       const future = x.f.evaluations.get(runId)!;
       inputs.push({
         variant,

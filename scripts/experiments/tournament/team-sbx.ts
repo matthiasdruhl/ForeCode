@@ -52,6 +52,7 @@ import {
   teamCompositionDigest,
   isProspectiveTeamStudy,
   staticAssetsProspectiveTeamStudyId,
+  metaEgressProspectiveTeamStudyId,
   type TeamRuntimeRegistration,
 } from "./team-config";
 import {
@@ -187,7 +188,8 @@ function buildControls(
     "Prospective study requires final-only authorization metric protocol v2 or v3.",
   );
   invariant(
-    study.definition.protocol.studyId !== staticAssetsProspectiveTeamStudyId ||
+    (study.definition.protocol.studyId !== staticAssetsProspectiveTeamStudyId &&
+      study.definition.protocol.studyId !== metaEgressProspectiveTeamStudyId) ||
       measurement?.protocol.schemaVersion ===
         "prospective-tournament-metrics.v3",
     "Static-asset prospective study requires explicit metric protocol v3.",

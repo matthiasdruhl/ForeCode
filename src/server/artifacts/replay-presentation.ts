@@ -1,4 +1,6 @@
 import "server-only";
+import { jsonDigest } from "@/lib/report/digests";
+import type { ProspectiveEvidenceCatalog } from "./prospective-publication";
 import { projectTournamentReplayCatalog } from "@/lib/replay";
 import type { TournamentCatalog } from "./tournament-recordings";
 import type { DecisionReportCatalog } from "./decision-reports";
@@ -7,6 +9,11 @@ import type { DecisionReportCatalog } from "./decision-reports";
 export function composeReplayPresentation(
   tournaments: TournamentCatalog,
   reports: DecisionReportCatalog,
+  prospectiveEvidence: ProspectiveEvidenceCatalog = {
+    state: "empty",
+    evidence: [],
+    unavailableCount: 0,
+  },
 ) {
   let replays;
   try {
@@ -38,5 +45,31 @@ export function composeReplayPresentation(
     reports: matching,
     unavailableCount,
   };
-  return { tournaments, replays, reports: joined };
+  const matchedEvidence = prospectiveEvidence.evidence.filter((evidence) =>
+    tournaments.studies.some(
+      (study) =>
+        study.studyId === evidence.studyId &&
+        jsonDigest(study) === evidence.projectionSha256 &&
+        study.preparedOriginalSha256 === evidence.preparedOriginalSha256,
+    ),
+  );
+  const missing =
+    prospectiveEvidence.unavailableCount +
+    prospectiveEvidence.evidence.length -
+    matchedEvidence.length;
+  const evidence: ProspectiveEvidenceCatalog = {
+    state: matchedEvidence.length
+      ? "available"
+      : prospectiveEvidence.state === "empty"
+        ? "empty"
+        : "unavailable",
+    evidence: matchedEvidence,
+    unavailableCount: missing,
+  };
+  return {
+    tournaments,
+    replays,
+    reports: joined,
+    prospectiveEvidence: evidence,
+  };
 }

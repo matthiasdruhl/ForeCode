@@ -1351,3 +1351,46 @@ code {
   overflow-wrap: anywhere;
   flex: 1;
 }
+
+/* Exact archival scope stays readable beside the existing evidence ledger. */
+.metric-scope {
+  margin: 12px 0;
+  max-width: 78ch;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.metric-scope summary {
+  cursor: pointer;
+  color: var(--ink);
+  padding: 8px 0;
+}
+.metric-scope summary:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 3px;
+}
+.metric-scope code,
+.evidence-detail .arm-evidence code {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 700px) {
+  .measurement-rail table {
+    min-width: 0;
+    table-layout: fixed;
+    font-size: 12px;
+  }
+  .measurement-rail th:first-child {
+    width: 46%;
+  }
+  .measurement-rail thead th:not(:first-child) {
+    width: 27%;
+  }
+  .measurement-rail th,
+  .measurement-rail td {
+    padding: 14px 8px 14px 0;
+    overflow-wrap: anywhere;
+  }
+}

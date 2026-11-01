@@ -21,6 +21,7 @@ import type { EvidenceQuestion } from "@/lib/presentation/decision-memo";
 import type { PublicForesightConfiguration } from "@/server/meta/configuration";
 import type { TournamentCatalog } from "@/server/artifacts/tournament-recordings";
 import type { DecisionReportCatalog } from "@/server/artifacts/decision-reports";
+import type { ProspectiveEvidenceCatalog } from "@/server/artifacts/prospective-publication";
 import type { PublicTournament } from "@/lib/experiment/tournament-publication";
 import type { TournamentReplayCatalog } from "@/lib/replay";
 import { ReplayHistory } from "./replay-history";
@@ -83,17 +84,22 @@ export function ResearchExperience({
   tournaments,
   reports,
   replays,
+  prospectiveEvidence = { state: "empty", evidence: [], unavailableCount: 0 },
 }: {
   configuration: PublicForesightConfiguration;
   tournaments: TournamentCatalog;
   reports: DecisionReportCatalog;
   replays: TournamentReplayCatalog;
+  prospectiveEvidence?: ProspectiveEvidenceCatalog;
 }) {
   const [chapter, setChapter] = useState<Chapter>("case");
   const [revision, setRevision] = useState(0);
   const [confirmedTitle, setConfirmedTitle] = useState<string | null>(null);
   const [studyId, setStudyId] = useState(tournaments.studies[0]?.studyId);
   const study = tournaments.studies.find((item) => item.studyId === studyId);
+  const studyEvidence = prospectiveEvidence.evidence.find(
+    (item) => item.studyId === study?.studyId,
+  );
   const replay = replays.replays.find(
     (item) => item.studyId === study?.studyId,
   );
@@ -570,7 +576,7 @@ export function ResearchExperience({
                 </select>
               </label>
             )}
-            <MeasurementRail study={study} />
+            <MeasurementRail study={study} prospective={studyEvidence} />
             <details className="publication-details">
               <summary>Inspect full publication, checks & limitations</summary>
               <TournamentOverview
@@ -660,7 +666,11 @@ export function ResearchExperience({
                 </button>
               ))}
             </div>
-            <EvidenceDetail study={study} question={question} />
+            <EvidenceDetail
+              study={study}
+              question={question}
+              prospective={studyEvidence}
+            />
             <div className="evidence-routes">
               <Link href="/experiments#evidence-laboratory" prefetch={false}>
                 Recorded verification catalog ↗

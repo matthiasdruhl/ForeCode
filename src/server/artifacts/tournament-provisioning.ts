@@ -1,4 +1,10 @@
 import "server-only";
+import {
+  loadProspectivePublications,
+  assertProspectivePublicationAuthority,
+  type ProspectiveEvidenceCatalog,
+} from "./prospective-publication";
+import type { ProspectivePublicationStoreConfig } from "./evaluation-store";
 import { IdSchema, Sha256Schema } from "@/lib/contracts/common";
 import { invariant, sameIds } from "@/lib/contracts/validation";
 import {
@@ -17,6 +23,7 @@ export type ApprovedTournamentConfig = Omit<
   TournamentRecordingConfig,
   "registrations"
 > & {
+  prospectiveEvidence?: ProspectivePublicationStoreConfig;
   registrations: readonly (TournamentRecordingConfig["registrations"][number] & {
     // Pins the entire approved task, conditions, arm identities and history.
     projectionSha256: string;
@@ -56,6 +63,14 @@ function validateProvisioning(config: ApprovedTournamentConfig) {
       }
     }
   }
+  if (config.prospectiveEvidence) {
+    const supplement = config.prospectiveEvidence;
+    assertProspectivePublicationAuthority(config.publications, supplement);
+    invariant(
+      [...supplement.entries.keys()].every((id) => studies.has(id)),
+      "Unregistered prospective supplement",
+    );
+  }
   invariant(
     sameIds([...config.publications.entries.keys()], [...studies]) &&
       sameIds([...config.evaluations.entries.keys()], [...evaluations]),
@@ -75,6 +90,18 @@ export function createTournamentPublicationReader(
     return config;
   }
   return Object.freeze({
+    async loadProspectiveEvidence(): Promise<ProspectiveEvidenceCatalog> {
+      try {
+        const current = currentConfig();
+        return await loadProspectivePublications(
+          current,
+          current?.prospectiveEvidence,
+          now(),
+        );
+      } catch {
+        return { state: "unavailable", evidence: [], unavailableCount: 1 };
+      }
+    },
     async loadTournaments(): Promise<TournamentCatalog> {
       try {
         return await loadTournamentRecordings(currentConfig(), now());

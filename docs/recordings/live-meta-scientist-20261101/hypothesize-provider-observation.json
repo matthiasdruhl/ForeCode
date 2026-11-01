@@ -1,0 +1,34 @@
+{
+  "label": "GENUINE LIVE META OUTPUT",
+  "captureMethod": "Temporary operator fetch guard observed the real HTTPS response; existing production transport and service accepted it. Metadata below is a derived sanitized projection; assistant content is unchanged.",
+  "startedAt": "2026-11-01T04:07:46.363Z",
+  "completedAt": "2026-11-01T04:07:50.267Z",
+  "providerHttpStatus": 200,
+  "applicationHttpStatus": 200,
+  "model": "muse-spark-1.3-contributor",
+  "promptVersion": "booking-scientist-1",
+  "providerCreatedUnixSeconds": 1793506070,
+  "transportResponseIdentity": "meta-dad56ac07fd9049791bd4309ef7f49ce622d2caea61588c070706e03cb6c1b1d",
+  "operatorRawResponseIdSha256": "73e74112e8c04c323463fc4d66e0cda9e08d0c985adc53fa97aa164931e940b8",
+  "operatorRawRequestIdSha256": "7d5fe43fb975d5a0bdfc1cdb5c13a0b2104ad179f66c845c6c450f56e9f4efb0",
+  "identityNote": "The transport hashes canonical JSON strings; the operator guard hashes raw ID strings. These are distinct hash conventions, not matching response IDs. Raw provider IDs were not retained. transportResponseIdentity is copied unchanged from the accepted transport-issued response.",
+  "payloadIdentity": "83bcf7e12bb1102f81db3bcd9aaafd67e43d0c14316f276fe7b463ca98def8b9",
+  "contextIdentity": "8df0cf516c803be8ebadef8541949d9f09f39e7299b6370e25e8780547475a0d",
+  "providerResponseBytes": 2022,
+  "originalApplicationResponseBytesSha256": "501df6765db146dfb371cc980204e7ac9f918999dc63f9dad4b25f5c125389c3",
+  "finishReason": "stop",
+  "usage": {
+    "completion_tokens": 490,
+    "prompt_tokens": 2100,
+    "total_tokens": 2590,
+    "completion_tokens_details": {
+      "reasoning_tokens": 152
+    },
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "estimatedCostUsd": 0.000308,
+  "actualInvoicedCostUsd": null,
+  "originalAssistantContent": "{\"hypotheses\": [{\"schemaVersion\": \"meta-hypothesis.v1\", \"id\": \"hyp-B-team-permissions-01\", \"baselineCommit\": \"a564da2fe36a5de3ea95f777c1f5a60fd80ad6f0\", \"candidateId\": \"candidate-B-team-permissions\", \"intentIds\": [\"intent-live-meta-team-20261101\"], \"visibleScenarioIds\": [\"scenario-team-cancel-01\", \"scenario-overlap-safety-02\"], \"statement\": \"Adding advisory team permission interface and domain cancellation boundary will reduce future boundary violations versus status quo while preserving overlap safety.\", \"mechanism\": \"Isolating team cancellation rules behind a service interface and domain boundary keeps owner checks and store overlap rejection intact, directing future team-permission extensions away from core invariants and http-to-store coupling.\", \"prediction\": {\"metric\": \"boundary_violations\", \"direction\": \"lower\", \"comparison\": \"candidate_vs_status_quo\", \"expectedEffect\": \"Candidate B shows fewer boundary violations than status quo A on team-cancel and overlap-safety scenarios if implemented.\", \"falsifiedWhen\": \"Falsified when candidate B shows equal or higher boundary violations than status quo A on the bound scenarios.\"}, \"assumptions\": [\"Fixed demo viewer context persists\", \"In-memory store overlap rejection unchanged\"], \"counterArguments\": [\"Added interface and boundary may add complexity without measurable benefit in this small graph.\"], \"limitations\": [\"Advisory proposal only, not verification or measurement.\", \"No team membership or durable storage exists in reviewed graph.\"]}]}"
+}

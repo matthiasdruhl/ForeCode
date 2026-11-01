@@ -1,4 +1,8 @@
 import "server-only";
+import {
+  ProspectivePublicationSchema,
+  prospectiveDisclosureSubject,
+} from "@/lib/experiment/prospective-publication";
 import { CustodianEnvelopeSchema } from "@/lib/experiment/scientist-custody";
 import { jsonDigest } from "@/lib/report/digests";
 import { constants } from "node:fs";
@@ -593,6 +597,72 @@ export async function createProtectedScientistCustodyStore(
           "Unauthenticated custody original.",
         );
         return deepFreeze({ record, sha256: entry.sha256, document });
+      } catch {
+        return null;
+      }
+    },
+  });
+}
+
+// Independent additive public archival disclosure. Reuses the existing exact
+// key/file/document/signature/revocation reader; never loads a live hypothesis.
+export type ProspectivePublicationStoreConfig = {
+  custody: ScientistCustodyConfig;
+  entries: ReadonlyMap<string, { disclosureId: string }>;
+};
+export async function createProtectedProspectivePublicationStore(
+  config: ProspectivePublicationStoreConfig,
+) {
+  const originals = await createProtectedScientistCustodyStore(config.custody);
+  const entries = new Map(
+    [...config.entries].map(([id, entry]) => {
+      IdSchema.parse(id);
+      IdSchema.parse(entry.disclosureId);
+      invariant(
+        config.custody.entries.has(entry.disclosureId),
+        "Missing exact prospective disclosure",
+      );
+      return [id, { ...entry }] as const;
+    }),
+  );
+  invariant(
+    entries.size <= 20 &&
+      new Set([...entries.values()].map((entry) => entry.disclosureId)).size ===
+        entries.size &&
+      sameIds(
+        [...config.custody.entries.keys()],
+        [...entries.values()].map((entry) => entry.disclosureId),
+      ),
+    "Reused or unregistered prospective disclosure",
+  );
+  return Object.freeze({
+    async load(studyId: string, now = Date.now()) {
+      try {
+        const entry = entries.get(studyId);
+        if (!entry) return null;
+        const held = await originals.load(entry.disclosureId);
+        if (!held) return null;
+        const evidence = ProspectivePublicationSchema.parse(held.document),
+          record = held.record;
+        invariant(
+          record.kind === "disclosure" &&
+            record.studyId === studyId &&
+            evidence.studyId === studyId &&
+            record.subjectSha256 === prospectiveDisclosureSubject(evidence) &&
+            record.predecessorSha256 === evidence.preparedOriginalSha256 &&
+            Date.parse(record.heldAt) <= now &&
+            now < Date.parse(record.expiresAt),
+          "Prospective disclosure stale or mismatched",
+        );
+        invariant(
+          Date.parse(evidence.lineage.selectedAt) <=
+            Date.parse(record.heldAt) &&
+            (!evidence.metrics ||
+              Date.parse(evidence.metrics.recordedAt) <=
+                Date.parse(record.heldAt)),
+          "Disclosure precedes historical evidence",
+        );
+        return deepFreeze(evidence);
       } catch {
         return null;
       }

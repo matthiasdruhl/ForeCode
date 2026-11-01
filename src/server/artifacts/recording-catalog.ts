@@ -26,3 +26,7 @@ export function loadApprovedDecisionReports() {
 export function inspectApprovedTournamentPublication() {
   return approvedTournamentPublication.inspect();
 }
+
+export function loadApprovedProspectiveEvidence() {
+  return approvedTournamentPublication.loadProspectiveEvidence();
+}

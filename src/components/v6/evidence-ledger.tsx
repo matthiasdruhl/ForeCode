@@ -1,11 +1,14 @@
+import type { PublicProspectiveEvidence } from "@/lib/experiment/prospective-publication";
 import type { PublicTournament } from "@/lib/experiment/tournament-publication";
 import type { EvidenceQuestion } from "@/lib/presentation/decision-memo";
 export function EvidenceDetail({
   study,
   question,
+  prospective,
 }: {
   study?: PublicTournament;
   question: EvidenceQuestion;
+  prospective?: PublicProspectiveEvidence;
 }) {
   if (!study)
     return (
@@ -115,6 +118,144 @@ export function EvidenceDetail({
               <li key={item}>{item}</li>
             ))}
           </ul>
+        </>
+      ) : prospective ? (
+        <>
+          <span className="v6-kicker">SIGNED ARCHIVAL EVIDENCE</span>
+          <section className="arm-evidence">
+            <h4>Review and custody provenance · not blind</h4>
+            <p>
+              Owner-designated AI reviewed and held records on a shared host and
+              context; possible key access is not excluded. Signed custody does
+              not establish human, organizational or blind independence.
+            </p>
+            <p>{prospective.reviewProvenance.priorExposureSummary}</p>
+            <p>
+              Known prior studies:{" "}
+              {prospective.reviewProvenance.priorStudyIds.length
+                ? prospective.reviewProvenance.priorStudyIds.map(
+                    (id, index) => (
+                      <span key={id}>
+                        {index ? ", " : ""}
+                        <code>{id}</code>
+                      </span>
+                    ),
+                  )
+                : "None disclosed"}
+              .
+            </p>
+          </section>
+          <section className="arm-evidence">
+            <h4>Scope and limitations</h4>
+            <ul>
+              {prospective.scopeLimitations.map((limitation, index) => (
+                <li key={index}>{limitation}</li>
+              ))}
+            </ul>
+          </section>
+          <h3>Recorded Meta hypothesis</h3>
+          <p>{prospective.lineage.hypothesisStatement}</p>
+          <p>{prospective.lineage.proposalSummary}</p>
+          <h4>Model-generated challenge · advisory</h4>
+          <p>{prospective.lineage.challengeSummary}</p>
+          <p>
+            The challenge was visible and was not a held-out evaluator or a
+            replacement for the frozen task.
+          </p>
+          <dl>
+            <div>
+              <dt>Issued hypothesis</dt>
+              <dd>
+                <code>{prospective.lineage.hypothesisId}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Selected candidate</dt>
+              <dd>{prospective.lineage.selectedCandidateId}</dd>
+            </div>
+            <div>
+              <dt>Registered / selected</dt>
+              <dd>
+                {prospective.lineage.registeredAt} /{" "}
+                {prospective.lineage.selectedAt}
+              </dd>
+            </div>
+          </dl>
+          {prospective.lineage.stages.map((stage) => (
+            <section className="arm-evidence" key={stage.stage}>
+              <h4>
+                {stage.stage} / {stage.modelId}
+              </h4>
+              <p>
+                Accepted {stage.acceptedAt} · Meta live response, recorded
+                historically.
+              </p>
+              <dl>
+                <div>
+                  <dt>Input / output tokens</dt>
+                  <dd>
+                    {stage.inputTokens ?? "Unknown"} /{" "}
+                    {stage.outputTokens ?? "Unknown"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Reserved allocation · not a charge</dt>
+                  <dd>
+                    {stage.reservedMicroUsd === null
+                      ? "Unknown"
+                      : `${stage.reservedMicroUsd} micro-USD`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Actual charge</dt>
+                  <dd>Unknown</dd>
+                </div>
+                <div>
+                  <dt>Approved request SHA</dt>
+                  <dd>
+                    <code>{stage.approvedRequestSha256}</code>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Accepted response SHA</dt>
+                  <dd>
+                    <code>{stage.acceptedResponseSha256}</code>
+                  </dd>
+                </div>
+              </dl>
+            </section>
+          ))}
+          {prospective.metrics && (
+            <section className="arm-evidence">
+              <h4>Exact v3 measurement scope</h4>
+              <ul>
+                {prospective.metrics.boundaryRules.map((rule) => (
+                  <li key={rule.id}>
+                    <code>
+                      {rule.from} → {rule.to}
+                    </code>
+                  </li>
+                ))}
+              </ul>
+              <p>
+                Selected forbidden rejection cases (
+                {prospective.metrics.authorizationCaseIds.length}):{" "}
+                {prospective.metrics.authorizationCaseIds.map((id, index) => (
+                  <span key={id}>
+                    {index ? ", " : ""}
+                    <code>{id}</code>
+                  </span>
+                ))}
+                . These observed sites are a subset of the protected checks and
+                do not replace the full eight-check receipt.
+              </p>
+            </section>
+          )}
+          <p>
+            This disclosure preserves historical lineage; it grants no current
+            model issuance or execution authority. One A/B pair has no equally
+            informed C arm and establishes no incremental Meta advantage.
+          </p>
         </>
       ) : (
         <>

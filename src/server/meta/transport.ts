@@ -6,6 +6,11 @@ import {
   PROMPT_VERSION,
   buildMetaPayload,
 } from "@/lib/foresight/prompts";
+import {
+  buildInterpretationPayload,
+  INTERPRET_PROMPT_VERSION,
+} from "@/lib/foresight/interpretation/prompts";
+import type { InterpretationContext } from "@/lib/foresight/interpretation/contracts";
 import type { FlowRequest, Step } from "@/lib/foresight/flow";
 import { ProviderInfoSchema } from "@/lib/contracts/provider";
 import { canonicalJson } from "@/lib/report/canonical";
@@ -109,8 +114,9 @@ async function boundedJson(
     reader.releaseLock();
   }
 }
+export type TransportStep = Step | "interpret-evidence";
 export type TransportObservation = {
-  step: Step;
+  step: TransportStep;
   model: string;
   promptVersion: string;
   responseIdentity: string;
@@ -125,6 +131,10 @@ export type TransportObservation = {
   } | null;
   cost: null;
 };
+type TransportResult = {
+  content: unknown;
+  provider: z.infer<typeof ProviderInfoSchema>;
+};
 export function createMetaTransport(options: {
   env: () => Record<string, string | undefined>;
   fetch: typeof fetch;
@@ -134,18 +144,37 @@ export function createMetaTransport(options: {
   let active = false,
     total = 0,
     lastCall = -Infinity;
-  const attempts: { step: Step; at: number }[] = [];
+  const attempts: { step: TransportStep; at: number }[] = [];
   // Bounded process memory only: no raw prompts/responses, files or public logs.
   const observations: TransportObservation[] = [];
   // A provider response identity may authenticate only one observed invocation.
   // Reusing it for different stages would make sourceEvidenceId ambiguous.
   const responseIdentities = new Set<string>();
-  async function call(step: Step, request: FlowRequest, signal: AbortSignal) {
+  function call(
+    step: Step,
+    request: FlowRequest,
+    signal: AbortSignal,
+  ): Promise<TransportResult>;
+  function call(
+    step: "interpret-evidence",
+    request: InterpretationContext,
+    signal: AbortSignal,
+  ): Promise<TransportResult>;
+  async function call(
+    step: TransportStep,
+    request: FlowRequest | InterpretationContext,
+    signal: AbortSignal,
+  ): Promise<TransportResult> {
     const config = foresightConfiguration(options.env());
     if (config.status !== "configured" || signal.aborted)
       throw new RequestFailure("PROVIDER_UNAVAILABLE");
     const model = config.credentials.META_MODEL;
-    const payload = buildMetaPayload(step, request, model);
+    const promptVersion =
+      step === "interpret-evidence" ? INTERPRET_PROMPT_VERSION : PROMPT_VERSION;
+    const payload =
+      step === "interpret-evidence"
+        ? buildInterpretationPayload(request as InterpretationContext, model)
+        : buildMetaPayload(step, request as FlowRequest, model);
     const body = JSON.stringify(payload);
     if (new TextEncoder().encode(body).byteLength > META_LIMITS.inputBytes)
       throw new RequestFailure("PAYLOAD_TOO_LARGE");
@@ -217,6 +246,17 @@ export function createMetaTransport(options: {
               envelope.usage.prompt_tokens + envelope.usage.completion_tokens))
       )
         throw new RequestFailure("PROVIDER_UNAVAILABLE");
+      // Revoked spending approval or changed provider configuration invalidates
+      // an in-flight reply as well. Never reuse a result after authorization changes.
+      const currentApproval = options.env();
+      const currentConfig = foresightConfiguration(currentApproval);
+      if (
+        currentConfig.status !== "configured" ||
+        currentConfig.credentials.META_MODEL !== model ||
+        (currentApproval.META_APPROVED_PAYLOAD_SHA256 &&
+          currentApproval.META_APPROVED_PAYLOAD_SHA256 !== digest(payload))
+      )
+        throw new RequestFailure("PROVIDER_UNAVAILABLE");
       const responseIdentity = `meta-${digest(envelope.id)}`;
       if (responseIdentities.has(responseIdentity))
         throw new RequestFailure("PROVIDER_UNAVAILABLE");
@@ -227,7 +267,7 @@ export function createMetaTransport(options: {
       const observation: TransportObservation = {
         step,
         model,
-        promptVersion: PROMPT_VERSION,
+        promptVersion,
         responseIdentity,
         requestIdentity: requestId ? digest(requestId) : null,
         contextIdentity: digest(request),
@@ -253,7 +293,7 @@ export function createMetaTransport(options: {
           provider: "meta",
           model,
           mode: "live",
-          promptVersion: PROMPT_VERSION,
+          promptVersion,
           sourceEvidenceId: responseIdentity,
         }),
       };

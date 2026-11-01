@@ -41,15 +41,15 @@ export function ChangeTrace({
         aria-label="Conceptual A and B responsibility lanes. Scroll horizontally to inspect."
       >
         <div className="trace-canvas">
-          <svg viewBox="0 0 760 290" aria-hidden="true" focusable="false">
+          <svg
+            preserveAspectRatio="none"
+            viewBox="0 0 760 290"
+            aria-hidden="true"
+            focusable="false"
+          >
             <path
               className="trace-trunk"
-              d="M380 50 V88 M100 88 H660 M100 88 V118 M660 88 V118"
-            />
-            <path className="trace-link" d="M100 153 H660 M100 244 H660" />
-            <path
-              className="trace-fork"
-              d="M380 88 V112 M380 112 H55 V244 H100"
+              d="M380 50 V84 H32 V227 M32 136 H160 M32 227 H160"
             />
           </svg>
           <div className="trace-requirement">

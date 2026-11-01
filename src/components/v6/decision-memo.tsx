@@ -7,14 +7,19 @@ import {
 export function DecisionMemo({
   catalog,
   studyId,
+  definitionSha256,
   inspect,
 }: {
   catalog: DecisionReportCatalog;
   studyId?: string;
+  definitionSha256?: string;
   inspect: (question: EvidenceQuestion, trigger: string) => void;
 }) {
   const report = catalog.reports.find(
-    (item) => item.analysis.identity?.studyId === studyId,
+    (item) =>
+      item.analysis.identity?.studyId === studyId &&
+      (!definitionSha256 ||
+        item.analysis.identity?.definitionSha256 === definitionSha256),
   );
   const memo = decisionMemo(report, catalog.state);
   return (

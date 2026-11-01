@@ -7,6 +7,10 @@ import {
 } from "@/lib/presentation/trace-focus";
 import { decisionMemo } from "@/lib/presentation/decision-memo";
 import { DecisionMemo } from "@/components/v6/decision-memo";
+import { SourceHistory } from "@/components/v6/source-phase-inspector";
+import { EvidenceDetail } from "@/components/v6/evidence-ledger";
+import { MeasurementRail } from "@/components/v6/tournament-measurements";
+import { syntheticTournamentView } from "../support/tournament-view";
 import { ChangeTrace } from "@/components/v6/change-trace";
 import { assessDecisionReport } from "@/lib/report/decision-report";
 import { publicationFixture } from "../support/tournament-publication";
@@ -164,4 +168,41 @@ describe("v6 presentation boundaries", () => {
       await rm(fixture.parent, { recursive: true, force: true });
     }
   });
+});
+
+it("source phases display only approved bindings and preserve absent bodies/topology", () => {
+  const study = syntheticTournamentView();
+  study.arms[0]!.initialTreeSha256 = "a".repeat(64);
+  study.arms[1]!.initialTreeSha256 = "b".repeat(64);
+  const base = { ...initialTraceFocus("synthetic"), arm: "B" as const };
+  const before = renderToStaticMarkup(
+    <SourceHistory study={study} focus={base} />,
+  );
+  expect(before).toContain("a".repeat(64));
+  expect(before).toContain("synthetic-baseline-A");
+  const prepared = renderToStaticMarkup(
+    <SourceHistory study={study} focus={{ ...base, phase: "prepared" }} />,
+  );
+  expect(prepared).toContain("b".repeat(64));
+  expect(prepared).toContain(
+    "APPROVED TREE IDENTITY · SNAPSHOT BODY UNAVAILABLE",
+  );
+  expect(prepared).toContain(study.sourceComparison![0]!.path);
+  const after = renderToStaticMarkup(
+    <SourceHistory study={study} focus={{ ...base, phase: "after" }} />,
+  );
+  expect(after).not.toContain(study.sourceComparison![0]!.path);
+  expect(after).toContain(
+    "Final changed-file bodies and diffs are not available",
+  );
+  const missing = renderToStaticMarkup(<SourceHistory focus={base} />);
+  expect(missing).not.toContain("src/");
+  expect(missing).toContain("UNAVAILABLE");
+  const evidence = renderToStaticMarkup(
+    <EvidenceDetail study={study} question="checks" />,
+  );
+  expect(evidence).toContain(study.arms[1]!.receiptId!);
+  expect(evidence).toContain(study.arms[1]!.runId!);
+  expect(evidence).toContain(study.arms[1]!.checks[0]!.id);
+  expect(renderToStaticMarkup(<MeasurementRail />)).toContain("Unknown");
 });

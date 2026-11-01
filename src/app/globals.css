@@ -1,12 +1,12 @@
 :root {
-  --paper: #f8f7f3;
-  --surface: #fffefa;
-  --ink: #262823;
-  --muted: #686b61;
-  --line: #dfdfd6;
-  --accent: #c84120;
-  --soft-accent: #f9ede5;
-  --green: #3e634b;
+  --paper: var(--night);
+  --surface: var(--workbench);
+  --ink: #f1f1ef;
+  --muted: #a1a4ad;
+  --line: #313744;
+  --accent: #d6ed86;
+  --soft-accent: var(--panel);
+  --green: #a5e1c5;
   --sans: "Avenir Next", "Avenir", "Segoe UI", sans-serif;
   --mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 }
@@ -110,7 +110,7 @@ p {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  background: #f0f0e9;
+  background: var(--panel);
 }
 .brand {
   display: flex;
@@ -172,11 +172,11 @@ p {
   font-weight: 600;
 }
 .steps > a {
-  background: #fffefa;
+  background: var(--workbench);
   border-color: var(--line);
 }
 .steps > div {
-  color: #73756c;
+  color: var(--muted);
 }
 .step-number {
   font: 11px var(--mono);
@@ -240,7 +240,7 @@ p {
 }
 .breadcrumb-separator {
   margin: 0 16px;
-  color: #a1a296;
+  color: var(--muted);
 }
 .session-label {
   display: flex;
@@ -325,7 +325,7 @@ input,
 textarea,
 select {
   background: var(--surface);
-  border: 1px solid #d7d8ce;
+  border: 1px solid var(--rule);
   border-radius: 2px;
   width: 100%;
   color: var(--ink);
@@ -337,7 +337,7 @@ input {
 }
 input::placeholder,
 textarea::placeholder {
-  color: #85877c;
+  color: var(--muted);
 }
 textarea {
   resize: vertical;
@@ -401,25 +401,25 @@ select {
   color: #fff;
 }
 .button-primary:hover {
-  background: #aa3418;
-  border-color: #aa3418;
+  background: var(--action);
+  border-color: var(--action);
 }
 .button-primary > span {
   font-size: 17px;
   line-height: 12px;
 }
 .button-secondary {
-  border: 1px solid #d0d2c8;
+  border: 1px solid var(--rule);
   background: transparent;
   color: var(--ink);
 }
 .button-secondary:hover {
-  background: #edeee6;
+  background: var(--panel);
 }
 .examples {
   padding: 18px 24px;
   border-top: 1px solid var(--line);
-  background: #f9faf5;
+  background: var(--panel);
 }
 .examples .eyebrow {
   font-size: 9px;
@@ -433,7 +433,7 @@ select {
 }
 .examples button {
   font-size: 10px;
-  border: 1px solid #d5d8cc;
+  border: 1px solid var(--rule);
   background: var(--surface);
   border-radius: 2px;
   padding: 7px 8px;
@@ -560,7 +560,7 @@ dd.ready > span {
 .count {
   font: 10px var(--mono);
   color: var(--muted);
-  background: #e9eae1;
+  background: var(--panel);
   padding: 3px 5px;
 }
 .register-heading p {
@@ -594,7 +594,7 @@ dd.ready > span {
   font:
     30px Georgia,
     serif;
-  color: #a6aa9b;
+  color: var(--muted);
   padding: 0 6px;
 }
 .empty-state h3 {
@@ -637,12 +637,12 @@ dd.ready > span {
   padding: 4px 6px;
 }
 .intent-status.confirmed {
-  background: #eaf0e6;
+  background: var(--panel);
   color: var(--green);
 }
 .intent-status.rejected {
-  background: #eee9e2;
-  color: #776d5c;
+  background: var(--panel);
+  color: var(--unknown);
 }
 .intent-item h3 {
   font-size: 15px;
@@ -682,14 +682,14 @@ dd.ready > span {
   background: none;
   border: 0;
   color: var(--ink);
-  border-bottom: 1px solid #c4c9ba;
+  border-bottom: 1px solid var(--rule);
 }
 .intent-bottom button:hover {
   color: var(--accent);
   border-color: var(--accent);
 }
 .revoked {
-  background: #f3f2ed;
+  background: var(--panel);
 }
 .workspace-footer {
   margin-top: 32px;
@@ -710,7 +710,7 @@ dd.ready > span {
 }
 .form-error {
   font-size: 11px;
-  color: #b32d19;
+  color: var(--challenge);
   margin-top: 12px;
   line-height: 1.7;
 }
@@ -1272,7 +1272,7 @@ dd.ready > span {
   overflow-wrap: anywhere;
 }
 .recording-context {
-  background: #f0f0e9;
+  background: var(--panel);
 }
 .recording-empty {
   padding: 36px 24px;
@@ -1395,7 +1395,7 @@ dd.ready > span {
 }
 .atlas-controls [aria-pressed="true"] {
   border-color: var(--ink);
-  background: #e9eddf;
+  background: var(--panel);
 }
 .atlas-layout {
   display: grid;
@@ -1406,7 +1406,7 @@ dd.ready > span {
 .atlas-scroll {
   min-width: 0;
   overflow: auto;
-  background: #f0f1e9;
+  background: var(--workbench);
 }
 .atlas-canvas {
   position: relative;
@@ -1420,7 +1420,7 @@ dd.ready > span {
   height: 385px;
 }
 .atlas-edge {
-  stroke: #b9bdae;
+  stroke: var(--rule);
   stroke-width: 1;
 }
 .atlas-edge.selected {
@@ -1437,7 +1437,7 @@ dd.ready > span {
   padding: 9px 10px;
   text-align: left;
   background: var(--surface);
-  border: 1px solid #c2c7b7;
+  border: 1px solid var(--rule);
   border-radius: 2px;
   color: var(--ink);
 }
@@ -1454,13 +1454,13 @@ dd.ready > span {
 .atlas-node small {
   display: block;
   font: 9px/1.6 var(--mono);
-  color: #64458d;
+  color: var(--meta);
 }
 .atlas-node[aria-pressed="true"] {
   border: 2px solid var(--accent);
 }
 .atlas-node.proposed {
-  background: #f3edf9;
+  background: var(--panel);
 }
 .atlas-inspector {
   padding: 17px;

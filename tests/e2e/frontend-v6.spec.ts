@@ -260,3 +260,33 @@ test("all six memo outcomes render with equal dignity from synthetic server DTOs
     }
   }
 });
+
+test("bounded source focus survives chapter and phase selection", async ({
+  page,
+}) => {
+  await page.goto("/#lab");
+  await page
+    .getByRole("button", {
+      name: "Inspect src/server/booking-store.ts",
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole("link", { name: "04 Time Machine", exact: true })
+    .click();
+  await expect(page.locator(".case-context")).toContainText("A / store");
+  await page.getByRole("button", { name: "03 / After", exact: true }).click();
+  await expect(page.locator(".case-context")).toContainText("A / store");
+  await page
+    .getByRole("link", { name: "02 Architecture Lab", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", {
+      name: "Inspect src/server/booking-store.ts",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByRole("button", { name: "Post-future-task source", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+});

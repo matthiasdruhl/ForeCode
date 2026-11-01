@@ -188,7 +188,8 @@ export function ResearchExperience({
     });
   }
   function select(patch: Partial<Omit<TraceFocus, "contextIdentity">>) {
-    const next = { ...focus, ...patch, sourceId: patch.sourceId };
+    const next = { ...focus, ...patch };
+    if (patch.responsibility && !patch.sourceId) delete next.sourceId;
     setSelection(next);
     writeUrl(chapter, next);
   }

@@ -1,7 +1,9 @@
 import type { PublicTournament } from "@/lib/experiment/tournament-publication";
 export function MeasurementRail({ study }: { study?: PublicTournament }) {
   const value = (number: number | null | undefined, unit: string) =>
-    number == null ? "Unknown" : `${number.toLocaleString("en-US")} ${unit}`;
+    number == null
+      ? "Unknown"
+      : `${number.toLocaleString("en-US", { maximumSignificantDigits: 12 })} ${unit}`;
   const arms = (["A", "B"] as const).map((variant) =>
     study?.arms.find((arm) => arm.variant === variant),
   );

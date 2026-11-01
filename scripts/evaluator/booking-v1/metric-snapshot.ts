@@ -119,20 +119,38 @@ export async function collectSealedMetricSnapshot(input: {
   // Detect replacement/mutation while parsing or enumerating. Custody and a
   // worker-inaccessible immutable export are still required; hashing is not a
   // defense against an authorized operator deliberately replacing both views.
-  const unsupported = Object.keys(files).some(
-    (p) =>
-      !MetricSourcePathSchema.safeParse(p).success &&
-      !protocol.stylesheetPaths.includes(p),
+  // Only v3 can omit exact precommitted opaque SVGs from the static parser.
+  // Inventory/tree hashing still includes every asset. An absent/changed asset
+  // makes the entire observation unknown, even if the new tree is self-consistent.
+  const assets =
+    protocol.schemaVersion === "prospective-tournament-metrics.v3"
+      ? protocol.staticAssets
+      : [];
+  const assetPaths = new Set(assets.map((asset) => asset.path));
+  const assetMismatch = assets.some(
+    (asset) =>
+      !Object.hasOwn(files, asset.path) ||
+      expected.get(asset.path) !== asset.sha256,
   );
+  const measuredFiles = Object.fromEntries(
+    Object.entries(files).filter(([p]) => !assetPaths.has(p)),
+  );
+  const unsupported =
+    assetMismatch ||
+    Object.keys(measuredFiles).some(
+      (p) =>
+        !MetricSourcePathSchema.safeParse(p).success &&
+        !protocol.stylesheetPaths.includes(p),
+    );
   const boundary =
-    unsupported || Object.keys(files).length === 0
+    unsupported || Object.keys(measuredFiles).length === 0
       ? {
           complete: false,
           unresolvedImports: 1,
           scannedRuleIds: protocol.boundaryRules.map((r) => r.id),
           edges: [],
         }
-      : collectBoundaryMetrics(files, protocol);
+      : collectBoundaryMetrics(measuredFiles, protocol);
   invariant(
     jsonDigest(files) === jsonDigest(await scan()),
     "Source changed during measurement.",

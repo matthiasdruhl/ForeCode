@@ -32,6 +32,7 @@ export async function studyFixture(
       definition: StudyDefinition,
       draft: import("../../scripts/experiments/tournament/future-study").FutureStudyDraft,
     ) => void;
+    sourceFiles?: Record<string, string>;
     order?: "A_then_B" | "B_then_A";
     preparationMetrics?: import("../../src/lib/experiment/metrics").ExperimentMetrics;
   } = {},
@@ -88,22 +89,32 @@ export async function studyFixture(
     A: path.join(parent, "source-A"),
     B: path.join(parent, "source-B"),
   };
-  for (const source of Object.values(sources)) {
-    await mkdir(path.join(source, "src"), { recursive: true, mode: 0o700 });
-    await writeFile(path.join(source, "package-lock.json"), "{}", {
-      mode: 0o400,
-    });
+  const sourceFiles: Record<"A" | "B", Record<string, string>> = {
+    A: options.sourceFiles ?? {
+      "package-lock.json": "{}",
+      "src/service.ts": "// inert original",
+    },
+    B: options.sourceFiles
+      ? {
+          ...options.sourceFiles,
+          "src/server/booking-service.ts":
+            options.sourceFiles["src/server/booking-service.ts"] +
+            "\n// Synthetic type-boundary preparation; never executed.\n",
+        }
+      : {
+          "package-lock.json": "{}",
+          "src/service.ts": "// inert prepared",
+          "src/policy.ts": "// inert policy",
+        },
+  };
+  for (const variant of ["A", "B"] as const) {
+    for (const [file, bytes] of Object.entries(sourceFiles[variant])) {
+      const target = path.join(sources[variant], file);
+      await mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
+      await writeFile(target, bytes, { mode: 0o400 });
+    }
   }
-  await writeFile(path.join(sources.A, "src/service.ts"), "// inert original", {
-    mode: 0o400,
-  });
-  await writeFile(path.join(sources.B, "src/service.ts"), "// inert prepared", {
-    mode: 0o400,
-  });
-  await writeFile(path.join(sources.B, "src/policy.ts"), "// inert policy", {
-    mode: 0o400,
-  });
-  const lockSha = sha256("{}");
+  const lockSha = sha256(sourceFiles.A["package-lock.json"]!);
   const draft = futureStudyData();
   if (options.order) draft.plan.trialPolicy.order = options.order;
   if (options.preparationMetrics)
@@ -115,15 +126,25 @@ export async function studyFixture(
   draft.plan.futureOracle.evaluatorSha256 = composite;
   draft.plan.manifest.evaluatorSha256 = composite;
   draft.futureOracle.oracle.evaluatorSha256 = composite;
-  const originalManifest = [
-    { path: "package-lock.json", sha256: lockSha },
-    { path: "src/service.ts", sha256: sha256("// inert original") },
-  ];
-  const preparedManifest = [
-    { path: "package-lock.json", sha256: lockSha },
-    { path: "src/policy.ts", sha256: sha256("// inert policy") },
-    { path: "src/service.ts", sha256: sha256("// inert prepared") },
-  ];
+  const manifest = (files: Record<string, string>) =>
+    Object.entries(files)
+      .map(([path, bytes]) => ({ path, sha256: sha256(bytes) }))
+      .sort((a, b) => (a.path < b.path ? -1 : 1));
+  const originalManifest = manifest(sourceFiles.A);
+  const preparedManifest = manifest(sourceFiles.B);
+  const changedFiles = preparedManifest
+    .filter(
+      (entry) =>
+        originalManifest.find((before) => before.path === entry.path)
+          ?.sha256 !== entry.sha256,
+    )
+    .map((entry) => entry.path);
+  if (
+    options.sourceFiles &&
+    draft.plan.manifest.arms[1]!.upfrontMetrics.filesTouched !== null
+  )
+    draft.plan.manifest.arms[1]!.upfrontMetrics.filesTouched =
+      changedFiles.length;
   const originalTree = jsonDigest(originalManifest),
     preparedTree = jsonDigest(preparedManifest);
   draft.plan.manifest.fixtureSha256 = originalTree;
@@ -262,7 +283,7 @@ export async function studyFixture(
           phase: "preparation",
           recordSha256: sha256(canonicalJson(evidence.record)),
           metrics: evidence.record.metrics,
-          changedFiles: ["src/policy.ts", "src/service.ts"],
+          changedFiles,
         }),
         predecessorSha256: protocol.sha256,
       })

@@ -44,22 +44,56 @@ async function seal(directory: string): Promise<void> {
     if (entry.isDirectory()) await seal(path.join(directory, entry.name));
   await chmod(directory, 0o500);
 }
-async function fixture(v2 = false) {
-  const f = await measuredFixture();
+async function fixture(
+  v2 = false,
+  fullFixture = false,
+  assetMode: "valid" | "wrong" | "legacy" = "valid",
+) {
+  const full = fullFixture
+    ? await (
+        await import("../support/complete-booking-source")
+      ).completeBookingSource()
+    : null;
+  const f = await measuredFixture({ sourceFiles: full?.files });
   roots.push(f.parent);
   const publication = await publicationFixture({}, f);
   const h = await scientistHarness(publication, {
-    schemaVersion: v2
-      ? "prospective-tournament-metrics.v2"
-      : "prospective-tournament-metrics.v1",
+    schemaVersion:
+      fullFixture && assetMode !== "legacy"
+        ? "prospective-tournament-metrics.v3"
+        : v2
+          ? "prospective-tournament-metrics.v2"
+          : "prospective-tournament-metrics.v1",
     ...(v2
       ? { baselineAuthorization: "not_applicable_before_future_requirement" }
       : {}),
-    externalPackages: [],
-    stylesheetPaths: [],
-    boundaryRules: [
-      { id: "self", from: "src/service.ts", to: "src/service.ts" },
-    ],
+    externalPackages: full
+      ? ["react", "next", "server-only", "zod", "node:crypto"]
+      : [],
+    stylesheetPaths: full ? ["src/app/style.css"] : [],
+    ...(full && assetMode !== "legacy"
+      ? {
+          staticAssets: [
+            {
+              path: "src/app/icon.svg",
+              sha256:
+                assetMode === "wrong"
+                  ? "0".repeat(64)
+                  : full.manifest.find((f) => f.path === "src/app/icon.svg")!
+                      .sha256,
+            },
+          ],
+        }
+      : {}),
+    boundaryRules: full
+      ? [
+          {
+            id: "http-store",
+            from: "src/server/http.ts",
+            to: "src/server/booking-store.ts",
+          },
+        ]
+      : [{ id: "self", from: "src/service.ts", to: "src/service.ts" }],
     authorizationCaseIds: f.study.definition.protocol.task.acceptance.map(
       (c) => c.id,
     ),
@@ -216,6 +250,78 @@ async function fixture(v2 = false) {
   };
 }
 describe("registered measurement release lifecycle (synthetic originals only)", () => {
+  it("v3 authenticates full 22-file fixture captures and both held baselines before release without faking production admission", async () => {
+    const x = await fixture(true, true),
+      session = await createRegisteredMeasurementSession(x.options),
+      signal = new AbortController().signal;
+    expect(isProductionRegisteredMeasurementSession(session)).toBe(false);
+    await session.captureBaseline(await x.capture("A"), signal);
+    await expect(session.release(signal)).rejects.toThrow(
+      "Both independently held",
+    );
+    await session.captureBaseline(await x.capture("B"), signal);
+    await session.release(signal);
+    for (const ref of session.references().baseline) {
+      expect(ref.original.manifest).toHaveLength(22);
+      expect(ref.original).toMatchObject({
+        schemaVersion: "protected-metric-snapshot.local.v3",
+        boundary: { complete: true, unresolvedImports: 0 },
+        authorization: { kind: "not_applicable_before_future_requirement" },
+      });
+      expect(
+        await (await createStudyCustodyStore(x.f.config)).load(ref.custodyId),
+      ).not.toBeNull();
+    }
+    x.h.advance(5 * 60_000);
+    const original = x.f.observations[0]!,
+      runId = original.run.id;
+    const envelope = await captureReviewedTree(x.f.sources.A, runId);
+    const final = await freezeCandidate(
+      envelope,
+      runId,
+      path.join(x.f.parent, "v3-full-final-A"),
+      envelope,
+    );
+    const future = x.f.evaluations.get(runId)!;
+    await session.captureFinal(
+      {
+        variant: "A",
+        directory: final.directory,
+        manifest: final.manifest,
+        treeSha256: final.treeSha256,
+        evaluation: future.loaded!,
+        reloadEvaluation: () => future.store.load(runId),
+        authorizationExport: x.exported(future.loaded!),
+        runEndedAt: original.run.endedAt,
+        runtimeOriginalSha256: jsonDigest(original),
+      },
+      signal,
+    );
+    expect(session.references().final[0]?.original).toMatchObject({
+      schemaVersion: "protected-metric-snapshot.local.v1",
+      boundary: { complete: true, unresolvedImports: 0 },
+    });
+    expect(session.references().final[0]?.original.manifest).toHaveLength(22);
+  });
+  it.each(["wrong", "legacy"] as const)(
+    "retains a genuinely held but rejected full-fixture %s snapshot without granting release",
+    async (assetMode) => {
+      const x = await fixture(true, true, assetMode),
+        session = await createRegisteredMeasurementSession(x.options),
+        signal = new AbortController().signal;
+      await expect(
+        session.captureBaseline(await x.capture("A"), signal),
+      ).rejects.toThrow("coverage");
+      expect(x.heldIds).toHaveLength(1);
+      expect(
+        await (await createStudyCustodyStore(x.f.config)).load(x.heldIds[0]!),
+      ).not.toBeNull();
+      expect(session.references().baseline).toEqual([]);
+      await expect(session.release(signal)).rejects.toThrow(
+        "Both independently held",
+      );
+    },
+  );
   it("v2 releases exact static plus personal5 baselines while future-feature authorization remains not applicable", async () => {
     const x = await fixture(true),
       session = await createRegisteredMeasurementSession(x.options),
@@ -270,7 +376,6 @@ describe("registered measurement release lifecycle (synthetic originals only)", 
       path.join(x.f.parent, "dispatch-final-A"),
       initial,
     );
-    await seal(sealed.directory);
     const future = x.f.evaluations.get(finalRun)!;
     await session.captureFinal(
       {
@@ -413,7 +518,6 @@ describe("registered measurement release lifecycle (synthetic originals only)", 
         path.join(x.f.parent, `batch-final-${variant}`),
         source,
       );
-      await seal(sealed.directory);
       const future = x.f.evaluations.get(runId)!;
       inputs.push({
         variant,

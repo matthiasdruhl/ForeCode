@@ -184,13 +184,17 @@ const roots: string[] = [];
 afterEach(async () => {
   for (const root of roots.splice(0)) await removeMetricFixture(root);
 });
-async function protectedV2() {
+async function protectedV2(version: 2 | 3 = 2) {
   const f = await protectedMetricFixture();
   roots.push(f.parent);
   const protocol = MetricProtocolSchema.parse({
     ...f.original.protocol,
-    schemaVersion: "prospective-tournament-metrics.v2",
+    schemaVersion:
+      version === 3
+        ? "prospective-tournament-metrics.v3"
+        : "prospective-tournament-metrics.v2",
     baselineAuthorization: na.kind,
+    ...(version === 3 ? { staticAssets: [] } : {}),
   });
   const commitment = await f.hold({
     id: "v2-metric-commitment",
@@ -202,7 +206,10 @@ async function protectedV2() {
   });
   const observations = MetricObservationsSchema.parse({
     ...f.original.observations,
-    schemaVersion: "prospective-tournament-observations.v2",
+    schemaVersion:
+      version === 3
+        ? "prospective-tournament-observations.v3"
+        : "prospective-tournament-observations.v2",
     protocolSha256: jsonDigest(protocol),
     arms: f.original.observations.arms.map((arm) => ({
       ...arm,
@@ -222,7 +229,10 @@ async function protectedV2() {
         ...arm.baseline!,
         original: MetricSnapshotOriginalSchema.parse({
           ...arm.baseline!.original,
-          schemaVersion: "protected-metric-snapshot.local.v2",
+          schemaVersion:
+            version === 3
+              ? "protected-metric-snapshot.local.v3"
+              : "protected-metric-snapshot.local.v2",
           protocolSha256: jsonDigest(protocol),
           authorization: proof,
         }),
@@ -379,4 +389,31 @@ describe("v2 protected reader binds a real personal baseline without inventing f
       ),
     ).toThrow();
   });
+});
+
+// Same authentic reader/custody and final-case coverage; no version coercion.
+describe("v3 protected personal-baseline compatibility", () => {
+  it("authenticates v3 observations and preserves unknown baseline authorization", async () => {
+    const f = await protectedV2(3),
+      result = await f.load();
+    expect(result?.status).toBe("complete");
+    expect(
+      result?.calculation.arms.map((a) => a.baseline.authorizationFailures),
+    ).toEqual([null, null]);
+    expect(result?.predictionAssessment).toBe("supported");
+  });
+  it.each(["snapshot", "observations"])(
+    "rejects a reheld v2 %s under v3",
+    async (field) => {
+      const f = await protectedV2(3);
+      if (field === "snapshot")
+        f.original.arms[0]!.baseline!.original.schemaVersion =
+          "protected-metric-snapshot.local.v2";
+      else
+        f.original.observations.schemaVersion =
+          "prospective-tournament-observations.v2";
+      await f.publish();
+      expect(await f.load()).toBeNull();
+    },
+  );
 });

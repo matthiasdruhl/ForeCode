@@ -1,3 +1,4 @@
+import { usesPersonalMetricBaseline } from "../../../src/lib/experiment/prospective-metrics";
 // Concrete fixed host dispatch. Production has no injected executables/adapters.
 import { chmod, mkdir, open, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
@@ -50,6 +51,7 @@ import {
   assertTeamRegistrationCurrent,
   teamCompositionDigest,
   isProspectiveTeamStudy,
+  staticAssetsProspectiveTeamStudyId,
   type TeamRuntimeRegistration,
 } from "./team-config";
 import {
@@ -170,11 +172,10 @@ function buildControls(
   );
   invariant(
     !measurement ||
-      measurement.protocol.schemaVersion !==
-        "prospective-tournament-metrics.v2" ||
+      !usesPersonalMetricBaseline(measurement.protocol) ||
       jsonDigest(measurement.baselineEvaluationRunIds) ===
         jsonDigest(config.baselineRunIds),
-    "Registered v2 baseline identities differ from installed composition.",
+    "Registered personal baseline identities differ from installed composition.",
   );
   invariant(
     !isProspectiveTeamStudy(study.definition.protocol.studyId) || measurement,
@@ -182,9 +183,14 @@ function buildControls(
   );
   invariant(
     !isProspectiveTeamStudy(study.definition.protocol.studyId) ||
+      (measurement && usesPersonalMetricBaseline(measurement.protocol)),
+    "Prospective study requires final-only authorization metric protocol v2 or v3.",
+  );
+  invariant(
+    study.definition.protocol.studyId !== staticAssetsProspectiveTeamStudyId ||
       measurement?.protocol.schemaVersion ===
-        "prospective-tournament-metrics.v2",
-    "Prospective study requires final-only authorization metric protocol v2.",
+        "prospective-tournament-metrics.v3",
+    "Static-asset prospective study requires explicit metric protocol v3.",
   );
   invariant(
     mode !== "production" ||
@@ -852,9 +858,9 @@ function buildControls(
         const downstreamRunId = study.draft.plan.manifest.arms.find(
           (a) => a.variant === variant,
         )!.runId!;
-        const baselineStaticOnly =
-          measurement.protocol.schemaVersion ===
-          "prospective-tournament-metrics.v2";
+        const baselineStaticOnly = usesPersonalMetricBaseline(
+          measurement.protocol,
+        );
         const metricRunId = baselineStaticOnly
           ? runId
           : metricBaselineEvaluationRunId(downstreamRunId);

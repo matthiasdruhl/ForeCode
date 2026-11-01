@@ -28,7 +28,11 @@ export async function publicationFixture(
     reviewedProposal: "Extract authorization policy before the future task.",
     hypothesis:
       "Preparation may reduce future effort after its own cost is counted.",
-    publishSourcePaths: ["src/service.ts"],
+    publishSourcePaths: report.preparedChangedFiles.includes("src/service.ts")
+      ? ["src/service.ts"]
+      : report.preparedChangedFiles
+          .filter((path) => path.endsWith(".ts"))
+          .slice(0, 1),
   };
   const proposed = prepareTournamentPublication(report, metadata);
   const approval = (await f.hold({

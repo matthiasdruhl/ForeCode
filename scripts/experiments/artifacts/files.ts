@@ -162,11 +162,23 @@ export async function freezeCandidate(
   const treeSha256 = jsonDigest(manifest);
   if ((await snapshotTree(destination)).treeSha256 !== treeSha256)
     throw new Error("Frozen candidate mismatch.");
-  // Files are immutable to normal writers; hashes are rechecked before/after grading.
-  for (const directory of new Set(
-    files.map((file) => path.dirname(path.join(destination, file.path))),
+  // Seal every parent created within this exclusively created destination,
+  // deepest first. Sealing only leaf directories leaves intermediate source
+  // directories writable and cannot substantiate a sealed metric snapshot.
+  // Derive parents solely from already validated relative file paths; never
+  // traverse or chmod an ancestor outside this owned new destination.
+  const directories = new Set<string>();
+  for (const file of files) {
+    let relative = path.dirname(file.path);
+    while (relative !== ".") {
+      directories.add(relative);
+      relative = path.dirname(relative);
+    }
+  }
+  for (const relative of [...directories].sort(
+    (a, b) => b.split("/").length - a.split("/").length,
   ))
-    await chmod(directory, 0o500);
+    await chmod(path.join(destination, relative), 0o500);
   await chmod(destination, 0o500);
   for (const file of envelope.files) Object.freeze(file);
   Object.freeze(envelope.files);

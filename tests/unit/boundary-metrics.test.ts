@@ -118,7 +118,7 @@ describe("prospective static observation collector", () => {
       }),
     ).toThrow("Duplicate");
   });
-  it("accepts the complete reviewed booking fixture, including its dynamic route and stylesheet", () => {
+  it("parses the reviewed fixture TS/CSS view; full sealed inventory is tested separately", () => {
     const root = "fixtures/booking-v1";
     function inventory(directory: string): [string, string][] {
       return readdirSync(join(root, directory), {

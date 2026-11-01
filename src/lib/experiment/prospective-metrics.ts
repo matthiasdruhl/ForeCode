@@ -16,6 +16,14 @@ export const MetricStylesheetPathSchema = z
   .string()
   .max(512)
   .regex(new RegExp(metricPathPrefix + String.raw`\.css$`));
+// Opaque, precommitted SVG metadata only; never permits source or imports.
+export const MetricStaticAssetSchema = z.strictObject({
+  path: z
+    .string()
+    .max(512)
+    .regex(new RegExp(metricPathPrefix + String.raw`\.svg$`)),
+  sha256: Sha256Schema,
+});
 const edge = z.strictObject({
   from: MetricSourcePathSchema,
   to: MetricSourcePathSchema,
@@ -54,9 +62,13 @@ const MetricProtocolBaseSchema = z.strictObject({
   prediction: z.literal("B_fewer_final_forbidden_edges_than_A"),
 });
 const validateMetricInventory = (
-  p:
-    | z.infer<typeof MetricProtocolBaseSchema>
-    | z.infer<typeof MetricProtocolV2BaseSchema>,
+  p: Pick<
+    z.infer<typeof MetricProtocolBaseSchema>,
+    | "externalPackages"
+    | "stylesheetPaths"
+    | "boundaryRules"
+    | "authorizationCaseIds"
+  >,
   c: z.RefinementCtx,
 ) => {
   if (
@@ -72,6 +84,17 @@ const MetricProtocolV2BaseSchema = MetricProtocolBaseSchema.extend({
   schemaVersion: z.literal("prospective-tournament-metrics.v2"),
   baselineAuthorization: z.literal("not_applicable_before_future_requirement"),
 });
+const MetricProtocolV3BaseSchema = MetricProtocolV2BaseSchema.extend({
+  schemaVersion: z.literal("prospective-tournament-metrics.v3"),
+  staticAssets: z.array(MetricStaticAssetSchema).max(100),
+});
+export const MetricProtocolV3Schema = MetricProtocolV3BaseSchema.superRefine(
+  (p, c) => {
+    validateMetricInventory(p, c);
+    if (!unique(p.staticAssets.map((asset) => asset.path)))
+      c.addIssue({ code: "custom", message: "Duplicate static assets" });
+  },
+);
 export const MetricProtocolV1Schema = MetricProtocolBaseSchema.superRefine(
   validateMetricInventory,
 );
@@ -81,6 +104,7 @@ export const MetricProtocolV2Schema = MetricProtocolV2BaseSchema.superRefine(
 export const MetricProtocolSchema = z.union([
   MetricProtocolV1Schema,
   MetricProtocolV2Schema,
+  MetricProtocolV3Schema,
 ]);
 export type MetricProtocol = z.infer<typeof MetricProtocolSchema>;
 export const MetricBoundaryObservationSchema = z.strictObject({
@@ -144,11 +168,28 @@ const MetricObservationsV2Schema = MetricObservationsV1Schema.extend({
     )
     .length(2),
 });
+const MetricObservationsV3Schema = MetricObservationsV2Schema.extend({
+  schemaVersion: z.literal("prospective-tournament-observations.v3"),
+});
 export const MetricObservationsSchema = z.union([
   MetricObservationsV1Schema,
   MetricObservationsV2Schema,
+  MetricObservationsV3Schema,
 ]);
 export type MetricObservations = z.infer<typeof MetricObservationsSchema>;
+export const usesPersonalMetricBaseline = (p: MetricProtocol) =>
+  p.schemaVersion === "prospective-tournament-metrics.v2" ||
+  p.schemaVersion === "prospective-tournament-metrics.v3";
+export const metricObservationSchemaVersion = (p: MetricProtocol) => {
+  switch (p.schemaVersion) {
+    case "prospective-tournament-metrics.v1":
+      return "prospective-tournament-observations.v1" as const;
+    case "prospective-tournament-metrics.v2":
+      return "prospective-tournament-observations.v2" as const;
+    case "prospective-tournament-metrics.v3":
+      return "prospective-tournament-observations.v3" as const;
+  }
+};
 const same = (a: string[], b: string[]) =>
   unique(a) &&
   unique(b) &&
@@ -198,12 +239,10 @@ export function calculateProspectiveMetrics(
     o = MetricObservationsSchema.parse(observationsInput);
   const protocolSha256 = jsonDigest(p);
   invariant(
-    (p.schemaVersion === "prospective-tournament-metrics.v2") ===
-      (o.schemaVersion === "prospective-tournament-observations.v2"),
+    metricObservationSchemaVersion(p) === o.schemaVersion,
     "Metric protocol/observation version mismatch",
   );
-  const baselineNotApplicable =
-    p.schemaVersion === "prospective-tournament-metrics.v2";
+  const baselineNotApplicable = usesPersonalMetricBaseline(p);
   // Content identity is necessary but never registration/evidence authentication.
   invariant(
     o.studyId === p.studyId && o.protocolSha256 === protocolSha256,

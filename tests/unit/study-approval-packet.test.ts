@@ -25,6 +25,7 @@ import {
   recoveryProspectiveTeamStudyId,
   diagnosticProspectiveTeamStudyId,
   selectionWindowProspectiveTeamStudyId,
+  staticAssetsProspectiveTeamStudyId,
   isProspectiveTeamStudy,
 } from "../../scripts/experiments/tournament/team-config";
 
@@ -63,6 +64,7 @@ describe("unsigned study approval preparation (synthetic inputs only)", () => {
     recoveryProspectiveTeamStudyId,
     diagnosticProspectiveTeamStudyId,
     selectionWindowProspectiveTeamStudyId,
+    staticAssetsProspectiveTeamStudyId,
   ] as const)(
     "allocates %s with fresh trial identities after a retained failure",
     (targetStudyId) => {

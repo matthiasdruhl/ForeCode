@@ -29,6 +29,7 @@ import { syntheticEvaluation } from "./tournament-evidence";
 export async function measuredFixture(
   options: {
     installedRuntime?: boolean;
+    sourceFiles?: Record<string, string>;
     codeA?: string;
     codeB?: string;
     failA?: boolean;
@@ -56,6 +57,7 @@ export async function measuredFixture(
     : {};
   const data = await studyFixture({
     ...fixtureOptions,
+    sourceFiles: options.sourceFiles,
     ...(options.installedRuntime
       ? {
           configure(d, draft) {

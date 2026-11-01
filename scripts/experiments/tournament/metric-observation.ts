@@ -15,6 +15,8 @@ import { matchedConditionsDigest } from "../../../src/lib/experiment/study-ident
 import { isAuthenticatedRegistration } from "../../../src/server/meta/registration-reader";
 import {
   MetricProtocolSchema,
+  usesPersonalMetricBaseline,
+  metricObservationSchemaVersion,
   MetricBoundaryObservationSchema,
   MetricObservationsSchema,
   calculateProspectiveMetrics,
@@ -70,9 +72,14 @@ export const MetricSnapshotOriginalV2Schema =
     role: z.literal("baseline"),
     authorization: MetricBaselineAuthorizationProofSchema,
   });
+export const MetricSnapshotOriginalV3Schema =
+  MetricSnapshotOriginalV2Schema.extend({
+    schemaVersion: z.literal("protected-metric-snapshot.local.v3"),
+  });
 export const MetricSnapshotOriginalSchema = z.union([
   MetricSnapshotOriginalV1Schema,
   MetricSnapshotOriginalV2Schema,
+  MetricSnapshotOriginalV3Schema,
 ]);
 export type MetricSnapshotOriginal = z.infer<
   typeof MetricSnapshotOriginalSchema
@@ -84,9 +91,8 @@ export function createMetricBaselineAuthorizationNotApplicable(
   evaluation: unknown,
 ) {
   invariant(
-    MetricProtocolSchema.parse(protocol).schemaVersion ===
-      "prospective-tournament-metrics.v2",
-    "Not-applicable baseline requires v2 protocol.",
+    usesPersonalMetricBaseline(MetricProtocolSchema.parse(protocol)),
+    "Not-applicable baseline requires a personal-baseline protocol.",
   );
   invariant(
     isTrustedEvaluation(evaluation),
@@ -203,8 +209,7 @@ export async function collectMetricSnapshotOriginal(input: {
   const startedAt = clock();
   const source = await collectSealedMetricSnapshot(input);
   const baselineV2 =
-    input.protocol.schemaVersion === "prospective-tournament-metrics.v2" &&
-    input.role === "baseline";
+    usesPersonalMetricBaseline(input.protocol) && input.role === "baseline";
   if (baselineV2) {
     readMetricBaselineAuthorizationNotApplicable(
       input.authorization,
@@ -226,7 +231,9 @@ export async function collectMetricSnapshotOriginal(input: {
     );
   return MetricSnapshotOriginalSchema.parse({
     schemaVersion: baselineV2
-      ? "protected-metric-snapshot.local.v2"
+      ? input.protocol.schemaVersion === "prospective-tournament-metrics.v3"
+        ? "protected-metric-snapshot.local.v3"
+        : "protected-metric-snapshot.local.v2"
       : "protected-metric-snapshot.local.v1",
     studyId: input.protocol.studyId,
     protocolSha256: jsonDigest(input.protocol),
@@ -281,8 +288,7 @@ export function metricMeasurementStatus(
       [a.baseline, a.final].every(
         (s) =>
           s.boundaryViolations !== null &&
-          ((s === a.baseline &&
-            p.schemaVersion === "prospective-tournament-metrics.v2") ||
+          ((s === a.baseline && usesPersonalMetricBaseline(p)) ||
             s.authorizationFailures !== null),
       ),
     )
@@ -453,10 +459,7 @@ export function createProtectedMetricObservationReader(
       "Invalid metric arms.",
     );
     const observationFields = {
-      schemaVersion:
-        p.schemaVersion === "prospective-tournament-metrics.v2"
-          ? "prospective-tournament-observations.v2"
-          : "prospective-tournament-observations.v1",
+      schemaVersion: metricObservationSchemaVersion(p),
       studyId: p.studyId,
       protocolSha256: jsonDigest(p),
       taskSha256: p.taskSha256,
@@ -580,12 +583,13 @@ export function createProtectedMetricObservationReader(
           jsonDigest(measured.boundary) === jsonDigest(s.boundary),
           "Static measurement altered.",
         );
-        const baselineV2 =
-          p.schemaVersion === "prospective-tournament-metrics.v2" &&
-          role === "baseline";
+        const baselineV2 = usesPersonalMetricBaseline(p) && role === "baseline";
         invariant(
           baselineV2
-            ? s.schemaVersion === "protected-metric-snapshot.local.v2"
+            ? s.schemaVersion ===
+                (p.schemaVersion === "prospective-tournament-metrics.v3"
+                  ? "protected-metric-snapshot.local.v3"
+                  : "protected-metric-snapshot.local.v2")
             : s.schemaVersion === "protected-metric-snapshot.local.v1",
           "Metric snapshot applicability/version mismatch.",
         );

@@ -1,3 +1,4 @@
+import { usesPersonalMetricBaseline } from "../../../src/lib/experiment/prospective-metrics";
 // Private source-owned orchestration. No signer, provider, CLI or web import.
 import { invariant, sameIds } from "../../../src/lib/contracts/validation";
 import { jsonDigest } from "../../../src/lib/report/digests";
@@ -101,8 +102,7 @@ export async function createRegisteredMeasurementSession(options: {
       first.registration.expiresAt,
   );
   const protocol = first.metricProtocol;
-  const baselineStaticOnly =
-    protocol.schemaVersion === "prospective-tournament-metrics.v2";
+  const baselineStaticOnly = usesPersonalMetricBaseline(protocol);
   const baselineEvaluationRunIds = options.baselineEvaluationRunIds
     ? immutable({ ...options.baselineEvaluationRunIds })
     : null;
@@ -113,7 +113,7 @@ export async function createRegisteredMeasurementSession(options: {
         Object.values(baselineEvaluationRunIds).every(
           (id) => !study.draft.plan.manifest.arms.some((a) => a.runId === id),
         )),
-    "V2 requires the exact existing public baseline run identities.",
+    "Personal-baseline protocol requires the exact existing public baseline run identities.",
   );
   const baseline = new Map<
     Variant,

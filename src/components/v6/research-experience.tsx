@@ -461,7 +461,9 @@ export function ResearchExperience({
                 [
                   "Same original starting point",
                   study
-                    ? "Shared original source; B preparation counted separately."
+                    ? study.comparability === "COMPARABLE"
+                      ? "Shared original under the approved comparison; B preparation counted separately."
+                      : "Not established · inspect comparability blockers."
                     : null,
                 ],
                 ["Same downstream conditions", study?.definitionSha256],

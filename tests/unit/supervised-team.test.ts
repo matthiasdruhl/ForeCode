@@ -35,6 +35,7 @@ import {
 import { isTrustedAgentFinalization } from "../../scripts/experiments/runner/sbx";
 import type { HeldRecord } from "../../scripts/experiments/tournament/custody";
 import { isTrustedEvaluation } from "../../src/server/artifacts/evaluation-store";
+import { BrokerStopSchema } from "../../scripts/experiments/tournament/team-termination";
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -745,13 +746,34 @@ describe("dedicated supervised team contract, no inference", () => {
       execFileSync("python3", ["-I", "-B", script], { encoding: "utf8" }),
     ).toContain("team controls passed");
   });
-  it("exercises full replay growth and durable broker refusals with zero upstream calls", () => {
+  it("retains bounded completion contracts and fails closed on diagnostic storage errors without sockets or inference", () => {
+    const script = fileURLToPath(
+      new URL("../runtime/team-contract-controls.py", import.meta.url),
+    );
+    const output = execFileSync("python3", ["-I", "-B", script], {
+      encoding: "utf8",
+    });
+    expect(output).toContain("team contract controls passed");
+    const summary = JSON.parse(output.trim().split("\n").at(-1)!);
+    expect(summary.brokerStops).toHaveLength(6);
+    for (const stop of summary.brokerStops)
+      expect(BrokerStopSchema.safeParse(stop).success).toBe(true);
+  });
+  it.each([
+    "admission",
+    "replay4m",
+    "replay32m",
+    "envelope32m",
+    "compact60",
+    "growing60",
+    "http",
+  ])("runs isolated %s reservation controls without inference", (mode) => {
     const script = fileURLToPath(
       new URL("../runtime/team-reservation-controls.py", import.meta.url),
     );
     expect(
-      execFileSync("python3", ["-I", "-B", script], { encoding: "utf8" }),
-    ).toContain("zero-send negative controls passed");
+      execFileSync("python3", ["-I", "-B", script, mode], { encoding: "utf8" }),
+    ).toContain("team reservation controls passed: " + mode);
   });
   it("delivers committed scenario assumptions as part of the exact common prompt", async () => {
     const f = await fixture(),

@@ -8,6 +8,7 @@ import http.client
 import json
 import pathlib
 import socket
+import sys
 import tempfile
 import threading
 import time
@@ -60,48 +61,6 @@ def refusal(broker, body, code):
     return result
 
 
-for changes, body, code in [
-    ({'tokenLimit': 1}, raw(), 'token-capacity'),
-    ({'spendMicroUsd': 1}, raw(), 'money-capacity'),
-    ({'tokenLimit': 1, 'spendMicroUsd': 1}, raw(), 'token-and-money-capacity'),
-    ({'maxRequests': 0}, raw(), 'request-count'),
-    ({'maxIterations': 0}, raw(), 'iteration-count'),
-    ({'deadline': 0}, raw(), 'deadline-or-request-bytes'),
-    ({}, b'x' * 1_048_577, 'request-bytes'),
-    ({}, raw(['inert'] * 4100), 'history-nodes'),
-    ({}, raw([{'type': 'reasoning', 'encrypted_content': 'unknown'}]), 'unauthenticated-opaque-context'),
-    ({}, raw(tools=[{'type': 'function', 'name': 'web_search'}]), 'tool-declaration'),
-    ({}, raw([{'type': 'function_call', 'name': 'read_private_oracle'}]), 'history-tool'),
-    ({}, raw('SECRET-CONTROL', arbitrary='NEVER-LOG-ME'), 'invalid-request'),
-]:
-    with tempfile.TemporaryDirectory() as temp:
-        broker = team.TeamReservations(pathlib.Path(temp), request(**changes))
-        diagnostic = refusal(broker, body, code)
-        serialized = json.dumps(diagnostic)
-        assert 'SECRET-CONTROL' not in serialized and 'NEVER-LOG-ME' not in serialized
-        if diagnostic['projection']:
-            assert diagnostic['projection']['inputTokenUpperBound'] > 16384
-
-# A diagnostic write failure still latches; a worker cannot replace a private
-# record or cause accounting to be resumed. Nothing follows a denied request.
-with tempfile.TemporaryDirectory() as temp:
-    broker = team.TeamReservations(pathlib.Path(temp), request(tokenLimit=1))
-    with patch.object(team.os, 'open', side_effect=OSError('synthetic disk failure')):
-        try:
-            broker.reserve(raw())
-        except OSError:
-            pass
-        else:
-            raise AssertionError('disk failure expected')
-    assert broker.local_refused and not broker.value['requests']
-    try:
-        broker.reserve(raw())
-    except ValueError:
-        pass
-    else:
-        raise AssertionError('logging failure cannot enable a later send')
-
-
 def growth(token_limit, spend, near_envelope=False, maximum=20, opaque=True):
     with tempfile.TemporaryDirectory() as temp:
         broker = team.TeamReservations(pathlib.Path(temp), request(tokenLimit=token_limit, spendMicroUsd=spend, maxRequests=maximum, maxIterations=maximum))
@@ -130,41 +89,6 @@ def growth(token_limit, spend, near_envelope=False, maximum=20, opaque=True):
         return {'completedRequests': maximum, 'reservedTokens': broker.value['reservedTokens'],
                 'reservedMicroUsd': broker.value['reservedMicroUsd'], 'refusal': None}
 
-old = growth(4_000_000, 6_000_000)
-new = growth(32_000_000, 32_000_000)
-envelope = growth(32_000_000, 32_000_000, True)
-assert old['completedRequests'] < 20 and old['refusal'] == 'token-capacity'
-assert new['completedRequests'] == envelope['completedRequests'] == 20
-assert new['reservedTokens'] < 32_000_000 and envelope['reservedTokens'] < 32_000_000
-print(json.dumps({'origin': 'synthetic-no-upstream', 'old': old, 'new': new, 'nearByteEnvelope': envelope}))
-compact60 = growth(32_000_000, 32_000_000, maximum=60, opaque=False)
-growing60 = growth(32_000_000, 32_000_000, maximum=60)
-assert compact60['completedRequests'] == 60
-assert growing60['completedRequests'] < 60 and growing60['refusal'] in ('token-capacity', 'token-and-money-capacity'), growing60
-print(json.dumps({'unregistered60RequestProposal': {'compact': compact60, 'growingReplay': growing60}, 'otherCeilingsRemainBinding': True}))
-
-# Last round is an ordinary paid reservation, with no tools and no hidden21st
-# send. Uncooperative tool output is still refused rather than executed.
-with tempfile.TemporaryDirectory() as temp:
-    broker = team.TeamReservations(pathlib.Path(temp), request(maxRequests=2, maxIterations=2, completionReserveRequests=2))
-    first = broker.reserve(raw(tools=[{'type': 'function', 'name': 'exec_command'}]))
-    assert json.loads(first)['tools']
-    final = broker.reserve(raw(tools=[{'type': 'function', 'name': 'exec_command'}], instructions=None))
-    assert json.loads(final)['tool_choice'] == 'auto' and json.loads(final)['tools'] == []
-    assert isinstance(json.loads(final)['instructions'], str)
-    assert len(broker.value['requests']) == 2
-    refusal(broker, raw(), 'request-count')
-with tempfile.TemporaryDirectory() as temp:
-    broker = team.TeamReservations(pathlib.Path(temp), request(maxRequests=1, maxIterations=1, completionReserveRequests=1))
-    sent = broker.reserve(raw())
-    response = {'object': 'response', 'model': broker.request['model'], 'service_tier': 'auto', 'status': 'completed', 'output': [{'type': 'function_call', 'name': 'exec_command', 'arguments': '{}'}], 'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}
-    try: broker.observe(team.base.budget.canonical(response), 'application/json', sent)
-    except ValueError: pass
-    else: raise AssertionError('final-round tools must never execute')
-    assert broker.value['blockedReason'] == 'provider-outcome-unverified'
-
-# Actual fixed HTTP path: refused reservation, malformed HTTP and valid local
-# response. No networking except one private AF_UNIX test socket.
 class UnixHTTP(http.client.HTTPConnection):
     def __init__(self, path):
         super().__init__('localhost', timeout=5)
@@ -173,32 +97,212 @@ class UnixHTTP(http.client.HTTPConnection):
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.connect(str(self.path))
 
-for changes, body, path, expected, calls in [
-    ({'tokenLimit': 1}, raw(), '/v1/responses', 403, 0),
-    ({}, raw(), '/bad', 403, 0),
-    ({}, raw(), '/v1/responses', 200, 1),
-]:
+
+
+def admission_controls():
+    for changes, body, code in [
+        ({'tokenLimit': 1}, raw(), 'token-capacity'),
+        ({'spendMicroUsd': 1}, raw(), 'money-capacity'),
+        ({'tokenLimit': 1, 'spendMicroUsd': 1}, raw(), 'token-and-money-capacity'),
+        ({'maxRequests': 0}, raw(), 'request-count'),
+        ({'maxIterations': 0}, raw(), 'iteration-count'),
+        ({'deadline': 0}, raw(), 'deadline-or-request-bytes'),
+        ({}, b'x' * 1_048_577, 'request-bytes'),
+        ({}, raw(['inert'] * 4100), 'history-nodes'),
+        ({}, raw([{'type': 'reasoning', 'encrypted_content': 'unknown'}]), 'unauthenticated-opaque-context'),
+        ({}, raw(tools=[{'type': 'function', 'name': 'web_search'}]), 'tool-declaration'),
+        ({}, raw([{'type': 'function_call', 'name': 'read_private_oracle'}]), 'history-tool'),
+        ({}, raw('SECRET-CONTROL', arbitrary='NEVER-LOG-ME'), 'invalid-request'),
+    ]:
+        with tempfile.TemporaryDirectory() as temp:
+            broker = team.TeamReservations(pathlib.Path(temp), request(**changes))
+            diagnostic = refusal(broker, body, code)
+            serialized = json.dumps(diagnostic)
+            assert 'SECRET-CONTROL' not in serialized and 'NEVER-LOG-ME' not in serialized
+            if diagnostic['projection']:
+                assert diagnostic['projection']['inputTokenUpperBound'] > 16384
+
+    # A diagnostic write failure still latches; a worker cannot replace a private
+    # record or cause accounting to be resumed. Nothing follows a denied request.
     with tempfile.TemporaryDirectory() as temp:
-        broker = team.TeamReservations(pathlib.Path(temp), request(**changes))
-        seen = []
+        broker = team.TeamReservations(pathlib.Path(temp), request(tokenLimit=1))
+        with patch.object(team.os, 'open', side_effect=OSError('synthetic disk failure')):
+            try:
+                broker.reserve(raw())
+            except team.base.budget.ReservationCapacityError as error:
+                assert str(error) == 'hard reservation exhausted'
+            else:
+                raise AssertionError('original capacity refusal must survive diagnostic disk failure')
+        assert broker.local_refused and not broker.value['requests']
+        try:
+            broker.reserve(raw())
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('logging failure cannot enable a later send')
+
+
+    # Last round is an ordinary paid reservation, with no tools and no hidden21st
+    # send. Uncooperative tool output is still refused rather than executed.
+    with tempfile.TemporaryDirectory() as temp:
+        broker = team.TeamReservations(pathlib.Path(temp), request(maxRequests=2, maxIterations=2, completionReserveRequests=2))
+        first = broker.reserve(raw(tools=[{'type': 'function', 'name': 'exec_command'}]))
+        assert json.loads(first)['tools']
+        final = broker.reserve(raw(tools=[{'type': 'function', 'name': 'exec_command'}], instructions=None))
+        assert json.loads(final)['tool_choice'] == 'auto' and json.loads(final)['tools'] == []
+        assert isinstance(json.loads(final)['instructions'], str)
+        assert len(broker.value['requests']) == 2
+        refusal(broker, raw(), 'request-count')
+    with tempfile.TemporaryDirectory() as temp:
+        broker = team.TeamReservations(pathlib.Path(temp), request(maxRequests=1, maxIterations=1, completionReserveRequests=1))
+        sent = broker.reserve(raw())
+        response = {'object': 'response', 'model': broker.request['model'], 'service_tier': 'auto', 'status': 'completed', 'output': [{'type': 'function_call', 'name': 'exec_command', 'arguments': '{}'}], 'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}
+        try: broker.observe(team.base.budget.canonical(response), 'application/json', sent)
+        except ValueError: pass
+        else: raise AssertionError('final-round tools must never execute')
+        assert broker.value['blockedReason'] == 'provider-outcome-unverified'
+
+
+
+def replay_controls(mode):
+    if mode == 'replay4m':
+        result = growth(4_000_000, 6_000_000)
+        assert result['completedRequests'] < 20 and result['refusal'] == 'token-capacity'
+    elif mode in ('replay32m', 'envelope32m'):
+        result = growth(32_000_000, 32_000_000, mode == 'envelope32m')
+        assert result['completedRequests'] == 20 and result['reservedTokens'] < 32_000_000
+    elif mode == 'compact60':
+        result = growth(32_000_000, 32_000_000, maximum=60, opaque=False)
+        assert result['completedRequests'] == 60
+    else:
+        assert mode == 'growing60'
+        result = growth(32_000_000, 32_000_000, maximum=60)
+        assert result['completedRequests'] < 60 and result['refusal'] in ('token-capacity', 'token-and-money-capacity'), result
+    print(json.dumps({'origin': 'synthetic-no-upstream', 'control': mode, 'result': result,
+                      'unregisteredProposalOnly': mode in ('compact60', 'growing60')}))
+
+
+def http_controls():
+    for changes, body, path, expected, calls in [
+        ({'tokenLimit': 1}, raw(), '/v1/responses', 403, 0),
+        ({}, raw(), '/bad', 403, 0),
+        ({}, raw(), '/v1/responses', 200, 1),
+    ]:
+        with tempfile.TemporaryDirectory() as temp:
+            broker = team.TeamReservations(pathlib.Path(temp), request(**changes))
+            seen = []
+            def upstream(sent):
+                seen.append(sent)
+                return team.base.budget.canonical({'object': 'response', 'model': broker.request['model'],
+                    'service_tier': 'auto', 'status': 'completed', 'output': [],
+                    'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}), 'application/json'
+            file = pathlib.Path(temp) / 'gateway.sock'
+            server = team.serve_team(file, broker, upstream)
+            thread = threading.Thread(target=server.handle_request)
+            thread.start()
+            client = UnixHTTP(file)
+            client.request('POST', path, body, {'Content-Type': 'application/json'})
+            response = client.getresponse()
+            assert response.status == expected
+            payload = response.read()
+            client.close(); thread.join(); server.server_close()
+            assert len(seen) == calls
+            if expected == 403:
+                assert payload == b'{"error":{"message":"Bounded provider request unavailable"}}'
+                assert (pathlib.Path(temp) / 'broker-refusal.json').is_file()
+                assert response.getheader('X-Forecode-Stop') == ('token-capacity' if changes else None)
+    print('durable numeric refusal diagnostics, latch, fixed envelope and zero-send negative controls passed')
+
+    # Exercise the actual HTTP admission boundary after twenty successful local
+    # sends, independently of whether the native CLI chooses to stop at its final.
+    for limit in ['maxRequests', 'maxIterations']:
+        with tempfile.TemporaryDirectory() as temp:
+            broker = team.TeamReservations(pathlib.Path(temp), request(
+                maxRequests=20 if limit == 'maxRequests' else 21,
+                maxIterations=20 if limit == 'maxIterations' else 21,
+                completionReserveRequests=3))
+            seen = []
+            def upstream(sent):
+                seen.append(sent)
+                return team.base.budget.canonical({'object': 'response', 'model': broker.request['model'],
+                    'service_tier': 'auto', 'status': 'completed', 'output': [],
+                    'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}), 'application/json'
+            socket_path = pathlib.Path(temp) / 'gateway.sock'
+            server = team.serve_team(socket_path, broker, upstream)
+            for index in range(21):
+                thread = threading.Thread(target=server.handle_request); thread.start()
+                client = UnixHTTP(socket_path)
+                client.request('POST', '/v1/responses', raw(), {'Content-Type': 'application/json'})
+                response = client.getresponse(); response.read(); client.close(); thread.join()
+                assert response.status == (200 if index < 20 else 403)
+            server.server_close()
+            assert len(seen) == len(broker.value['requests']) == 20
+            assert json.loads((pathlib.Path(temp) / 'broker-refusal.json').read_bytes())['reasonCode'] == (
+                'request-count' if limit == 'maxRequests' else 'iteration-count')
+            assert broker.value['reservedTokens'] == sum(x['inputTokenUpperBound'] + x['maximumOutputTokens'] for x in broker.value['requests'])
+    print('HTTP request21 and independent iteration21 refused before local upstream; reservations retained')
+
+    for failure_stage in ['admission', 'observation']:
+        with tempfile.TemporaryDirectory() as temp:
+            broker = team.TeamReservations(pathlib.Path(temp), request(
+                maxRequests=2, maxIterations=2, completionReserveRequests=2))
+            seen = []
+            def upstream(sent):
+                seen.append(sent)
+                return team.base.budget.canonical({'object': 'response', 'model': broker.request['model'],
+                    'service_tier': 'auto', 'status': 'completed', 'output': [],
+                    'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}), 'application/json'
+            save = broker.contract_event
+            def fail_storage(stage, sent, details=None):
+                if stage == ('admitted' if failure_stage == 'admission' else 'response-received'):
+                    with patch.object(team.os, 'link', side_effect=OSError('synthetic diagnostic storage failure')):
+                        return save(stage, sent, details)
+                return save(stage, sent, details)
+            socket_path = pathlib.Path(temp) / 'gateway.sock'
+            server = team.serve_team(socket_path, broker, upstream)
+            with patch.object(broker, 'contract_event', side_effect=fail_storage):
+                thread = threading.Thread(target=server.handle_request); thread.start()
+                client = UnixHTTP(socket_path)
+                client.request('POST', '/v1/responses', raw(), {'Content-Type': 'application/json'})
+                response = client.getresponse(); response.read(); client.close(); thread.join()
+                assert response.status == 403
+            server.server_close()
+            assert len(seen) == int(failure_stage == 'observation')
+            assert len(broker.value['requests']) == 1
+            assert 'observedUsage' not in broker.value['requests'][0]
+            assert broker.value['reservedTokens'] > 0 and broker.value['reservedMicroUsd'] > 0
+            if failure_stage == 'observation':
+                assert (pathlib.Path(temp) / 'unverified-response.bin').is_file()
+            try: broker.reserve(raw())
+            except ValueError: pass
+            else: raise AssertionError('storage recovery must not reopen admission')
+    print('HTTP diagnostic-storage failures refuse before delivery, retain unknown usage and latch admission')
+
+    # Provider Content-Type parameters are never copied into the local HTTP envelope.
+    with tempfile.TemporaryDirectory() as temp:
+        broker = team.TeamReservations(pathlib.Path(temp), request())
         def upstream(sent):
-            seen.append(sent)
             return team.base.budget.canonical({'object': 'response', 'model': broker.request['model'],
                 'service_tier': 'auto', 'status': 'completed', 'output': [],
-                'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}), 'application/json'
-        file = pathlib.Path(temp) / 'gateway.sock'
-        server = team.serve_team(file, broker, upstream)
-        thread = threading.Thread(target=server.handle_request)
-        thread.start()
-        client = UnixHTTP(file)
-        client.request('POST', path, body, {'Content-Type': 'application/json'})
-        response = client.getresponse()
-        assert response.status == expected
-        payload = response.read()
-        client.close(); thread.join(); server.server_close()
-        assert len(seen) == calls
-        if expected == 403:
-            assert payload == b'{"error":{"message":"Bounded provider request unavailable"}}'
-            assert (pathlib.Path(temp) / 'broker-refusal.json').is_file()
-            assert response.getheader('X-Forecode-Stop') == ('token-capacity' if changes else None)
-print('durable numeric refusal diagnostics, latch, fixed envelope and zero-send negative controls passed')
+                'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}), 'application/json; charset=utf-8\r\nX-Provider-Canary: private'
+        socket_path = pathlib.Path(temp) / 'gateway.sock'
+        server = team.serve_team(socket_path, broker, upstream)
+        thread = threading.Thread(target=server.handle_request); thread.start()
+        client = UnixHTTP(socket_path)
+        client.request('POST', '/v1/responses', raw(), {'Content-Type': 'application/json'})
+        response = client.getresponse(); response.read(); client.close(); thread.join(); server.server_close()
+        assert response.status == 200 and response.getheader('Content-Type') == 'application/json'
+        assert response.getheader('X-Provider-Canary') is None
+    print('provider header parameters excluded from local HTTP response')
+
+
+# Separate finite selections keep independent controls within the unchanged
+# ordinary test timeout. With no argument, retain the complete standalone suite.
+MODES = ('admission', 'replay4m', 'replay32m', 'envelope32m', 'compact60', 'growing60', 'http')
+if len(sys.argv) > 2 or (len(sys.argv) == 2 and sys.argv[1] not in MODES):
+    raise ValueError('fixed reservation control selection required')
+for mode in sys.argv[1:] or MODES:
+    if mode == 'admission': admission_controls()
+    elif mode == 'http': http_controls()
+    else: replay_controls(mode)
+    print('team reservation controls passed: ' + mode)

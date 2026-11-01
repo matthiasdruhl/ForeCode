@@ -1,5 +1,161 @@
 # Implementation log
 
+## CI reservation-control partition — October 31, 2026
+
+The first PR workflow on `b735b733485f33cdf3ec6961b3fe790a083a0174` passed
+all Foundation steps. Its separate push workflow
+[41256424703](https://github.com/matthiasdruhl/ForeCode/actions/runs/41256424703)
+failed with1041/1042 tests passing: the single synchronous Python reservation
+control exceeded Vitest's existing5000ms test deadline. The complete original log
+is retained privately. This was not a model/runtime/resource-limit failure.
+
+Partitioned the test-only driver into seven finite independent groups: admission,
+4M replay,32M replay, near-byte-envelope replay, compact60, growing60 and HTTP.
+The same shared helpers are AST-identical and all40 original assertions remain
+semantically covered. No argument still executes the entire standalone suite.
+Vitest invokes one group per case; no assertion, iteration, reservation, runtime
+or test timeout changed. This turns one case into seven, adding six framework
+cases without manufacturing additional behavior coverage.
+
+All seven groups passed in a fresh mountless deny-all Linux2CPU/4GiB guest with
+unchanged512-task/64GiB ceilings; per-group observations were85–400ms. The
+no-argument suite also passed there. Exact source/control hashes and outputs
+remain outside Git, and this second unit-only namespace was removed after export.
+The actual native/supervisor/worker source is unchanged from the validated hash
+below. Earlier native/resource/restart observations remain bound to those same
+bytes; the new broker-test entry point has its separate Linux result.
+
+A separate shared-host AI reviewer compared the refactor against `b735b73`,
+confirmed unchanged helpers/assertion coverage, safe callback captures and matching
+Python/TypeScript selections, and found no actionable issue. Post-correction exit0: full `npm run check`1048 tests/56 files plus lint, strict
+types and both builds; app/fixture browser60/2; pinned planning128; focused76;
+Python complete and partitioned broker controls; formatting/whitespace. The final
+exact-commit review and GitHub results are reported in the PR/delivery.
+
+## Consolidated tournament contract reliability — October 31, 2026
+
+Consolidates PR [#42](https://github.com/matthiasdruhl/ForeCode/pull/42)
+(`ad2694ff7cb499b5953cf3628249ccad7c876899`) and
+[#43](https://github.com/matthiasdruhl/ForeCode/pull/43)
+(`7ec3f9ec9b7e3340d1db3e73b02f4c83414069df`) on a clean integration branch from
+main `9ef63d5762399612f5cdf06f438e4ca19e2ef761`. Both originals were still open,
+unchanged, without discussion/review comments, and their Foundation checks had
+passed. Neither original is merged or closed by this task.
+
+Selection and reconciliation:
+
+- #42 uniquely supplies whole-request lifecycle observations, process-local timing,
+  immutable event files and actual emitted-stop compatibility with the existing
+  strict TypeScript schema. Its append-only design is the foundation.
+- #43 supplies separate terminal/added SSE counts, five full-history native modes,
+  explicit HTTP request21/iteration21 and storage controls, native rollout-limit
+  and container PID/tmpfs/OOM probes. These controls are retained.
+- Both project the final normalized reservation, closing phases, instruction
+  digests, allowlisted tools and history shapes. One implementation now owns them:
+  admission projects the contract; response-received projects unvalidated shape;
+  response-accepted/rejected records outcome without repeating that shape. The
+  competing mutable `completion-contract.json` store is omitted. Tests read the
+  immutable lifecycle schema, rather than keeping a compatibility duplicate.
+- Retained #42's dynamic-import feedback/repair and growing native history within
+  #43's nineteen-tool-result workflow. Short native controls remain available.
+  Budget/refusal/report schemas, unknown usage, full reservations, deadlines,
+  capability isolation and every operational authority boundary remain unchanged.
+
+Defects completed during consolidation:
+
+- Exclusive writes could expose a partial final event after interruption. Sync a
+  private temporary file, chmod0400, atomically link without replacement, unlink
+  the temporary name, and sync the directory. Reject duplicate/out-of-order stages.
+  Regression controls inject write/chmod/fsync/link failures, existing names and
+  aliases, substituted hashes and post-publication directory-sync failure.
+- Secondary failure-retention or refusal storage errors could hide the original
+  rejection. Preserve its cause, latch before fallible storage, retain original
+  immutable evidence, and refuse every later request. Tests cover budget,
+  provider-failure, raw-response and lifecycle-store failure, including validated
+  usage surviving a later accepted-event write failure without any refund.
+- Team response validation could accept an absent/non-array terminal output or
+  content events after a terminal. Require explicit terminal output and reject
+  subsequent data events. Preserve sparse nonterminal envelopes, and distinguish
+  terminal output from added/done echoes. Regressions cover missing/duplicate
+  terminals, trailing items, malformed/unhashable kinds and deeply nested JSON.
+- Raw provider Content-Type parameters previously reached the local HTTP reply.
+  Strip parameters before validation/release. An actual HTTP regression injects a
+  CRLF header canary in discarded parameters and requires a clean media type and
+  no injected header. Invalid media types still fail closed.
+
+Diagnostic files remain private and outside worker mounts. Each is at most8192
+bytes; input/event kind counting retains at most4096 items with explicit truncation.
+The fixed request allowance bounds file count. No raw instructions, history,
+arguments, arbitrary provider names, credentials, IDs or usage enter these
+projections. Response shapes/echoes are explicitly observational. Only accepted
+records report broker validation, and none proves delivery, invoice accuracy or
+protected correctness. Failed/incomplete runs remain interpretable through absent
+stages, fixed rejection codes, exact hashes and existing budget/failure stores.
+
+Validation commands and exact source/exit records are retained privately. The
+final team supervisor SHA-256 is
+`95e59f63a569d5f876b542d2a928e42fcd43c5b486ae76e7bad0b2f5d68743f6`.
+All native/container observations bind that installed source, fixed config,
+Codex CLI0.165.0/Node24.16.0 and the cached public-only immutable worker
+`sha256:221a51713e8c22e5852d8d587d60322c4ff2ac4235437eb268ae95c8d88fafd5`.
+The fresh test guest has no workspace mount, skills off, deny-all networking,
+two CPUs/4GiB; each control applies/reads the unchanged512-task/64GiB outer
+ceilings and checks an unchanged boot through its invocation. Inner UID1000,
+network-none, read-only root,1CPU/768MiB/128PID and tmpfs limits stay unchanged.
+Observed exit0 on the consolidated executable bytes:
+
+| Validation                                                                                                           | Result                                                                               |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `META_CALLS_ENABLED=false META_SPENDING_APPROVED=false NEXT_TELEMETRY_DISABLED=1 UV_THREADPOOL_SIZE=1 npm run check` | 1042 tests/56 files; lint, strict types and both builds passed                       |
+| `npm run test:e2e`; `npm run test:fixture-e2e` with provider calls disabled                                          | 60;2 passed                                                                          |
+| `PLAN_REFERENCE_ROOT=<pinned planning checkout> npm run test:plan`                                                   | 128 passed                                                                           |
+| Fresh `prepare:booking`, offline `ci --ignore-scripts`, test, typecheck, build                                       | 22-file export;1 visible test, types/build passed                                    |
+| Python supervisor/team/reservation/contract controls, on host and disposable Linux guest                             | All passed; supervisor suite31/0 failures/0 errors                                   |
+| Five full-history actual-native modes and three short repair/completion/refusal modes                                | All passed; full modes exactly20 local responses,19 prior tool results, no request21 |
+| Actual native rollout limit; PID/tmpfs/OOM probes                                                                    | Passed; unchanged native1M/broker32M guards and actual resource failures             |
+| Team lifecycle/public preparation; generic supervisor/launcher cases                                                 | 11/9/16/2 passed                                                                     |
+| Controlled restart and immutable retention                                                                           | Changed boot;2207 files unchanged;61 recorded removed workers unstartable            |
+| Python syntax, changed-file formatting, whitespace and secret/private-artifact scan                                  | Passed                                                                               |
+
+The focused70-test supervised-team suite also passed after the final test-only
+root-controller correction. GitHub Actions validates the exact delivered commit;
+its final state is reported in the consolidated PR and delivery response. Native
+and resource evidence is bound to the identical executable source hash above.
+
+Failed development/preparation invocations are retained privately: an assertion
+incorrectly compared a time-varying remaining deadline, an overly broad fsync
+injection hit the budget writer instead of the intended event writer, and an old
+unit assertion expected a secondary logging error to replace the primary capacity
+refusal. Tests now check the intended semantics. The Linux-root guest exposed a
+unit assumption: a bare `main()` denial could inspect a real installed root. The
+unit now explicitly models an unprivileged caller before checking refusal; runtime
+behavior is unchanged. A subsequent mirror-only missing-inventory-helper failure
+was corrected by copying the two reviewed read-only test dependencies, then the
+remaining guest unit/broker/contract controls passed. Initial sandbox deny-pattern
+and executable-symlink copy errors were corrected before controls. No failed
+invocation is relabelled as a pass, and no limit, timeout or assertion was weakened.
+
+The complete private archive was independently rehashed on export before the
+controlled restart. Test-owned namespace deletion followed retained restart
+results and absence of every owned container. No production namespace was touched. No
+historical operational record, protected assertion, candidate or frozen benchmark
+was modified. Only reviewed public fixture bytes were exported for controls.
+
+A separate Codex reviewer inspected the consolidated code against main and both
+PR heads, then examined the final header/SSE refinements. No actionable defect was
+reported. Its suggested chmod/directory-fsync coverage was added and passed. This
+is AI peer review sharing the host/filesystem/context, not a human or independently
+isolated security audit. The final commit is separately inspected before publication; its review outcome is reported in the PR.
+
+Operational readiness remains separately gated. New trusted bytes require a
+reviewed source/inventory installation, source-bound zero-upstream runtime gate,
+current independent admission, prospective study registration/authorization and
+fresh source preparation/baselines before any separately authorized provider run.
+No operational sandbox was installed into or started, no paid inference/study
+activation/spending authority was granted, and no merge or original-PR closure
+was performed. Scripted local responses do not establish real-provider latency,
+completion compliance, truthful usage, autonomous repair or protected correctness.
+
 ## Controlled case-14 execution and private closure — October 31, 2026
 
 PR40 integrated the complete PR39 implementation into main `64030c551b96c0327b211d147effcce6e3755c66` after separate source review and both required CI runs passed. Both PR38 and reviewed PR39 head are reachable. Actual execution used the archived exact source `e55f505987a646cc5188690e5f22be20ea5dc591`, with the same trusted closure `e077151ec7c327bd4734e4d455e970ccf22c3ee672d926c0cb089dfcc309d0a7`. The documentation-only integration differences do not change that closure.

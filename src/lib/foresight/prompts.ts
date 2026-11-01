@@ -11,8 +11,9 @@ import { actionWeights } from "../contracts/validation";
 import { canonicalJson } from "../report/canonical";
 import type { FlowRequest, Step } from "./flow";
 import { metaCompatibleSchema } from "./provider-schema";
+import { ScientistChallengeRequestSchema } from "../contracts/api";
 
-export const PROMPT_VERSION = "booking-scientist-2";
+export const PROMPT_VERSION = "booking-scientist-3";
 export const META_LIMITS = Object.freeze({
   inputBytes: 49_152,
   outputBytes: 65_536,
@@ -58,12 +59,38 @@ const tasks: Record<Step, string> = {
   challenge:
     "Return exactly one adversarial proposed counterexample targeting the supplied hypothesis, its candidate and baseline. Link the same intent set. Explain failureMechanism, potentialDisconfirmation and an actionable acceptanceOutline. reviewStatus proposed; visibility model_generated_not_heldout. State limitations. You cannot approve, freeze, execute or change evaluator policy.",
 };
+// These references are already chosen and authenticated by the service. Asking
+// the model to reproduce unconstrained IDs can yield structurally valid JSON
+// that cannot target the issued hypothesis. Constrain generation as well as
+// retaining the independent frozen response and semantic validators.
+export function buildMetaContentSchema(step: Step, request: FlowRequest) {
+  const schema = z.toJSONSchema(contentSchemas[step]);
+  if (step !== "challenge") return schema;
+  const input = ScientistChallengeRequestSchema.parse(request);
+  if (input.hypotheses.length !== 1)
+    throw new Error("Select one current hypothesis.");
+  const hypothesis = input.hypotheses[0]!;
+  const properties = (
+    schema.properties!.challenges as {
+      items: { properties: Record<string, Record<string, unknown>> };
+    }
+  ).items.properties;
+  properties.hypothesisId!.const = hypothesis.id;
+  properties.targetCandidateId!.const = hypothesis.candidateId;
+  properties.baselineCommit!.const = hypothesis.baselineCommit;
+  const change = properties.change as {
+    properties: Record<string, Record<string, unknown>>;
+  };
+  change.properties.intentIds!.const = [...hypothesis.intentIds];
+  properties.limitations!.minItems = 1;
+  return schema;
+}
 export function buildMetaPayload(
   step: Step,
   request: FlowRequest,
   model: string,
 ) {
-  const schema = z.toJSONSchema(contentSchemas[step]);
+  const schema = buildMetaContentSchema(step, request);
   return {
     model,
     messages: [
@@ -83,7 +110,7 @@ export function buildMetaPayload(
     response_format: {
       type: "json_schema",
       json_schema: {
-        name: `forecode_${step}_v2`,
+        name: `forecode_${step}_v3`,
         schema: metaCompatibleSchema(schema),
         strict: true,
       },

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import {
   buildMetaPayload,
+  buildMetaContentSchema,
   contentSchemas,
   META_LIMITS,
   PROMPT_VERSION,
@@ -61,6 +62,47 @@ function inspectSchema(schema: Record<string, unknown>) {
 }
 
 describe("Scientist2 schema-constrained requests (offline only)", () => {
+  it("constrains challenge generation to issued references without changing frozen validators", () => {
+    const request = requestSchemas.challenge.parse(
+      recorded("challenge-request.json"),
+    );
+    const before = structuredClone(request);
+    const frozen = z.toJSONSchema(contentSchemas.challenge);
+    const original = JSON.parse(
+      recorded("challenge-provider-observation.json").originalAssistantContent,
+    );
+    const schema = buildMetaPayload("challenge", request, env.META_MODEL)
+      .response_format.json_schema.schema;
+    const validate = new Ajv2020({ strict: true }).compile(schema);
+    expect(validate(original)).toBe(true);
+    for (const field of [
+      "hypothesisId",
+      "targetCandidateId",
+      "baselineCommit",
+    ] as const) {
+      const wrong = structuredClone(original);
+      wrong.challenges[0][field] =
+        field === "baselineCommit" ? "f".repeat(40) : "unissued-reference";
+      expect(contentSchemas.challenge.safeParse(wrong).success).toBe(true);
+      expect(validate(wrong)).toBe(false);
+    }
+    for (const value of [
+      ["unapproved-intent"],
+      [
+        ...request.hypotheses[0]!.intentIds,
+        ...request.hypotheses[0]!.intentIds,
+      ],
+    ]) {
+      const wrong = structuredClone(original);
+      wrong.challenges[0].change.intentIds = value;
+      expect(validate(wrong)).toBe(false);
+    }
+    const empty = structuredClone(original);
+    empty.challenges[0].limitations = [];
+    expect(validate(empty)).toBe(false);
+    expect(request).toEqual(before);
+    expect(z.toJSONSchema(contentSchemas.challenge)).toEqual(frozen);
+  });
   it.each(stages)(
     "sends the exact strict %s content schema with closed nested objects",
     (step) => {
@@ -70,17 +112,17 @@ describe("Scientist2 schema-constrained requests (offline only)", () => {
       const payload = buildMetaPayload(step, request, env.META_MODEL);
       const format = payload.response_format;
       expect(format.type).toBe("json_schema");
-      expect(format.json_schema.name).toBe(`forecode_${step}_v2`);
+      expect(format.json_schema.name).toBe(`forecode_${step}_v3`);
       expect(format.json_schema.strict).toBe(true);
       expect(format.json_schema.schema).toEqual(
-        metaCompatibleSchema(z.toJSONSchema(contentSchemas[step])),
+        metaCompatibleSchema(buildMetaContentSchema(step, request)),
       );
       expect(inspectSchema(format.json_schema.schema)).toBeGreaterThan(1);
       expect(payload.messages[0]!.content).toContain(
-        JSON.stringify(z.toJSONSchema(contentSchemas[step])),
+        JSON.stringify(buildMetaContentSchema(step, request)),
       );
       expect(payload.messages[0]!.content).toContain(
-        "ForeCode booking-scientist-2;",
+        "ForeCode booking-scientist-3;",
       );
       expect(payload.max_completion_tokens).toBe(META_LIMITS.outputTokens);
       expect(Buffer.byteLength(JSON.stringify(payload))).toBeLessThanOrEqual(
@@ -136,7 +178,7 @@ describe("Scientist2 schema-constrained requests (offline only)", () => {
         "ForeCode booking-scientist-1;",
       );
       expect(RECORDED_PROMPT_VERSION_V1).toBe("booking-scientist-1");
-      expect(PROMPT_VERSION).toBe("booking-scientist-2");
+      expect(PROMPT_VERSION).toBe("booking-scientist-3");
       expect(
         jsonDigest(buildMetaPayload(step, request, observation.model)),
       ).not.toBe(observation.payloadIdentity);
@@ -160,7 +202,9 @@ describe("Scientist2 schema-constrained requests (offline only)", () => {
       expect(nodes(payload)).toBeLessThanOrEqual(256);
       return nodes(payload);
     });
-    expect(counts).toEqual([195, 142, 119]);
+    expect(counts[0]).toBe(195);
+    expect(counts[1]).toBe(142);
+    expect(counts[2]).toBeGreaterThan(119);
     // Arithmetic fact only, not a new spending permission or ledger change:
     // eighteen consumed reservations stay consumed, including unknown03 and
     // known-but-not-semantically-accepted07/08. Existing ceilings stay fixed.
@@ -178,7 +222,7 @@ describe("Scientist2 schema-constrained requests (offline only)", () => {
       expect(payload.response_format).toEqual(
         buildMetaPayload("propose", request, env.META_MODEL).response_format,
       );
-      expect(payload.messages[0].content).toContain("booking-scientist-2");
+      expect(payload.messages[0].content).toContain("booking-scientist-3");
       return Response.json(envelope(syntheticContent("propose", request)));
     });
     const transport = createMetaTransport({ env: () => env, fetch: network });
@@ -187,7 +231,7 @@ describe("Scientist2 schema-constrained requests (offline only)", () => {
       request,
       new AbortController().signal,
     );
-    expect(result.provider.promptVersion).toBe("booking-scientist-2");
+    expect(result.provider.promptVersion).toBe("booking-scientist-3");
     expect(network).toHaveBeenCalledTimes(1);
   });
 

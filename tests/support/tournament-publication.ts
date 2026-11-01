@@ -100,7 +100,10 @@ export async function publicationFixture(
             arm.variant,
             {
               baselineEvaluationId: arm.original.baselineRunId,
-              futureEvaluationId: arm.original.run.id,
+              futureEvaluationId:
+                arm.original.run.receiptId === null
+                  ? null
+                  : arm.original.run.id,
             },
           ]),
         ),

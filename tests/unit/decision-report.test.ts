@@ -297,6 +297,28 @@ describe("deterministic non-authoritative Decision Report analysis", () => {
     ])
       expect(assessDecisionReport(p, c).identity).toBeNull();
   });
+  it("parses only canonical snapshots and never invokes hidden known-field getters", () => {
+    let reads = 0;
+    const p = input();
+    Object.defineProperty(p, "schemaVersion", {
+      enumerable: false,
+      get() {
+        reads++;
+        throw new Error("PRIVATE_SENTINEL");
+      },
+    });
+    expect(assessDecisionReport(p).identity).toBeNull();
+    const c = criterion(input());
+    Object.defineProperty(c, "metric", {
+      enumerable: false,
+      get() {
+        reads++;
+        throw new Error("PRIVATE_SENTINEL");
+      },
+    });
+    expect(assessDecisionReport(input(), c).identity).toBeNull();
+    expect(reads).toBe(0);
+  });
   it("returns stable deeply frozen output without mutating inputs or leaking private fixtures", () => {
     const p = input(),
       before = canonicalJson(p);

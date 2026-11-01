@@ -41,9 +41,9 @@ Observed validation, all on reviewed baseline source or synthetic test-owned dat
   passed 227/227 (exit 0, before the final four negative cases were added).
 - A later duplicate-baseline test initially failed because its mutation branch
   was missing from the test harness; corrected the harness before final validation.
-- Final `META_CALLS_ENABLED=false NEXT_TELEMETRY_DISABLED=1 npm run check`:
-  exit 0; lint, app/fixture typechecks, **57 test files / 1,108 tests**, including
-  **60 new Decision Report tests**, and both production builds passed.
+- Before peer-review hardening, `META_CALLS_ENABLED=false NEXT_TELEMETRY_DISABLED=1 npm run check`:
+  exit 0; lint, app/fixture typechecks, 57 test files / 1,108 tests (60 new),
+  and both production builds passed.
 - `PLAN_REFERENCE_ROOT=/Users/matthiasdruhl/Projects/Meta-Hackathon/AgentHarness-Planning npm run test:plan`:
   exit 0; 128 checks against pinned planning commit
   `695e68a40b5f5009c9b06b83a1181e18cd6d0223`.
@@ -58,6 +58,27 @@ Observed validation, all on reviewed baseline source or synthetic test-owned dat
   source/tests/docs diff for provenance and security errors. Frozen contracts,
   benchmark fixtures, protected tests, runtime code and dependency manifests are
   unchanged.
+
+A separate Codex reviewer inspected the six-file change at
+`d2b9b4504a363c94c5d4871286948af34b85b259` and traced the existing loader. It
+found no blocking provenance, classification or unknown-metric issue, but an
+in-memory probe found a non-enumerable known-field getter could execute during
+Zod parsing after canonical validation skipped it. Production JSON originals
+cannot contain getters. Fixed the pure boundary by parsing canonical JSON
+snapshots for both inputs and added a regression asserting zero getter reads.
+The review is Codex-to-Codex technical review, not human, organizational or blind
+independence; the source fix and test retain its reproducible finding.
+
+The first full rerun after this fix failed 5/1,109 tests when a concurrent comment
+edit changed the implementation digest during source-pinned custody tests. No
+custody rule was changed. Repeated with a frozen tree: the before/after working
+diff SHA-256 was `2b58d13df2d945cb90f51f20175a68bddbd4736ad39259c3bc9b5590c8eee1e2`.
+Final `META_CALLS_ENABLED=false NEXT_TELEMETRY_DISABLED=1 npm run check` exited 0:
+**57 test files / 1,109 tests (61 new)**, lint, app/fixture typechecks and both
+builds passed. The new targeted suite separately passed 61/61 (exit 0).
+Repeated planning parity (128), browser (60) and fixture browser (2) tests all
+exited 0 after the hardening change. No source or documentation was edited during
+the final full check.
 
 No provider requests, coding-agent execution, protected guest/grader operations,
 private original reads, study modifications, new disclosure or automatic merge

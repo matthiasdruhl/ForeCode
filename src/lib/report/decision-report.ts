@@ -194,15 +194,17 @@ export function assessDecisionReport(
   assumedCriterionInput: unknown = null,
 ): DecisionReportAnalysis {
   try {
-    // Reject cycles, accessors, exotic prototypes and oversized structures before parsing.
-    canonicalJson(input);
-    canonicalJson(assumedCriterionInput);
-    const p = PublicTournamentSchema.parse(input);
+    // Validate plain JSON and parse snapshots so Zod never accesses caller objects.
+    const snapshot: unknown = JSON.parse(canonicalJson(input));
+    const criterionSnapshot: unknown = JSON.parse(
+      canonicalJson(assumedCriterionInput),
+    );
+    const p = PublicTournamentSchema.parse(snapshot);
     validateConsistency(p);
     const assumedCriterion =
-      assumedCriterionInput === null
+      criterionSnapshot === null
         ? null
-        : AssumedEffortCriterionSchema.parse(assumedCriterionInput);
+        : AssumedEffortCriterionSchema.parse(criterionSnapshot);
     invariant(
       !assumedCriterion ||
         assumedCriterion.protocolOriginalSha256 === p.protocolOriginalSha256,

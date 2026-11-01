@@ -69,6 +69,7 @@ function traceIdentity(study: PublicTournament | undefined, revision: number) {
 function chapterAt(url: URL): Chapter {
   const hash = url.hash.slice(1);
   if (hash === "foresight" || hash === "workspace") return "lab";
+  if (hash === "evidence-laboratory") return "evidence";
   return chapters.find(([key]) => key === hash)?.[0] ?? "case";
 }
 function questionAt(url: URL): EvidenceQuestion {
@@ -123,6 +124,12 @@ export function ResearchExperience({
         tournaments.studies.some((item) => item.studyId === requestedStudy)
       )
         setStudyId(requestedStudy);
+      if (!historyContext)
+        window.history.replaceState(
+          { ...window.history.state, forecodeContext: contextRef.current },
+          "",
+          window.location.href,
+        );
       const origin = window.history.state?.forecodeReturn;
       setReturnTo(origin ?? null);
       if (event)
@@ -242,7 +249,14 @@ export function ResearchExperience({
   return (
     <TraceContext.Provider value={{ focus, select }}>
       <div className={`research-experience chapter-${chapter}`}>
-        <a className="skip-link" href="#chapter-heading">
+        <a
+          className="skip-link"
+          href="#chapter-heading"
+          onClick={(event) => {
+            event.preventDefault();
+            title.current?.focus();
+          }}
+        >
           Skip to chapter
         </a>
         <header className="research-header">
@@ -340,7 +354,17 @@ export function ResearchExperience({
                   >
                     Explore the booking case <span aria-hidden="true">↗</span>
                   </button>
-                  <a href="#comparison-explainer">How the comparison works ↓</a>
+                  <a
+                    href="#comparison-explainer"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      document
+                        .getElementById("comparison-explainer")
+                        ?.scrollIntoView();
+                    }}
+                  >
+                    How the comparison works ↓
+                  </a>
                 </div>
               </div>
               <div className="landing-artifact">
@@ -433,7 +457,14 @@ export function ResearchExperience({
               the existing consented Meta proposal and challenge workflow.
             </p>
             {trace}
-            <a className="v6-text-link" href="#workspace">
+            <a
+              className="v6-text-link"
+              href="#workspace"
+              onClick={(event) => {
+                event.preventDefault();
+                document.getElementById("intent-title")?.focus();
+              }}
+            >
               Confirm the future requirement ↓
             </a>
           </section>

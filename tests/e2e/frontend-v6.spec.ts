@@ -293,3 +293,32 @@ test("bounded source focus survives chapter and phase selection", async ({
     page.getByRole("button", { name: "Post-future-task source", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
 });
+
+test("skip and within-chapter links preserve their active chapter and focus", async ({
+  page,
+}) => {
+  await page.goto("/#report");
+  const skip = page.getByRole("link", { name: "Skip to chapter", exact: true });
+  await skip.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".chapter-rail [aria-current]")).toHaveText(
+    /Decision Report/,
+  );
+  await expect(page.locator("#chapter-heading")).toBeFocused();
+  await page.goto("/");
+  await page.getByRole("link", { name: "How the comparison works" }).click();
+  await expect(page.locator("#comparison-explainer")).toBeInViewport();
+  await expect(page.locator(".chapter-rail [aria-current]")).toHaveText(/Case/);
+  await page.getByRole("button", { name: "Explore the booking case" }).click();
+  await page
+    .getByRole("link", { name: "Confirm the future requirement" })
+    .click();
+  await expect(page.getByLabel("Short title")).toBeFocused();
+  await expect(page.locator(".chapter-rail [aria-current]")).toHaveText(
+    /Architecture Lab/,
+  );
+  await page.goto("/#evidence-laboratory");
+  await expect(page.locator(".chapter-rail [aria-current]")).toHaveText(
+    /Evidence Laboratory/,
+  );
+});

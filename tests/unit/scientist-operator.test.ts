@@ -172,6 +172,7 @@ async function fixture(realTime = false) {
     };
   }
   const options: Parameters<typeof stageScientistOperator>[0] = {
+    registrationId: h.registration.id,
     initial,
     schedule,
     now,
@@ -211,6 +212,32 @@ async function fixture(realTime = false) {
   };
 }
 describe("staged private Scientist operator", () => {
+  it.each(["", "prospective-registration-20261101-01", "not-a-uuid"])(
+    "rejects invalid planned registration %j before custody or provider use",
+    async (registrationId) => {
+      const x = await fixture();
+      x.options.registrationId = registrationId;
+      x.options.initial.custody.originalRoot = "/missing-planned-id-control";
+      const resolveBinding = vi.fn(x.options.resolveBinding);
+      x.options.resolveBinding = resolveBinding;
+      await expect(stageScientistOperator(x.options)).rejects.toThrow(
+        "Invalid UUID",
+      );
+      expect(x.network).not.toHaveBeenCalled();
+      expect(resolveBinding).not.toHaveBeenCalled();
+      expect(x.approved).toEqual([]);
+    },
+  );
+  it("captures the planned enrollment UUID before generation and cannot retarget it later", async () => {
+    const x = await fixture();
+    const op = await stageScientistOperator(x.options);
+    x.options.registrationId = randomUUID();
+    await x.throughChallenge(op);
+    const registered = await op.register(new AbortController().signal);
+    expect(isAuthenticatedRegistration(registered)).toBe(true);
+    expect(registered.registration.id).toBe(x.h.registration.id);
+    expect(x.network).toHaveBeenCalledTimes(3);
+  });
   it("prepares concrete review data without inventing owner confirmation, consent or custody", async () => {
     const x = await fixture();
     const draft = buildScientistPreselectionDraft({
@@ -280,10 +307,7 @@ describe("staged private Scientist operator", () => {
       false,
     );
     await x.throughChallenge(op);
-    const registration = await op.register(
-      x.h.registration.id,
-      new AbortController().signal,
-    );
+    const registration = await op.register(new AbortController().signal);
     expect(isAuthenticatedRegistration(registration)).toBe(true);
     expect(await op.resolveRegistered()).toBeTruthy();
     expect(x.network).toHaveBeenCalledTimes(3);
@@ -310,10 +334,7 @@ describe("staged private Scientist operator", () => {
       scheduleEvidence: "UNVERIFIED_ESTIMATE",
     });
     await x.throughChallenge(op);
-    const registered = await op.register(
-      x.h.registration.id,
-      new AbortController().signal,
-    );
+    const registered = await op.register(new AbortController().signal);
     expect(isAuthenticatedRegistration(registered)).toBe(true);
     expect(x.captured[0]?.issuedAt).toBe(
       x.h.issued.proposalStartedAt! + 11_000,
@@ -325,9 +346,7 @@ describe("staged private Scientist operator", () => {
     expect((await op.resolveRegistered()).bindingOriginalSha256).toBe(
       registered.bindingOriginalSha256,
     );
-    await expect(
-      op.register(x.h.registration.id, new AbortController().signal),
-    ).rejects.toThrow();
+    await expect(op.register(new AbortController().signal)).rejects.toThrow();
     // Actual local rehearsal time, explicitly not provider/custodian/runtime timing.
     console.info(
       JSON.stringify({
@@ -458,7 +477,7 @@ describe("staged private Scientist operator", () => {
       expect(x.network).not.toHaveBeenCalled();
     },
   );
-  it.each(["authority", "revocation", "inventory"])(
+  it.each(["authority", "revocation", "inventory", "registration"])(
     "rejects %s substitution by the private continuation",
     async (mode) => {
       const x = await fixture();
@@ -474,13 +493,12 @@ describe("staged private Scientist operator", () => {
               ([id]) => id !== x.initial.commitmentId,
             ),
           );
+        if (mode === "registration") config.registrations[0]!.id = randomUUID();
         return config;
       };
       const op = await stageScientistOperator(x.options);
       await x.throughChallenge(op);
-      await expect(
-        op.register(x.h.registration.id, new AbortController().signal),
-      ).rejects.toThrow();
+      await expect(op.register(new AbortController().signal)).rejects.toThrow();
       await expect(op.resolveRegistered()).rejects.toThrow();
     },
   );
@@ -493,9 +511,7 @@ describe("staged private Scientist operator", () => {
     };
     const op = await stageScientistOperator(x.options);
     await x.throughChallenge(op);
-    await expect(
-      op.register(x.h.registration.id, new AbortController().signal),
-    ).rejects.toThrow();
+    await expect(op.register(new AbortController().signal)).rejects.toThrow();
     expect(op.status().remainingMs).toBe(0);
     await expect(op.resolveRegistered()).rejects.toThrow();
   });
@@ -517,7 +533,7 @@ describe("staged private Scientist operator", () => {
     const op = await stageScientistOperator(x.options);
     await x.throughChallenge(op);
     const controller = new AbortController(),
-      pending = op.register(x.h.registration.id, controller.signal);
+      pending = op.register(controller.signal);
     await ready;
     controller.abort();
     await expect(pending).rejects.toThrow();
@@ -531,7 +547,7 @@ describe("staged private Scientist operator", () => {
     const x = await fixture(),
       op = await stageScientistOperator(x.options);
     await x.throughChallenge(op);
-    await op.register(x.h.registration.id, new AbortController().signal);
+    await op.register(new AbortController().signal);
     const file = path.join(x.h.root, "revocations.json");
     await chmod(file, 0o600);
     await writeFile(

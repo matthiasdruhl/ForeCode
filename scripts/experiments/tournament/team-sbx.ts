@@ -49,7 +49,7 @@ import {
   loadRegisteredTeamRuntime,
   assertTeamRegistrationCurrent,
   teamCompositionDigest,
-  prospectiveTeamStudyId,
+  isProspectiveTeamStudy,
   type TeamRuntimeRegistration,
 } from "./team-config";
 import {
@@ -177,11 +177,11 @@ function buildControls(
     "Registered v2 baseline identities differ from installed composition.",
   );
   invariant(
-    study.definition.protocol.studyId !== prospectiveTeamStudyId || measurement,
+    !isProspectiveTeamStudy(study.definition.protocol.studyId) || measurement,
     "Prospective study requires live registered measurement orchestration.",
   );
   invariant(
-    study.definition.protocol.studyId !== prospectiveTeamStudyId ||
+    !isProspectiveTeamStudy(study.definition.protocol.studyId) ||
       measurement?.protocol.schemaVersion ===
         "prospective-tournament-metrics.v2",
     "Prospective study requires final-only authorization metric protocol v2.",

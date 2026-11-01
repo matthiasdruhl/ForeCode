@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { BookingDraftState } from "@/lib/projects/workspace-store";
 import Link from "next/link";
 import { ForesightWorkspace } from "./foresight-workspace";
 import type { PublicForesightConfiguration } from "@/server/meta/configuration";
@@ -51,9 +52,13 @@ export function IntentWorkspace({
   configuration,
   onResearchRevision,
   projectEpoch = 0,
+  initialDraftState,
+  onDraftStateChange,
 }: {
   configuration: PublicForesightConfiguration;
   projectEpoch?: number;
+  initialDraftState?: BookingDraftState;
+  onDraftStateChange?: (state: BookingDraftState) => void;
   onResearchRevision?: (
     revision: number,
     confirmedTitle: string | null,
@@ -61,13 +66,37 @@ export function IntentWorkspace({
 }) {
   const metaStatus = configuration.status;
   const [researchRevision, setResearchRevision] = useState(0);
-  const [input, setInput] = useState<IntentInput>(emptyInput);
+  const [input, setInput] = useState<IntentInput>(
+    initialDraftState?.editor ?? emptyInput,
+  );
+  const [restoredDrafts, setRestoredDrafts] = useState<IntentInput[]>(
+    initialDraftState?.requirements ?? [],
+  );
   const [intents, setIntents] = useState<IntentV1[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const titleInput = useRef<HTMLInputElement>(null);
   const confirmed = intents.filter((intent) => intent.status === "confirmed");
+  useEffect(() => {
+    onDraftStateChange?.({
+      editor: input,
+      requirements: [
+        ...restoredDrafts,
+        ...intents
+          .filter(
+            (intent) =>
+              intent.status === "confirmed" && intent.id !== editingId,
+          )
+          .map(({ title, statement, priority, horizon }) => ({
+            title,
+            statement,
+            priority,
+            horizon,
+          })),
+      ],
+    });
+  }, [input, restoredDrafts, intents, editingId, onDraftStateChange]);
   const statusText = {
     missing: "Not configured",
     invalid: "Configuration needs attention",
@@ -82,9 +111,12 @@ export function IntentWorkspace({
       setError(parsed.error.issues[0]?.message ?? "Check the requirement.");
       return;
     }
-    if (!editingId && intents.length >= 32) {
+    if (
+      !editingId &&
+      (intents.length >= 32 || confirmed.length + restoredDrafts.length >= 32)
+    ) {
       setError(
-        "This session supports up to 32 requirements. Export your requirements before starting a new session.",
+        "This session supports up to 32 requirements including restored drafts. Discard an unused draft or export your requirements before starting a new session.",
       );
       return;
     }
@@ -252,6 +284,59 @@ export function IntentWorkspace({
                 <span className="text-badge">Your input</span>
               </div>
               <form onSubmit={submit} noValidate>
+                {restoredDrafts.length > 0 && (
+                  <div className="restored-drafts">
+                    <h3>Restored requirement drafts</h3>
+                    <p>
+                      Saved requirements need your confirmation again. No
+                      sharing consent or research results were restored.
+                    </p>
+                    {editingId && (
+                      <p>
+                        Finish or cancel the current revision before loading
+                        another draft.
+                      </p>
+                    )}
+                    {restoredDrafts.map((draft, index) => (
+                      <div key={index}>
+                        <span>{draft.title || "Untitled draft"}</span>
+                        <button
+                          type="button"
+                          className="button-secondary"
+                          disabled={editingId !== null}
+                          onClick={() => {
+                            setRestoredDrafts((current) => [
+                              ...current.filter(
+                                (_, position) => position !== index,
+                              ),
+                              ...(input.title || input.statement
+                                ? [input]
+                                : []),
+                            ]);
+                            setInput(draft);
+                            setEditingId(null);
+                            titleInput.current?.focus();
+                          }}
+                        >
+                          Load draft: {draft.title || "Untitled draft"}
+                        </button>
+                        <button
+                          type="button"
+                          className="button-secondary"
+                          onClick={() =>
+                            setRestoredDrafts((current) =>
+                              current.filter(
+                                (_, position) => position !== index,
+                              ),
+                            )
+                          }
+                        >
+                          Discard draft: {draft.title || "Untitled draft"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <label htmlFor="intent-title">Short title</label>
                 <input
                   ref={titleInput}
@@ -321,7 +406,8 @@ export function IntentWorkspace({
                 </div>
                 <p id="privacy-note" className="privacy-note">
                   <span aria-hidden="true">◈</span> Your text stays in this
-                  browser session. Nothing is sent to a model.
+                  browser session unless you explicitly save a workspace on this
+                  device. Nothing is sent to a model.
                 </p>
                 {error && (
                   <p id="input-error" className="form-error" role="alert">

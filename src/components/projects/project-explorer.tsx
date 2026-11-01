@@ -166,10 +166,22 @@ const browserDirectorySupport = () =>
   "webkitdirectory" in document.createElement("input");
 const serverDirectorySupport = () => false;
 
+export interface ProjectExplorerState {
+  project: LocalProject | null;
+  selected: string;
+  query: string;
+}
+
 export function ProjectExplorer({
   onSourceChange,
+  initialState,
+  onStateChange,
+  getContextVersion,
 }: {
   onSourceChange?: () => void;
+  initialState?: ProjectExplorerState;
+  onStateChange?: (state: ProjectExplorerState) => void;
+  getContextVersion?: () => number;
 }) {
   const directorySupported = useSyncExternalStore(
     subscribeBrowserCapability,
@@ -178,13 +190,25 @@ export function ProjectExplorer({
   );
   const [candidates, setCandidates] = useState<Candidate[] | null>(null);
   const [name, setName] = useState("Local project");
-  const [project, setProject] = useState<LocalProject | null>(null);
-  const [selected, setSelected] = useState("");
-  const [query, setQuery] = useState("");
+  const [project, setProject] = useState<LocalProject | null>(
+    initialState?.project ?? null,
+  );
+  const [selected, setSelected] = useState(initialState?.selected ?? "");
+  const [query, setQuery] = useState(initialState?.query ?? "");
+  useEffect(() => {
+    onStateChange?.({ project, selected, query });
+  }, [project, selected, query, onStateChange]);
   const [reviewQuery, setReviewQuery] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [readAttempted, setReadAttempted] = useState(false);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const folderInput = useRef<HTMLInputElement>(null);
   const filesInput = useRef<HTMLInputElement>(null);
   const selectionTitle = useRef<HTMLHeadingElement>(null);
@@ -276,6 +300,9 @@ export function ProjectExplorer({
 
   async function importSelection() {
     if (busy || !included.length || selectionLimit) return;
+    const contextVersion = getContextVersion?.();
+    const isCurrent = () =>
+      alive.current && getContextVersion?.() === contextVersion;
     setBusy(true);
     setReadAttempted(true);
     setError("");
@@ -283,11 +310,13 @@ export function ProjectExplorer({
       const sourceFiles = [];
       for (const candidate of included) {
         const source = await candidate.file.text();
+        if (!isCurrent()) return;
         if (source.includes("\u0000")) throw new Error("binary-file");
         sourceFiles.push({ path: candidate.path, source });
       }
       const { parseLocalProject } =
         await import("@/lib/projects/local-project");
+      if (!isCurrent()) return;
       const result = parseLocalProject(
         name.trim() || "Local project",
         sourceFiles,
@@ -305,13 +334,14 @@ export function ProjectExplorer({
       setCandidates(null);
       requestAnimationFrame(() => loadedTitle.current?.focus());
     } catch (cause) {
+      if (!isCurrent()) return;
       setError(
         cause instanceof Error && cause.message === "binary-file"
           ? "A selected file contains binary data. Deselect it or choose a smaller set of plain-text source files, then try again."
           : "The selected files could not be read or parsed. Choose the files again and check that they are available on this device.",
       );
     } finally {
-      setBusy(false);
+      if (alive.current) setBusy(false);
     }
   }
 
@@ -329,7 +359,7 @@ export function ProjectExplorer({
           <p>Follow the imports. Read the source. Start with your own files.</p>
         </div>
         <span className="project-local-badge">
-          <span aria-hidden="true" /> Browser memory only
+          <span aria-hidden="true" /> Local source
         </span>
       </header>
       <div className="project-scope-note">
@@ -408,9 +438,9 @@ export function ProjectExplorer({
         <p>
           {!directorySupported &&
             "Folder selection is unavailable here. Choose individual source files instead. "}
-          Files stay in this browser tab. Nothing is uploaded, executed, or
-          saved by this importer. Source can contain secrets; exclusions are not
-          a complete secret scan.
+          Import stays in this browser tab. Use Saved workspaces to explicitly
+          store source on this device. Nothing is uploaded or executed. Source
+          can contain secrets; exclusions are not a complete secret scan.
         </p>
       </div>
       {error && (
@@ -638,6 +668,7 @@ export function ProjectExplorer({
               <label htmlFor="project-file-search">Search project files</label>
               <input
                 id="project-file-search"
+                maxLength={200}
                 type="search"
                 placeholder="Filter by path…"
                 value={query}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { IntentWorkspace } from "../intent-workspace";
 import { TournamentOverview } from "../tournament-overview";
@@ -25,7 +25,26 @@ import type { ProspectiveEvidenceCatalog } from "@/server/artifacts/prospective-
 import type { PublicTournament } from "@/lib/experiment/tournament-publication";
 import type { TournamentReplayCatalog } from "@/lib/replay";
 import { ReplayHistory } from "./replay-history";
-import { ProjectExplorer } from "../projects/project-explorer";
+import {
+  ProjectExplorer,
+  type ProjectExplorerState,
+} from "../projects/project-explorer";
+import { WorkspaceManager } from "../projects/workspace-manager";
+import type {
+  BookingDraftState,
+  WorkspaceRecord,
+  WorkspaceSnapshot,
+} from "@/lib/projects/workspace-store";
+
+const emptyBookingDrafts: BookingDraftState = {
+  editor: { title: "", statement: "", priority: "high", horizon: "near" },
+  requirements: [],
+};
+const emptyExplorer: ProjectExplorerState = {
+  project: null,
+  selected: "",
+  query: "",
+};
 
 const chapters = [
   ["case", "Case"],
@@ -97,6 +116,25 @@ export function ResearchExperience({
   const [chapter, setChapter] = useState<Chapter>("case");
   const [revision, setRevision] = useState(0);
   const [projectEpoch, setProjectEpoch] = useState(0);
+  const [explorerEpoch, setExplorerEpoch] = useState(0);
+  const [bookingEpoch, setBookingEpoch] = useState(0);
+  const [explorerInitial, setExplorerInitial] = useState(emptyExplorer);
+  const [explorerState, setExplorerState] = useState(emptyExplorer);
+  const [bookingInitial, setBookingInitial] = useState(emptyBookingDrafts);
+  const [bookingDrafts, setBookingDrafts] = useState(emptyBookingDrafts);
+  const [bookingNotes, setBookingNotes] = useState("");
+  const [localNotes, setLocalNotes] = useState("");
+  const [localRequirements, setLocalRequirements] = useState("");
+  const restoreGeneration = useRef(0);
+  const getContextVersion = useCallback(() => restoreGeneration.current, []);
+  const reportExplorer = useCallback(
+    (state: ProjectExplorerState) => setExplorerState(state),
+    [],
+  );
+  const reportBookingDrafts = useCallback(
+    (state: BookingDraftState) => setBookingDrafts(state),
+    [],
+  );
   const chapterRef = useRef<Chapter>("case");
   const [confirmedTitle, setConfirmedTitle] = useState<string | null>(null);
   const [studyId, setStudyId] = useState(tournaments.studies[0]?.studyId);
@@ -126,6 +164,7 @@ export function ResearchExperience({
 
   useEffect(() => {
     function restore(event?: PopStateEvent | HashChangeEvent) {
+      restoreGeneration.current += 1;
       const url = new URL(window.location.href);
       const restoredChapter = chapterAt(url);
       const changedProject =
@@ -212,6 +251,7 @@ export function ResearchExperience({
     );
   }
   function navigate(next: Chapter, nextFocus = focus) {
+    restoreGeneration.current += 1;
     if ((chapter === "projects") !== (next === "projects")) {
       setProjectEpoch((value) => value + 1);
       nextFocus = initialTraceFocus(contextIdentity);
@@ -258,13 +298,106 @@ export function ResearchExperience({
       document.getElementById(origin.trigger)?.focus(),
     );
   }
-  function invalidate(nextRevision: number, title: string | null) {
+  function invalidate(requestedRevision: number, title: string | null) {
+    // Reopened editors start their own counter at zero; the shell context must
+    // remain monotonic so old history cannot regain a previously used identity.
+    const nextRevision = Math.max(revision + 1, requestedRevision);
     setConfirmedTitle(title);
     setRevision(nextRevision);
     const identity = traceIdentity(study, nextRevision);
     const next = initialTraceFocus(identity);
     setSelection(next);
     writeUrl(chapter, next);
+  }
+  const isLocal = chapter === "projects";
+  const workspaceSnapshot: WorkspaceSnapshot | null =
+    isLocal && !explorerState.project
+      ? null
+      : {
+          project:
+            isLocal && explorerState.project
+              ? {
+                  kind: "local",
+                  name: explorerState.project.name,
+                  files: explorerState.project.files,
+                }
+              : { kind: "booking" },
+          bookingDrafts: isLocal ? emptyBookingDrafts : bookingDrafts,
+          localRequirements: isLocal ? localRequirements : "",
+          notes: isLocal ? localNotes : bookingNotes,
+          navigation: {
+            chapter,
+            selectedPath: isLocal ? explorerState.selected : "",
+            query: isLocal ? explorerState.query : "",
+          },
+        };
+  async function openWorkspace(record: WorkspaceRecord) {
+    const generation = ++restoreGeneration.current;
+    const saved = record.snapshot;
+    let restoredExplorer = emptyExplorer;
+    if (saved.project.kind === "local") {
+      const { parseLocalProject } =
+        await import("@/lib/projects/local-project");
+      const project = parseLocalProject(
+        saved.project.name,
+        saved.project.files,
+      );
+      if (
+        project.files.length !== saved.project.files.length ||
+        !project.files.length
+      )
+        throw new Error(
+          "Saved source did not pass current import validation. Delete this workspace or import its original files again.",
+        );
+      restoredExplorer = {
+        project,
+        selected: project.files.some(
+          (file) => file.path === saved.navigation.selectedPath,
+        )
+          ? saved.navigation.selectedPath
+          : project.files[0]!.path,
+        query: saved.navigation.query,
+      };
+    }
+    if (generation !== restoreGeneration.current)
+      throw new Error(
+        "Opening was cancelled because the active project changed. Reopen the workspace to try again.",
+      );
+    setExplorerInitial(restoredExplorer);
+    setExplorerState(restoredExplorer);
+    setExplorerEpoch((value) => value + 1);
+    setBookingInitial(
+      saved.project.kind === "booking"
+        ? saved.bookingDrafts
+        : emptyBookingDrafts,
+    );
+    setBookingDrafts(
+      saved.project.kind === "booking"
+        ? saved.bookingDrafts
+        : emptyBookingDrafts,
+    );
+    setBookingEpoch((value) => value + 1);
+    setBookingNotes(saved.project.kind === "booking" ? saved.notes : "");
+    setLocalNotes(saved.project.kind === "local" ? saved.notes : "");
+    setLocalRequirements(
+      saved.project.kind === "local" ? saved.localRequirements : "",
+    );
+    setProjectEpoch((value) => value + 1);
+    setConfirmedTitle(null);
+    setRevision((value) => value + 1);
+    setReturnTo(null);
+    const nextChapter =
+      saved.project.kind === "local"
+        ? "projects"
+        : saved.navigation.chapter === "projects"
+          ? "lab"
+          : saved.navigation.chapter;
+    const next = initialTraceFocus(traceIdentity(study, revision + 1));
+    setSelection(next);
+    setChapter(nextChapter);
+    chapterRef.current = nextChapter;
+    writeUrl(nextChapter, next);
+    requestAnimationFrame(() => title.current?.focus());
   }
   const trace = (
     <ChangeTrace
@@ -359,12 +492,28 @@ export function ResearchExperience({
           >
             {activeName}
           </h1>
+          <WorkspaceManager
+            snapshot={workspaceSnapshot}
+            onOpen={openWorkspace}
+            notes={isLocal ? localNotes : bookingNotes}
+            onNotesChange={isLocal ? setLocalNotes : setBookingNotes}
+            localRequirements={localRequirements}
+            onLocalRequirementsChange={setLocalRequirements}
+            isLocal={isLocal}
+          />
           <section
             hidden={chapter !== "projects"}
             aria-label="Local project workspace"
           >
             <ProjectExplorer
+              key={explorerEpoch}
+              initialState={explorerInitial}
+              onStateChange={reportExplorer}
+              getContextVersion={getContextVersion}
               onSourceChange={() => {
+                restoreGeneration.current += 1;
+                setLocalNotes("");
+                setLocalRequirements("");
                 setProjectEpoch((value) => value + 1);
                 setSelection(initialTraceFocus(contextIdentity));
                 setReturnTo(null);
@@ -522,6 +671,9 @@ export function ResearchExperience({
             className="embedded-workspace"
           >
             <IntentWorkspace
+              key={bookingEpoch}
+              initialDraftState={bookingInitial}
+              onDraftStateChange={reportBookingDrafts}
               projectEpoch={projectEpoch}
               configuration={configuration}
               onResearchRevision={invalidate}

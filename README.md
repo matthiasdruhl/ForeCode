@@ -13,9 +13,15 @@ npm ci --ignore-scripts
 npm run dev
 ```
 
-Open http://127.0.0.1:3000. The current build lets you confirm, revise, revoke and export future requirements, then review a pinned booking graph and separately consent to Meta proposals, one falsifiable hypothesis and one proposed counterexample. Requirements and research live in browser memory and disappear on reload; export requirements before leaving. Example buttons only populate the editor and require explicit confirmation. Each model stage has its own exact-payload review and sharing action; editing or revoking a requirement discards dependent research. [Foresight configuration, boundaries and first-smoke handoff](docs/FORESIGHT.md).
+Open http://127.0.0.1:3000. The current build lets you confirm, revise, revoke and export future requirements, then review a pinned booking graph and separately consent to Meta proposals, one falsifiable hypothesis and one proposed counterexample. Research results and sharing approvals stay in browser memory. Use **Saved workspaces** to explicitly retain project source, requirement drafts, notes and navigation on this device; saved requirements require reconfirmation when reopened. Unsaved work disappears on reload. Example buttons only populate the editor and require explicit confirmation. Each model stage has its own exact-payload review and sharing action; editing or revoking a requirement discards dependent research. [Foresight configuration, boundaries and first-smoke handoff](docs/FORESIGHT.md).
 
 For a credential-free walkthrough, confirm **Team permissions**, select **Explore local template**, then read the local hypothesis and counterexample. Every stage is explicitly a developer-authored template; no provider call occurs. The source-backed Atlas keeps observed imports separate from B's planned actions and marks missing preparation/future snapshots unavailable. Review/export the research handoff, then inspect `/experiments` for the blocked tournament, Evidence Laboratory and certificate availability. This is a working local product flow with absent experimental evidence, not a completed Meta or coding-agent experiment. See [judge walkthrough](docs/P0-JUDGE-WALKTHROUGH.md).
+
+## Explore your project and save work
+
+Open **Local Projects** to select a TypeScript/Next.js folder or individual source files. Review the inclusion preview before reading source, then search modules and inspect their graph, dependencies, source and coverage limitations. Import and analysis stay in the browser; imported code is never executed and no provider request is made. Booking remains an explicitly labeled example with its own research context.
+
+The **Saved workspaces** shelf on every chapter lets you save, reopen, rename and delete local work. Source storage requires an explicit checkbox. Up to ten workspaces fit within a conservative 4 MiB device budget, with 2 MiB per saved record; browser quota may be lower. Source graphs are recomputed on reopen, confirmed booking requirements become drafts, and no consent, authorization, provider output or authenticated evidence is saved. [Import scope, storage format and limitations](docs/LOCAL-PROJECT-WORKSPACES.md).
 
 ## Verification
 

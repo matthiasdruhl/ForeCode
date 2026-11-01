@@ -896,3 +896,220 @@
   opacity: 0;
   pointer-events: none;
 }
+
+/* Device workspace shelf: a compact companion to every research chapter. */
+.workspace-manager {
+  --project-ink: #263633;
+  --project-rule: #ced8d1;
+  --project-cyan: #126a73;
+  --project-tint: #e2f0eb;
+  --project-surface: #fffef8;
+  margin: 0 0 24px;
+  border: 1px solid #ced8d1;
+  background: #f7f6f0;
+  color: #263633;
+  color-scheme: light;
+  min-width: 0;
+}
+.workspace-manager > summary {
+  padding: 14px 18px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.workspace-manager > summary > span {
+  float: right;
+  font: 9px var(--mono);
+  letter-spacing: 1px;
+  color: #5d6e69;
+  padding-top: 3px;
+}
+.workspace-manager-body {
+  border-top: 1px solid #ced8d1;
+  padding: 20px;
+}
+.workspace-disclosure {
+  color: #5d6e69;
+  font-size: 12px;
+  line-height: 1.8;
+  max-width: 100ch;
+  margin: 0 0 20px;
+}
+.workspace-drafts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
+}
+.workspace-manager label {
+  display: block;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.workspace-manager input:not([type="checkbox"]),
+.workspace-manager textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 6px 0 0;
+  border: 1px solid #ced8d1;
+  background: #fffef8;
+  color: #263633;
+  font: inherit;
+  padding: 10px 12px;
+  min-height: 42px;
+}
+.workspace-manager textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.workspace-manager .workspace-check {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin: 12px 0;
+}
+.workspace-check input {
+  margin: 3px 0 0;
+  accent-color: #126a73;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0;
+}
+.workspace-save {
+  margin-top: 20px;
+  max-width: 600px;
+}
+.workspace-save > button {
+  margin-top: 6px;
+}
+.workspace-status {
+  font-size: 12px;
+  color: #126a73;
+  line-height: 1.7;
+  min-height: 20px;
+}
+.workspace-list > p,
+.workspace-problems {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #5d6e69;
+}
+.workspace-list article {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 20px;
+  border-top: 1px solid #ced8d1;
+  padding: 16px 0;
+}
+.workspace-list article > div:first-child {
+  min-width: 0;
+}
+.workspace-list h3 {
+  margin: 0 0 5px;
+  font-size: 16px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.workspace-list article p {
+  margin: 0;
+  color: #5d6e69;
+  font-size: 11px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.workspace-record-actions,
+.workspace-list article form {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.workspace-list article form label {
+  flex-basis: 100%;
+}
+.workspace-confirm {
+  flex-basis: 100%;
+  border-left: 2px solid #126a73;
+  padding: 8px 14px;
+}
+.workspace-confirm p {
+  margin: 0 0 10px !important;
+  font-size: 12px !important;
+}
+.workspace-confirm button + button {
+  margin-left: 18px;
+}
+.workspace-remove-all {
+  border-top: 1px solid #ced8d1;
+  padding-top: 16px;
+}
+.workspace-problems {
+  padding: 12px;
+  border: 1px solid #d8bd80;
+  background: #f4efe2;
+  overflow-wrap: anywhere;
+}
+.workspace-manager button {
+  cursor: pointer;
+}
+.workspace-manager button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+.workspace-manager :focus-visible {
+  outline: 2px solid #126a73;
+  outline-offset: 3px;
+}
+@media (max-width: 700px) {
+  .workspace-manager-body {
+    padding: 16px 14px;
+  }
+  .workspace-manager > summary {
+    padding: 14px;
+  }
+  .workspace-manager > summary > span {
+    font-size: 8px;
+    letter-spacing: 0.5px;
+  }
+  .workspace-list article {
+    align-items: flex-start;
+  }
+}
+.restored-drafts {
+  border: 1px solid var(--line, #ced8d1);
+  padding: 14px;
+  margin: 14px 0;
+  max-height: 330px;
+  overflow: auto;
+}
+.restored-drafts h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+.restored-drafts p {
+  font-size: 12px;
+  line-height: 1.7;
+}
+.restored-drafts > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 12px;
+}
+.restored-drafts > div > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.restored-drafts button {
+  flex-shrink: 0;
+}
+@media (max-width: 700px) {
+  .restored-drafts > div {
+    flex-wrap: wrap;
+  }
+}

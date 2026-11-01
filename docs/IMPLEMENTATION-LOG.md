@@ -1,5 +1,94 @@
 # Implementation log
 
+## Evidence-backed Decision Report engine — October 31, 2026
+
+Started `codex/evidence-backed-decision-report` from freshly fetched `origin/main`
+`0c9f48a711aeba779347acaf8c8e6b4fd5d78701` (merged PR #44), in a separate
+worktree. Reviewed the application instructions, frozen contracts, tournament
+publication/receipt loader, metrics, certificate/canonicalization code, related
+tests and external planning Decision Report guidance. Authored this implementation
+in the event repository; no planning implementation assets were copied.
+
+Added a strict, bounded supplementary pure analysis schema and deterministic
+KEEP/REFACTOR/INCONCLUSIVE engine. It checks pair/check/identity/classification
+consistency, preserves eight protected check outcomes and failed/interrupted
+history, and verifies preparation-inclusive totals with the existing metrics
+helper. It retains nulls, separate reservations, changed-file counts and exact
+available source/evaluator/receipt identifiers. Output is deeply frozen; malformed
+input produces a safe inconclusive analysis without echoing errors or input.
+Modeled worksheets and Meta predictions never determine the recommendation.
+
+Pure analyses explicitly carry `UNAUTHENTICATED_ANALYSIS`. The new server-only
+composer invokes the existing fresh tournament loader on every call; it adds no
+filesystem access, receipt verifier, upload/execution endpoint or cache. Tampered,
+revoked, expired, missing and mismatched originals produce no production report.
+The source-owned approved catalog remains empty. No records were provisioned.
+
+Current public projections contain no authenticated predeclared effort criterion.
+Production therefore abstains on correctness ties even with complete telemetry.
+An optional pure-analysis criterion is explicitly an offline assumption bound to
+the supplied protocol digest, never authentication of preregistration or measurement
+comparability. Server configuration cannot promote it. `docs/DECISION-REPORT.md`
+documents the boundary, available behavior and this deliberate limitation.
+
+Observed validation, all on reviewed baseline source or synthetic test-owned data:
+
+- `npm ci --ignore-scripts`: exit 0. Existing peer warnings and 15 moderate audit
+  findings were reported; dependencies and lockfiles were not changed.
+- Initial targeted reporting/publication/boundary run: exit 1, 83/84 passing.
+  The new malformed-configuration test caught an uncaught typed-loader error;
+  added safe failure handling in the new composer. The seven relevant suites then
+  passed 227/227 (exit 0, before the final four negative cases were added).
+- A later duplicate-baseline test initially failed because its mutation branch
+  was missing from the test harness; corrected the harness before final validation.
+- Before peer-review hardening, `META_CALLS_ENABLED=false NEXT_TELEMETRY_DISABLED=1 npm run check`:
+  exit 0; lint, app/fixture typechecks, 57 test files / 1,108 tests (60 new),
+  and both production builds passed.
+- `PLAN_REFERENCE_ROOT=/Users/matthiasdruhl/Projects/Meta-Hackathon/AgentHarness-Planning npm run test:plan`:
+  exit 0; 128 checks against pinned planning commit
+  `695e68a40b5f5009c9b06b83a1181e18cd6d0223`.
+- `npm run test:e2e`: exit 0; 60 desktop/mobile tests, with the existing synthetic
+  keys and provider-network blocking preload. `npm run test:fixture-e2e`: exit 0;
+  2 desktop/mobile tests.
+- `npm run prepare:booking -- --output /private/tmp/forecode-decision-report-export-20261031`:
+  exit 0; 22 reviewed baseline files exported, execution NOT_RUN. In that disposable
+  export, `npm ci --ignore-scripts`, `npm test` (1 visible test), `npm run typecheck`
+  and `npm run build` passed with exit 0.
+- Changed-file Prettier checks and `git diff --check` passed. Reviewed the complete
+  source/tests/docs diff for provenance and security errors. Frozen contracts,
+  benchmark fixtures, protected tests, runtime code and dependency manifests are
+  unchanged.
+
+A separate Codex reviewer inspected the six-file change at
+`d2b9b4504a363c94c5d4871286948af34b85b259` and traced the existing loader. It
+found no blocking provenance, classification or unknown-metric issue, but an
+in-memory probe found a non-enumerable known-field getter could execute during
+Zod parsing after canonical validation skipped it. Production JSON originals
+cannot contain getters. Fixed the pure boundary by parsing canonical JSON
+snapshots for both inputs and added a regression asserting zero getter reads.
+The review is Codex-to-Codex technical review, not human, organizational or blind
+independence; the source fix and test retain its reproducible finding.
+
+The first full rerun after this fix failed 5/1,109 tests when a concurrent comment
+edit changed the implementation digest during source-pinned custody tests. No
+custody rule was changed. Repeated with a frozen tree: the before/after working
+diff SHA-256 was `2b58d13df2d945cb90f51f20175a68bddbd4736ad39259c3bc9b5590c8eee1e2`.
+Final `META_CALLS_ENABLED=false NEXT_TELEMETRY_DISABLED=1 npm run check` exited 0:
+**57 test files / 1,109 tests (61 new)**, lint, app/fixture typechecks and both
+builds passed. The new targeted suite separately passed 61/61 (exit 0).
+Repeated planning parity (128), browser (60) and fixture browser (2) tests all
+exited 0 after the hardening change. No source or documentation was edited during
+the final full check.
+
+No provider requests, coding-agent execution, protected guest/grader operations,
+private original reads, study modifications, new disclosure or automatic merge
+occurred. These synthetic checks establish software behavior, not an experimental
+finding. Next dependency: separately approve and provision a genuine public
+publication with its existing receipt allowlists, then render the fresh report
+read-only. A production effort tie-break additionally needs a reviewed projection
+of a genuinely prospective criterion; this task grants no such experimental or
+publication authority and invents no missing criterion.
+
 ## CI reservation-control partition — October 31, 2026
 
 The first PR workflow on `b735b733485f33cdf3ec6961b3fe790a083a0174` passed

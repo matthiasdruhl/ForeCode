@@ -228,7 +228,7 @@ describe("consented Foresight HTTP and issued-context bindings (synthetic networ
       provider: "meta",
       mode: "live",
       model: env.META_MODEL,
-      promptVersion: "booking-scientist-1",
+      promptVersion: "booking-scientist-2",
       sourceEvidenceId: `meta-${digest("chatcmpl-synthetic-challenge-3")}`,
     });
     expect(h.network).toHaveBeenCalledTimes(3);

@@ -13,10 +13,10 @@ import {
   type Step,
 } from "../../src/lib/foresight/flow";
 import {
-  buildMetaPayload,
-  contentSchemas,
-  PROMPT_VERSION,
-} from "../../src/lib/foresight/prompts";
+  buildRecordedMetaPayloadV1 as buildMetaPayload,
+  RECORDED_PROMPT_VERSION_V1 as PROMPT_VERSION,
+} from "./historical-scientist-payload-v1";
+import { contentSchemas } from "../../src/lib/foresight/prompts";
 import { canonicalJson } from "../../src/lib/report/canonical";
 
 const digest = (value: unknown) =>

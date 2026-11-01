@@ -35,6 +35,9 @@ import { RequestFailure } from "../http/errors";
 import { createMetaTransport, digest } from "./transport";
 import {
   observeScientistFailure,
+  observeScientistPrivateFailure,
+  type ScientistPrivateFailureObserver,
+  type ScientistPrivateFailureDiagnostic,
   scientistFailureCode,
   type ScientistFailureObserver,
   type ScientistFailureObservation,
@@ -54,6 +57,7 @@ export function createForesightService(
   evidenceAdapter: EvidenceAdapter = createEvidenceAdapter(),
   registrationResolver: RegistrationResolver = approvedScientistLineage.resolveRegistration,
   observeFailure?: ScientistFailureObserver,
+  observePrivateFailureDiagnostic?: ScientistPrivateFailureObserver,
 ) {
   let sequence = 0;
   const pendingProposals = new Set<{
@@ -263,14 +267,17 @@ export function createForesightService(
     if (pending) pendingProposals.add(pending);
     let stage: ScientistFailureObservation["stage"] = "fetch";
     let payloadSha256: string | null = null;
+    let privateStage: ScientistPrivateFailureDiagnostic["stage"] | null = null;
     try {
       const transportResult = await transport.call(step, request, signal);
       const { content, provider } = transportResult;
       payloadSha256 = transportResult.payloadSha256;
       stage = "content_schema";
+      privateStage = "content_parse";
       let response: FlowResponse;
       if (step === "propose") {
         const data = contentSchemas.propose.parse(content);
+        privateStage = "response_mapping";
         response = {
           schemaVersion: "foresight-proposals.v1",
           provider,
@@ -284,6 +291,7 @@ export function createForesightService(
         };
       } else if (step === "hypothesize") {
         const data = contentSchemas.hypothesize.parse(content);
+        privateStage = "response_mapping";
         response = {
           schemaVersion: "scientist-hypotheses.v1",
           provider,
@@ -295,6 +303,7 @@ export function createForesightService(
         };
       } else {
         const data = contentSchemas.challenge.parse(content);
+        privateStage = "response_mapping";
         response = {
           schemaVersion: "scientist-challenges.v1",
           provider,
@@ -305,7 +314,9 @@ export function createForesightService(
         };
       }
       stage = "flow_validation";
+      privateStage = "flow_validation";
       const result = validateFlowOutput(step, request, response);
+      privateStage = null;
       stage = "continuation";
       if (signal.aborted) throw new Error("Obsolete response");
       prune();
@@ -422,6 +433,17 @@ export function createForesightService(
       prune();
       return result;
     } catch (error) {
+      if (privateStage && observePrivateFailureDiagnostic)
+        observeScientistPrivateFailure(
+          observePrivateFailureDiagnostic,
+          {
+            stage: privateStage,
+            step,
+            at: new Date(now()).toISOString(),
+            payloadSha256,
+          },
+          error,
+        );
       observeScientistFailure(observeFailure, {
         schemaVersion: "scientist-failure-observation.local.v1",
         layer: "flow",

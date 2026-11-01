@@ -33,6 +33,7 @@ import {
   observeScientistFailure,
   scientistFailureCode,
   type ScientistFailureObserver,
+  type ScientistPrivateFailureObserver,
 } from "../../../src/server/meta/failure-observation";
 import {
   createMetaTransport,
@@ -183,6 +184,7 @@ export async function stageScientistOperator(options: {
   schedule: ScientistSchedule;
   provider: { env(): Record<string, string | undefined>; fetch: typeof fetch };
   observeFailure?: ScientistFailureObserver;
+  observePrivateFailureDiagnostic?: ScientistPrivateFailureObserver;
   approveRequest(
     approval: ScientistRequestApproval,
     signal: AbortSignal,
@@ -430,6 +432,7 @@ export async function stageScientistOperator(options: {
       return bindingReader.resolveRegistration(id, issued);
     },
     observeFailure,
+    options.observePrivateFailureDiagnostic,
   );
   async function operation<T>(
     expected: typeof phase,

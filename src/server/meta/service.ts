@@ -33,6 +33,12 @@ import {
 import { META_LIMITS, contentSchemas } from "@/lib/foresight/prompts";
 import { RequestFailure } from "../http/errors";
 import { createMetaTransport, digest } from "./transport";
+import {
+  observeScientistFailure,
+  scientistFailureCode,
+  type ScientistFailureObserver,
+  type ScientistFailureObservation,
+} from "./failure-observation";
 
 type Binding = { at: number; context: string; goalContext?: string };
 type ProposalBinding = Binding & {
@@ -47,6 +53,7 @@ export function createForesightService(
   now = Date.now,
   evidenceAdapter: EvidenceAdapter = createEvidenceAdapter(),
   registrationResolver: RegistrationResolver = approvedScientistLineage.resolveRegistration,
+  observeFailure?: ScientistFailureObserver,
 ) {
   let sequence = 0;
   const pendingProposals = new Set<{
@@ -187,6 +194,15 @@ export function createForesightService(
     try {
       request = requestSchemas[step].parse(raw);
     } catch {
+      observeScientistFailure(observeFailure, {
+        schemaVersion: "scientist-failure-observation.local.v1",
+        layer: "flow",
+        stage: "request",
+        step,
+        at: new Date(now()).toISOString(),
+        payloadSha256: null,
+        code: "INVALID_REQUEST",
+      });
       throw new RequestFailure("INVALID_REQUEST");
     }
     prune();
@@ -223,6 +239,15 @@ export function createForesightService(
         }
       }
     } catch {
+      observeScientistFailure(observeFailure, {
+        schemaVersion: "scientist-failure-observation.local.v1",
+        layer: "flow",
+        stage: "reference",
+        step,
+        at: new Date(now()).toISOString(),
+        payloadSha256: null,
+        code: "INVALID_REFERENCE",
+      });
       throw new RequestFailure("INVALID_REFERENCE");
     }
     const pending =
@@ -236,8 +261,13 @@ export function createForesightService(
           }
         : undefined;
     if (pending) pendingProposals.add(pending);
+    let stage: ScientistFailureObservation["stage"] = "fetch";
+    let payloadSha256: string | null = null;
     try {
-      const { content, provider } = await transport.call(step, request, signal);
+      const transportResult = await transport.call(step, request, signal);
+      const { content, provider } = transportResult;
+      payloadSha256 = transportResult.payloadSha256;
+      stage = "content_schema";
       let response: FlowResponse;
       if (step === "propose") {
         const data = contentSchemas.propose.parse(content);
@@ -274,7 +304,9 @@ export function createForesightService(
           })),
         };
       }
+      stage = "flow_validation";
       const result = validateFlowOutput(step, request, response);
+      stage = "continuation";
       if (signal.aborted) throw new Error("Obsolete response");
       prune();
       if (
@@ -390,6 +422,15 @@ export function createForesightService(
       prune();
       return result;
     } catch (error) {
+      observeScientistFailure(observeFailure, {
+        schemaVersion: "scientist-failure-observation.local.v1",
+        layer: "flow",
+        stage,
+        step,
+        at: new Date(now()).toISOString(),
+        payloadSha256,
+        code: scientistFailureCode(error),
+      });
       if (error instanceof RequestFailure) throw error;
       throw new RequestFailure("PROVIDER_UNAVAILABLE");
     } finally {

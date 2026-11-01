@@ -17,8 +17,12 @@ export async function freezeBooking(
     "src/lib/report",
     "src/lib/verify",
     "src/lib/experiment",
+    "src/lib/foresight",
     "benchmarks/booking-team-permissions",
     "src/server/artifacts",
+    "src/server/meta",
+    "src/server/config",
+    "src/server/http",
     "scripts/experiments",
   ];
   const trustedManifests = await Promise.all(

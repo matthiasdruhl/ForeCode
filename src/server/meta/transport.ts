@@ -15,6 +15,12 @@ import type { FlowRequest, Step } from "@/lib/foresight/flow";
 import { ProviderInfoSchema } from "@/lib/contracts/provider";
 import { canonicalJson } from "@/lib/report/canonical";
 import { RequestFailure } from "../http/errors";
+import {
+  observeScientistFailure,
+  scientistFailureCode,
+  type ScientistFailureObserver,
+  type ScientistFailureObservation,
+} from "./failure-observation";
 import { foresightConfiguration, META_ENDPOINT } from "./configuration";
 
 export const digest = (value: unknown) =>
@@ -134,11 +140,13 @@ export type TransportObservation = {
 type TransportResult = {
   content: unknown;
   provider: z.infer<typeof ProviderInfoSchema>;
+  payloadSha256: string;
 };
 export function createMetaTransport(options: {
   env: () => Record<string, string | undefined>;
   fetch: typeof fetch;
   now?: () => number;
+  observeFailure?: ScientistFailureObserver;
 }) {
   const now = options.now ?? Date.now;
   let active = false,
@@ -165,144 +173,176 @@ export function createMetaTransport(options: {
     request: FlowRequest | InterpretationContext,
     signal: AbortSignal,
   ): Promise<TransportResult> {
-    const config = foresightConfiguration(options.env());
-    if (config.status !== "configured" || signal.aborted)
-      throw new RequestFailure("PROVIDER_UNAVAILABLE");
-    const model = config.credentials.META_MODEL;
-    const promptVersion =
-      step === "interpret-evidence" ? INTERPRET_PROMPT_VERSION : PROMPT_VERSION;
-    const payload =
-      step === "interpret-evidence"
-        ? buildInterpretationPayload(request as InterpretationContext, model)
-        : buildMetaPayload(step, request as FlowRequest, model);
-    const body = JSON.stringify(payload);
-    if (new TextEncoder().encode(body).byteLength > META_LIMITS.inputBytes)
-      throw new RequestFailure("PAYLOAD_TOO_LARGE");
-    const approval = options.env();
-    if (
-      approval.META_APPROVED_PAYLOAD_SHA256 &&
-      approval.META_APPROVED_PAYLOAD_SHA256 !== digest(payload)
-    )
-      throw new RequestFailure("PROVIDER_UNAVAILABLE");
-    const approvedLimit =
-      approval.META_APPROVED_CALL_LIMIT === undefined
-        ? META_LIMITS.totalPerProcess
-        : Number(approval.META_APPROVED_CALL_LIMIT);
-    if (
-      !Number.isInteger(approvedLimit) ||
-      approvedLimit < 1 ||
-      approvedLimit > META_LIMITS.totalPerProcess
-    )
-      throw new RequestFailure("PROVIDER_UNAVAILABLE");
-    const at = now();
-    while (attempts.length && attempts[0]!.at <= at - 3_600_000)
-      attempts.shift();
-    if (
-      active ||
-      total >= approvedLimit ||
-      at - lastCall < META_LIMITS.intervalMs ||
-      attempts.filter((item) => item.step === step).length >=
-        META_LIMITS.perEndpointPerHour
-    )
-      throw new RequestFailure("RATE_LIMITED");
-    active = true;
-    total++;
-    lastCall = at;
-    attempts.push({ step, at });
-    const controller = new AbortController();
-    const deadline = setTimeout(
-      () => controller.abort(),
-      META_LIMITS.timeoutMs,
-    );
-    const combined = AbortSignal.any([signal, controller.signal]);
+    let stage: ScientistFailureObservation["stage"] = "configuration";
+    let payloadSha256: string | null = null;
+    let httpStatus: number | undefined;
     try {
-      const response = await abortable(
-        options.fetch(META_ENDPOINT, {
-          method: "POST",
-          redirect: "error",
-          cache: "no-store",
-          signal: combined,
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${config.credentials.META_MODEL_API_KEY}`,
-          },
-          body,
-        }),
-        combined,
-      );
-      const envelope = envelopeSchema.parse(
-        await boundedJson(response, combined),
-      );
+      const config = foresightConfiguration(options.env());
+      if (config.status !== "configured" || signal.aborted)
+        throw new RequestFailure("PROVIDER_UNAVAILABLE");
+      const model = config.credentials.META_MODEL;
+      const promptVersion =
+        step === "interpret-evidence"
+          ? INTERPRET_PROMPT_VERSION
+          : PROMPT_VERSION;
+      stage = "request";
+      const payload =
+        step === "interpret-evidence"
+          ? buildInterpretationPayload(request as InterpretationContext, model)
+          : buildMetaPayload(step, request as FlowRequest, model);
+      payloadSha256 = digest(payload);
+      const body = JSON.stringify(payload);
+      if (new TextEncoder().encode(body).byteLength > META_LIMITS.inputBytes)
+        throw new RequestFailure("PAYLOAD_TOO_LARGE");
+      const approval = options.env();
       if (
-        envelope.model !== model ||
-        combined.aborted ||
-        (envelope.usage &&
-          (envelope.usage.completion_tokens > META_LIMITS.outputTokens ||
-            (envelope.usage.completion_tokens_details?.reasoning_tokens ?? 0) >
-              envelope.usage.completion_tokens ||
-            (envelope.usage.prompt_tokens_details?.cached_tokens ?? 0) >
-              envelope.usage.prompt_tokens ||
-            envelope.usage.total_tokens !==
-              envelope.usage.prompt_tokens + envelope.usage.completion_tokens))
+        approval.META_APPROVED_PAYLOAD_SHA256 &&
+        approval.META_APPROVED_PAYLOAD_SHA256 !== digest(payload)
       )
         throw new RequestFailure("PROVIDER_UNAVAILABLE");
-      // Revoked spending approval or changed provider configuration invalidates
-      // an in-flight reply as well. Never reuse a result after authorization changes.
-      const currentApproval = options.env();
-      const currentConfig = foresightConfiguration(currentApproval);
+      const approvedLimit =
+        approval.META_APPROVED_CALL_LIMIT === undefined
+          ? META_LIMITS.totalPerProcess
+          : Number(approval.META_APPROVED_CALL_LIMIT);
       if (
-        currentConfig.status !== "configured" ||
-        currentConfig.credentials.META_MODEL !== model ||
-        (currentApproval.META_APPROVED_PAYLOAD_SHA256 &&
-          currentApproval.META_APPROVED_PAYLOAD_SHA256 !== digest(payload))
+        !Number.isInteger(approvedLimit) ||
+        approvedLimit < 1 ||
+        approvedLimit > META_LIMITS.totalPerProcess
       )
         throw new RequestFailure("PROVIDER_UNAVAILABLE");
-      const responseIdentity = `meta-${digest(envelope.id)}`;
-      if (responseIdentities.has(responseIdentity))
-        throw new RequestFailure("PROVIDER_UNAVAILABLE");
-      const requestId = response.headers.get("x-request-id");
-      if (requestId !== null && requestId.length > 256)
-        throw new RequestFailure("PROVIDER_UNAVAILABLE");
-      responseIdentities.add(responseIdentity);
-      const observation: TransportObservation = {
-        step,
-        model,
-        promptVersion,
-        responseIdentity,
-        requestIdentity: requestId ? digest(requestId) : null,
-        contextIdentity: digest(request),
-        payloadIdentity: digest(payload),
-        usage: envelope.usage
-          ? {
-              inputTokens: envelope.usage.prompt_tokens,
-              outputTokens: envelope.usage.completion_tokens,
-              totalTokens: envelope.usage.total_tokens,
-              reasoningTokens:
-                envelope.usage.completion_tokens_details?.reasoning_tokens ??
-                null,
-            }
-          : null,
-        cost: null,
-      };
-      observations.push(observation);
-      if (observations.length > META_LIMITS.totalPerProcess)
-        observations.shift();
-      return {
-        content: JSON.parse(envelope.choices[0]!.message.content) as unknown,
-        provider: ProviderInfoSchema.parse({
-          provider: "meta",
+      stage = "limits";
+      const at = now();
+      while (attempts.length && attempts[0]!.at <= at - 3_600_000)
+        attempts.shift();
+      if (
+        active ||
+        total >= approvedLimit ||
+        at - lastCall < META_LIMITS.intervalMs ||
+        attempts.filter((item) => item.step === step).length >=
+          META_LIMITS.perEndpointPerHour
+      )
+        throw new RequestFailure("RATE_LIMITED");
+      active = true;
+      total++;
+      lastCall = at;
+      attempts.push({ step, at });
+      const controller = new AbortController();
+      const deadline = setTimeout(
+        () => controller.abort(),
+        META_LIMITS.timeoutMs,
+      );
+      const combined = AbortSignal.any([signal, controller.signal]);
+      try {
+        stage = "fetch";
+        const response = await abortable(
+          options.fetch(META_ENDPOINT, {
+            method: "POST",
+            redirect: "error",
+            cache: "no-store",
+            signal: combined,
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${config.credentials.META_MODEL_API_KEY}`,
+            },
+            body,
+          }),
+          combined,
+        );
+        stage = "response";
+        if (response.status >= 100 && response.status <= 599)
+          httpStatus = response.status;
+        const responseJson = await boundedJson(response, combined);
+        stage = "envelope";
+        const envelope = envelopeSchema.parse(responseJson);
+        stage = "identity_usage";
+        if (
+          envelope.model !== model ||
+          combined.aborted ||
+          (envelope.usage &&
+            (envelope.usage.completion_tokens > META_LIMITS.outputTokens ||
+              (envelope.usage.completion_tokens_details?.reasoning_tokens ??
+                0) > envelope.usage.completion_tokens ||
+              (envelope.usage.prompt_tokens_details?.cached_tokens ?? 0) >
+                envelope.usage.prompt_tokens ||
+              envelope.usage.total_tokens !==
+                envelope.usage.prompt_tokens +
+                  envelope.usage.completion_tokens))
+        )
+          throw new RequestFailure("PROVIDER_UNAVAILABLE");
+        // Revoked spending approval or changed provider configuration invalidates
+        // an in-flight reply as well. Never reuse a result after authorization changes.
+        stage = "revalidation";
+        const currentApproval = options.env();
+        const currentConfig = foresightConfiguration(currentApproval);
+        if (
+          currentConfig.status !== "configured" ||
+          currentConfig.credentials.META_MODEL !== model ||
+          (currentApproval.META_APPROVED_PAYLOAD_SHA256 &&
+            currentApproval.META_APPROVED_PAYLOAD_SHA256 !== digest(payload))
+        )
+          throw new RequestFailure("PROVIDER_UNAVAILABLE");
+        stage = "identity_usage";
+        const responseIdentity = `meta-${digest(envelope.id)}`;
+        if (responseIdentities.has(responseIdentity))
+          throw new RequestFailure("PROVIDER_UNAVAILABLE");
+        const requestId = response.headers.get("x-request-id");
+        if (requestId !== null && requestId.length > 256)
+          throw new RequestFailure("PROVIDER_UNAVAILABLE");
+        responseIdentities.add(responseIdentity);
+        const observation: TransportObservation = {
+          step,
           model,
-          mode: "live",
           promptVersion,
-          sourceEvidenceId: responseIdentity,
-        }),
-      };
-    } catch {
-      throw new RequestFailure("PROVIDER_UNAVAILABLE");
-    } finally {
-      clearTimeout(deadline);
-      controller.abort();
-      active = false;
+          responseIdentity,
+          requestIdentity: requestId ? digest(requestId) : null,
+          contextIdentity: digest(request),
+          payloadIdentity: digest(payload),
+          usage: envelope.usage
+            ? {
+                inputTokens: envelope.usage.prompt_tokens,
+                outputTokens: envelope.usage.completion_tokens,
+                totalTokens: envelope.usage.total_tokens,
+                reasoningTokens:
+                  envelope.usage.completion_tokens_details?.reasoning_tokens ??
+                  null,
+              }
+            : null,
+          cost: null,
+        };
+        observations.push(observation);
+        if (observations.length > META_LIMITS.totalPerProcess)
+          observations.shift();
+        stage = "content_json";
+        return {
+          payloadSha256: digest(payload),
+          content: JSON.parse(envelope.choices[0]!.message.content) as unknown,
+          provider: ProviderInfoSchema.parse({
+            provider: "meta",
+            model,
+            mode: "live",
+            promptVersion,
+            sourceEvidenceId: responseIdentity,
+          }),
+        };
+      } catch {
+        throw new RequestFailure("PROVIDER_UNAVAILABLE");
+      } finally {
+        clearTimeout(deadline);
+        controller.abort();
+        active = false;
+      }
+    } catch (error) {
+      observeScientistFailure(options.observeFailure, {
+        schemaVersion: "scientist-failure-observation.local.v1",
+        layer: "transport",
+        stage,
+        step,
+        at: new Date(now()).toISOString(),
+        payloadSha256,
+        code: scientistFailureCode(error),
+        ...(httpStatus === undefined ? {} : { httpStatus }),
+      });
+      throw error;
     }
   }
   return { call, observations: () => structuredClone(observations) };

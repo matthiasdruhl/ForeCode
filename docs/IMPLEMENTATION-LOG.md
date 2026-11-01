@@ -2455,3 +2455,24 @@ Validation with provider/spending disabled and synthetic credentials:
 - Independent shared-agent source review found no actionable privacy, public-error, cap, cleanup, retry or live-capability change. This is technical review under shared authority, not independent human/organizational custody.
 
 `npm run test:e2e`: exit 0, **78 application browser cases**, 18.6 seconds, using the repository blocked-network provider fixture. Fixture-browser and exact-head CI delivery results follow after their actual completion. No new paid call, guest operation, architecture selection or experimental result occurred during this source validation.
+
+## Retained slot-04 selection cutoff and separate prospective locator — November 1, 2026
+
+PR65 passed exact-head Foundation workflow `41334130916` (all steps: full check, pinned parity, application/fixture browsers and standalone export), merged as `460a511da6178a1438fe99bb6e39461c9c885a38`, and recomputed to the reviewed source closure `f68c36b680c71511e07b1db44674555f33d9af06391c0a0f0baddf3e5d9be369`. Local validation also completed both fixture browser cases (exit 0, 2.2 seconds). Shared checkout was clean before the next inert-locator branch.
+
+The actual slot-04 attempt completed three genuine fresh Scientist responses and registered at `2026-11-01T18:08:16.903Z`. Its private driver imposed an extra 30-second selection/authorization timeout and stopped at `18:08:46.912Z` (`AbortError`, retry `NONE`). Actual selection at `18:08:56.392Z` and held preparation authorization at `18:08:56.487Z` arrived approximately 9.6 seconds after terminal failure. No preparation-started event or B source generation occurred; no downstream arm or protected result followed. The original late artifacts remain unchanged and do not revive issuance. This is a known private orchestration cutoff; it is not the unknown slot-03 provider/validation failure and not absent owner approval.
+
+Added only the inert named `forecode-team-20261101-prospective-05` source locator and its unsigned packet-test parameter. The fixed registration path is distinct; the existing trust anchor and production live-registration/local-v2 dispatch checks remain unchanged through the source-owned prospective list. The source change grants no call, signature or admission and allocates no actual new trial identity. For a separately reviewed private continuation, the owner authorized removing only the additional selection-specific 30-second abort while preserving the 210-second whole preparation phase, maximum 180-second actual helper, fixed 30-minute lifecycle and conservative pre-dispatch full-pair remaining-time gate. Actual content can be reviewed while challenge/binding runs, but actual selection/holding still follows new registration and code generation follows real helper start. No failed scope is resumed.
+
+Current trusted implementation identity: `1ce5950894ffba272bcd758a4c551fca05fb059ba0691f7461a4310f0488ce5a`, 198 files. Fixture, baseline suite and baseline policy hashes are unchanged. Historical source identities and originals are preserved.
+
+Validation with provider/spending disabled and synthetic credentials:
+
+- Focused `prospective-runtime-guards` and `study-approval-packet` suites: exit 0, **20 cases / 2 files**. Every named prospective slot, including 05, requires an authentic production live session/v2 capability; unsigned packet controls retain fresh trial identities, distinct fixed locations and the same public anchor.
+- `PLAN_REFERENCE_ROOT=../AgentHarness-Planning npm run test:plan`: exit 0, **128 immutable-pin cases**.
+
+- Full `npm run check`: exit 0, **1,783 tests / 81 files**, lint, both strict typechecks and both production builds; unit duration 55.89 seconds. Log: `/private/tmp/forecode-prospective-selection-window-check-20261101.log`.
+- Local application browser suite: exit 0, **78 cases**, 18.2 seconds; fixture browser suite: exit 0, **2 cases**, 2.5 seconds. Both used the repository’s synthetic, network-blocked provider arrangement.
+- Changed-file Prettier and `git diff --check`: exit 0.
+
+Exact-head CI delivery results follow after actual completion. No provider or guest operation occurred during this source validation.

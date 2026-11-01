@@ -66,11 +66,14 @@ export const recoveryProspectiveTeamStudyId =
   "forecode-team-20261101-prospective-03";
 export const diagnosticProspectiveTeamStudyId =
   "forecode-team-20261101-prospective-04";
+export const selectionWindowProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-05";
 export const prospectiveTeamStudyIds = [
   prospectiveTeamStudyId,
   nextProspectiveTeamStudyId,
   recoveryProspectiveTeamStudyId,
   diagnosticProspectiveTeamStudyId,
+  selectionWindowProspectiveTeamStudyId,
 ] as const;
 export const isProspectiveTeamStudy = (id: string) =>
   prospectiveTeamStudyIds.some((reserved) => reserved === id);
@@ -176,6 +179,27 @@ export const configuredTeamRuntimes: ReadonlyMap<string, TeamRuntimeLocation> =
           "forecode-tournament",
           "registration",
           "prospective-20261101-04",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      selectionWindowProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-05",
         ),
         publicKeyPem: [
           "-----BEGIN PUBLIC KEY-----",

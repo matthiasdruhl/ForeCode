@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { bookingGraph } from "@/lib/foresight/booking-context";
 import type { ProposeResponse } from "@/lib/foresight/flow";
+import { ChangeTrace } from "./change-trace";
 
 // Layout only. Every rendered dependency comes from the reviewed source graph.
 const positions: Record<string, [number, number]> = {
@@ -24,6 +25,11 @@ export function ArchitectureAtlas({
 }) {
   const [arm, setArm] = useState<"A" | "B">("A");
   const [selected, setSelected] = useState("service");
+
+  // An invalidated/revoked proposal must not leave an active B selection.
+  useEffect(() => {
+    if (!proposal) setArm("A");
+  }, [proposal]);
   const [snapshot, setSnapshot] = useState<"initial" | "prepared" | "future">(
     "initial",
   );
@@ -75,6 +81,19 @@ export function ArchitectureAtlas({
           ? "Existing reviewed modules and static imports. No speculative preparation."
           : "The same existing source graph, annotated with proposed actions. B has no implemented source snapshot."}
       </p>
+      <ChangeTrace
+        proposal={proposal}
+        arm={arm}
+        selected={selected}
+        onInspect={(nextArm, moduleId) => {
+          setArm(nextArm);
+          setSelected(moduleId);
+        }}
+      />
+      <div className="atlas-source-heading">
+        <strong>Detailed source inspector</strong>
+        <span>Reviewed static imports · selection synchronized with Change Trace</span>
+      </div>
       <div className="atlas-layout">
         <div
           className="atlas-scroll"

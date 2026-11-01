@@ -4,6 +4,7 @@ import { VisibleScenarioV1Schema } from "../../../src/lib/contracts/architecture
 import { z } from "zod";
 import { IntentV1Schema } from "../../../src/lib/contracts/intents";
 import { IntentInputSchema } from "../../../src/lib/intents/lifecycle";
+import { OpaqueIdSchema } from "../../../src/lib/foresight/interpretation/contracts";
 import { invariant } from "../../../src/lib/contracts/validation";
 import {
   requestSchemas,
@@ -171,6 +172,8 @@ async function bounded<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
  * are trusted private operator code, never request-supplied configuration.
  * Callback readiness and schedule estimates are not experimental authority. */
 export async function stageScientistOperator(options: {
+  // Fix and validate the enrollment identity before any generation can occur.
+  registrationId: string;
   initial: ScientistInitialOriginals;
   schedule: ScientistSchedule;
   provider: { env(): Record<string, string | undefined>; fetch: typeof fetch };
@@ -184,6 +187,7 @@ export async function stageScientistOperator(options: {
   ): Promise<RegistrationConfig>;
   now?: () => number;
 }) {
+  const registrationId = OpaqueIdSchema.parse(options.registrationId);
   const now = options.now ?? Date.now;
   const wallClock = options.now === undefined;
   const concreteProvider = options.provider.fetch === globalThis.fetch;
@@ -304,7 +308,6 @@ export async function stageScientistOperator(options: {
   let bindingReader: ReturnType<
     typeof createScientistRegistrationReader
   > | null = null;
-  let registrationId: string | null = null;
   let hypothesisId: string | null = null;
   let hypothesisInput: ReturnType<
     typeof requestSchemas.hypothesize.parse
@@ -371,6 +374,10 @@ export async function stageScientistOperator(options: {
     now,
     undefined,
     async (id, issued) => {
+      invariant(
+        id === registrationId,
+        "Planned registration identity changed.",
+      );
       if (!bindingReader) {
         invariant(
           bindingSignal && !bindingSignal.aborted && phase === "challenged",
@@ -407,7 +414,6 @@ export async function stageScientistOperator(options: {
             config.registrations[0]!.commitmentId === initial.commitmentId,
           "Binding selected another initial study.",
         );
-        registrationId = id;
         bindingReader = createScientistRegistrationReader(
           { custody, registrations: config.registrations },
           now,
@@ -569,11 +575,11 @@ export async function stageScientistOperator(options: {
         phase = "challenged";
         return result;
       }),
-    register: (id: string, signal: AbortSignal) =>
+    register: (signal: AbortSignal) =>
       operation("challenged", signal, async (scoped) => {
         bindingSignal = scoped;
         try {
-          const result = await service.register(id, hypothesisId!);
+          const result = await service.register(registrationId, hypothesisId!);
           live();
           invariant(
             !scoped.aborted && phase === "challenged",

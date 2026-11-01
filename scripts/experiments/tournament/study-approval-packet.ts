@@ -24,6 +24,8 @@ import { SourceManifestSchema } from "./source-manifest";
 import {
   loadRegisteredTeamRuntime,
   prospectiveTeamStudyId,
+  prospectiveTeamStudyIds,
+  isProspectiveTeamStudy,
 } from "./team-config";
 import { StudyDefinitionSchema, validateStudyDefinition } from "./study";
 import { buildScientistPreselectionDraft } from "./scientist-preselection-draft";
@@ -46,6 +48,7 @@ const evaluationPins = z.strictObject({
 
 /** Proposals only: a parsed draft can never become custody, approval or admission. */
 export function buildStudyApprovalPacket(input: {
+  targetStudyId?: (typeof prospectiveTeamStudyIds)[number];
   sourceDefinition: unknown;
   originalManifest: unknown;
   reviewedGitManifest: unknown;
@@ -73,7 +76,8 @@ export function buildStudyApprovalPacket(input: {
     "Reviewed Git fixture differs from observed original source.",
   );
   const definition = structuredClone(source);
-  const studyId = prospectiveTeamStudyId;
+  const studyId = input.targetStudyId ?? prospectiveTeamStudyId;
+  invariant(isProspectiveTeamStudy(studyId), "Unknown prospective slot.");
   invariant(
     source.protocol.studyId !== studyId,
     "Prospective slot already used as source.",

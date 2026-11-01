@@ -29,12 +29,23 @@ import { RequestFailure } from "../http/errors";
 import { createMetaTransport, digest } from "./transport";
 
 type Binding = { at: number; context: string; goalContext?: string };
-type ProposalBinding = Binding & { sourceContext: string; intentIds: string[] };
+type ProposalBinding = Binding & {
+  sourceContext: string;
+  intentIds: string[];
+  hypothesisGeneration: number;
+};
 export function createForesightService(
   transport: ReturnType<typeof createMetaTransport>,
   now = Date.now,
   evidenceAdapter: EvidenceAdapter = createEvidenceAdapter(),
 ) {
+  let sequence = 0;
+  const pendingProposals = new Set<{
+    sequence: number;
+    sourceContext: string;
+    intentIds: string[];
+    obsolete: boolean;
+  }>();
   const issued = new Map<
     string,
     IssuedHypothesis & {
@@ -49,12 +60,15 @@ export function createForesightService(
     intents: request.intents,
     graph: request.graph,
   });
-  function forgetProposal(key: string) {
-    proposals.delete(key);
+  function forgetHypotheses(key: string) {
     for (const [id, record] of hypotheses)
       if (record.proposalKey === key) hypotheses.delete(id);
     for (const [id, record] of issued)
       if (record.proposalKey === key) issued.delete(id);
+  }
+  function forgetProposal(key: string) {
+    proposals.delete(key);
+    forgetHypotheses(key);
   }
   function prune() {
     for (const [key, record] of proposals)
@@ -167,6 +181,9 @@ export function createForesightService(
     }
     prune();
     let selectedProposal: ProposalBinding | undefined;
+    let selectedHypothesis: Binding | undefined;
+    let selectedHypothesisKey: string | undefined;
+    let hypothesisGeneration: number | undefined;
     try {
       validateApprovedInput(request);
       if ("candidates" in request) {
@@ -186,8 +203,11 @@ export function createForesightService(
         )
           throw new Error("Unissued context");
         selectedProposal = record;
+        hypothesisGeneration = record.hypothesisGeneration;
         if ("hypotheses" in request) {
-          const hypothesis = hypotheses.get(digest(request.hypotheses));
+          selectedHypothesisKey = digest(request.hypotheses);
+          const hypothesis = hypotheses.get(selectedHypothesisKey);
+          selectedHypothesis = hypothesis;
           if (!hypothesis || hypothesis.context !== digest(context))
             throw new Error("Unissued hypothesis");
         }
@@ -195,8 +215,18 @@ export function createForesightService(
     } catch {
       throw new RequestFailure("INVALID_REFERENCE");
     }
-    const { content, provider } = await transport.call(step, request, signal);
+    const pending =
+      step === "propose"
+        ? {
+            sequence: ++sequence,
+            sourceContext: digest(request.graph),
+            intentIds: request.intents.map((i) => i.id),
+            obsolete: false,
+          }
+        : undefined;
+    if (pending) pendingProposals.add(pending);
     try {
+      const { content, provider } = await transport.call(step, request, signal);
       let response: FlowResponse;
       if (step === "propose") {
         const data = contentSchemas.propose.parse(content);
@@ -236,6 +266,14 @@ export function createForesightService(
       const result = validateFlowOutput(step, request, response);
       if (signal.aborted) throw new Error("Obsolete response");
       prune();
+      if (
+        pending?.obsolete ||
+        (step === "hypothesize" &&
+          selectedProposal?.hypothesisGeneration !== hypothesisGeneration) ||
+        (selectedHypothesisKey &&
+          hypotheses.get(selectedHypothesisKey) !== selectedHypothesis)
+      )
+        throw new RequestFailure("INVALID_REFERENCE");
       // Object identity is a server-owned acceptance generation. Even if an old
       // context is proposed again, in-flight work from its removed record stays stale.
       if (
@@ -277,7 +315,18 @@ export function createForesightService(
             goalContext,
             sourceContext,
             intentIds,
+            hypothesisGeneration: 0,
           });
+        // A later accepted request wins over older still-pending overlapping
+        // proposals. Failed replacements never invalidate accepted state.
+        for (const other of pendingProposals)
+          if (
+            pending &&
+            other.sequence < pending.sequence &&
+            other.sourceContext === sourceContext &&
+            other.intentIds.some((id) => intentIds.includes(id))
+          )
+            other.obsolete = true;
       }
       if (
         result.schemaVersion === "scientist-hypotheses.v1" &&
@@ -288,6 +337,8 @@ export function createForesightService(
           candidates: request.candidates,
           visibleScenarios: request.visibleScenarios,
         };
+        forgetHypotheses(selectedProposal!.context);
+        selectedProposal!.hypothesisGeneration++;
         hypotheses.set(digest(result.hypotheses), {
           at: now(),
           context: digest(context),
@@ -326,6 +377,8 @@ export function createForesightService(
     } catch (error) {
       if (error instanceof RequestFailure) throw error;
       throw new RequestFailure("PROVIDER_UNAVAILABLE");
+    } finally {
+      if (pending) pendingProposals.delete(pending);
     }
   }
   return { run, interpret };

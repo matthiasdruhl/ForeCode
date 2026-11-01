@@ -16,6 +16,7 @@ import {
   type EvidenceLink,
   type IssuedHypothesis,
 } from "@/server/meta/evidence";
+import type { ProspectiveRegistration } from "@/server/meta/prospective-lineage";
 import { createForesightService } from "@/server/meta/service";
 import { createForesightHttp } from "@/server/meta/http";
 import { createMetaTransport, digest } from "@/server/meta/transport";
@@ -55,9 +56,11 @@ vi.mock("@/lib/foresight/booking-context", async (importOriginal) => {
 });
 type Fixture = Awaited<ReturnType<typeof publicationFixture>>;
 const fixtures: Fixture[] = [];
-const origin = "https://forecode.example.test";
+const origin = "http://127.0.0.1:3189";
 const environment = {
   FORECODE_ORIGIN: origin,
+  FORECODE_RESEARCH_MODE: "local-single-operator",
+  FORECODE_RESEARCH_PROCESSES: "1",
   META_CALLS_ENABLED: "true",
   META_SPENDING_APPROVED: "true",
   META_MODEL_API_KEY: "synthetic-secret",
@@ -107,11 +110,13 @@ async function harness(
   let at = Date.parse("2026-10-28T12:01:00.000Z");
   let seq = 0;
   let link: EvidenceLink | null = null;
+  let registration: ProspectiveRegistration | null = null;
   let catalog = () => loadDecisionReports(f.config, at);
   const loadReports = vi.fn(() => catalog());
   const adapter = createEvidenceAdapter({
     loadReports,
     resolveLink: async () => structuredClone(link),
+    resolveRegistration: async () => structuredClone(registration),
   });
   const env: Record<string, string | undefined> = { ...environment };
   const network = vi.fn<typeof fetch>(async (_url, init) => {
@@ -204,6 +209,7 @@ async function harness(
   };
   const report = (await loadDecisionReports(f.config, f.now)).reports[0]!;
   link = {
+    prospectiveRegistrationId: randomUUID(),
     evidenceSummaryId: randomUUID(),
     hypothesisId: h.id,
     hypothesisSha256: digest(h),
@@ -216,6 +222,26 @@ async function harness(
     publicationApprovedAt: f.now,
     registeredAt: at + 1000,
     expiresAt: Date.parse("2026-10-28T12:30:00.000Z"),
+  };
+  const {
+    preparedOriginalSha256,
+    comparability,
+    correctness,
+    ...prospectiveStudy
+  } = report.analysis.identity!;
+  void preparedOriginalSha256;
+  void comparability;
+  void correctness;
+  registration = {
+    schemaVersion: "scientist-prospective-registration.v1",
+    id: link.prospectiveRegistrationId,
+    hypothesisId: h.id,
+    hypothesisSha256: digest(h),
+    issuedAt: issued.issuedAt,
+    registeredAt: link.registeredAt,
+    expiresAt: issued.issuedAt + META_LIMITS.artifactTtlMs,
+    context: structuredClone(hypothesisInput),
+    study: prospectiveStudy,
   };
   at = f.now;
   const request = {
@@ -241,6 +267,10 @@ async function harness(
     hypothesisInput,
     hypothesis,
     link: () => link!,
+    registration: () => registration!,
+    setRegistration: (value: ProspectiveRegistration | null) => {
+      registration = value;
+    },
     setLink: (value: EvidenceLink | null) => {
       link = value;
     },
@@ -255,6 +285,34 @@ async function harness(
 }
 
 describe("authenticated interpretation through #45 loader and synthetic Meta transport", () => {
+  it.each([
+    "missing",
+    "revoked",
+    "expired",
+    "wrong-study",
+    "wrong-context",
+    "wrong-candidate",
+    "wrong-source",
+    "late-registration",
+    "wrong-protocol",
+    "wrong-policy",
+  ])("rejects prospective registration %s before inference", async (kind) => {
+    const h = await harness(),
+      r = h.registration();
+    if (kind === "missing" || kind === "revoked") h.setRegistration(null);
+    if (kind === "expired") r.expiresAt = h.now();
+    if (kind === "wrong-study") r.study.studyId = "wrong-study";
+    if (kind === "wrong-context") r.context.goal += " changed";
+    if (kind === "wrong-candidate") r.context.candidates[1]!.id += "-changed";
+    if (kind === "wrong-source") r.context.graph.repoCommit = "f".repeat(40);
+    if (kind === "late-registration") r.registeredAt = h.now();
+    if (kind === "wrong-protocol")
+      r.study.protocolOriginalSha256 = "f".repeat(64);
+    if (kind === "wrong-policy") r.study.futurePolicySha256 = "f".repeat(64);
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(422);
+    expect(h.network).not.toHaveBeenCalled();
+  });
+
   it.each([
     [0, "INCONCLUSIVE", "VERIFIED", "VERIFIED"],
     [1, "REFACTOR", "REJECTED", "VERIFIED"],
@@ -525,6 +583,25 @@ describe("authenticated interpretation through #45 loader and synthetic Meta tra
       expect(h.network).toHaveBeenCalledTimes(1);
     },
   );
+
+  it.each(["registration-revoked", "registration-context", "link-changed"])(
+    "rejects %s during inference",
+    async (kind) => {
+      const h = await harness(undefined, {
+        response: (c) => {
+          if (kind === "registration-revoked") h.setRegistration(null);
+          if (kind === "registration-context")
+            h.registration().context.goal += " changed";
+          if (kind === "link-changed") h.link().expiresAt--;
+          return contentFor(c);
+        },
+      });
+      expect((await h.post("interpret-evidence", h.request)).status).toBe(
+        kind === "link-changed" ? 503 : 422,
+      );
+      expect(h.network).toHaveBeenCalledTimes(1);
+    },
+  );
   it("revalidates lineage and publication after provider latency", async () => {
     const h = await harness(undefined, {
       response: (c) => {
@@ -609,6 +686,126 @@ describe("authenticated interpretation through #45 loader and synthetic Meta tra
 });
 
 describe("accepted research context lifecycle", () => {
+  it.each(["interpret-evidence", "hypothesize", "challenge"] as const)(
+    "rejects pending %s after same-context hypothesis replacement",
+    async (stage) => {
+      let hold = false,
+        release!: () => void,
+        entered!: () => void;
+      const pending = new Promise<void>((r) => {
+        release = r;
+      });
+      const started = new Promise<void>((r) => {
+        entered = r;
+      });
+      const h = await harness(undefined, {
+        afterCall: async (step) => {
+          if (hold && step === stage) {
+            hold = false;
+            entered();
+            await pending;
+          }
+        },
+      });
+      hold = true;
+      const input =
+        stage === "interpret-evidence"
+          ? h.request
+          : stage === "hypothesize"
+            ? h.hypothesisInput
+            : challengeRequest(h.hypothesisInput, h.hypothesis);
+      const old = h.post(stage, input);
+      try {
+        await started;
+        expect((await h.post("hypothesize", h.hypothesisInput)).status).toBe(
+          200,
+        );
+      } finally {
+        release();
+      }
+      expect((await old).status).toBe(422);
+    },
+  );
+
+  it("retires earlier hypotheses when a fresh hypothesis is accepted for the same context", async () => {
+    const h = await harness();
+    const next = await h.post("hypothesize", h.hypothesisInput);
+    expect(next.status).toBe(200);
+    h.network.mockClear();
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(422);
+    expect(
+      (
+        await h.post(
+          "challenge",
+          challengeRequest(h.hypothesisInput, h.hypothesis),
+        )
+      ).status,
+    ).toBe(422);
+    expect(h.network).not.toHaveBeenCalled();
+    expect(
+      (
+        await h.post(
+          "challenge",
+          challengeRequest(h.hypothesisInput, await next.json()),
+        )
+      ).status,
+    ).toBe(200);
+  });
+  it("rejects an older pending proposal after a newer overlapping proposal is accepted", async () => {
+    let hold = false,
+      release!: () => void,
+      entered!: () => void;
+    const pending = new Promise<void>((r) => {
+      release = r;
+    });
+    const started = new Promise<void>((r) => {
+      entered = r;
+    });
+    const h = await harness(undefined, {
+      afterCall: async (step) => {
+        if (hold && step === "propose") {
+          hold = false;
+          entered();
+          await pending;
+        }
+      },
+    });
+    hold = true;
+    const old = h.post("propose", {
+      ...h.input,
+      goal: "Older pending replacement",
+    });
+    try {
+      await started;
+      expect(
+        (
+          await h.post("propose", {
+            ...h.input,
+            goal: "Newer accepted replacement",
+          })
+        ).status,
+      ).toBe(200);
+    } finally {
+      release();
+    }
+    expect((await old).status).toBe(422);
+  });
+  it("does not share issued identities between isolated service processes", async () => {
+    const a = await harness(),
+      b = await harness();
+    b.network.mockClear();
+    expect((await b.post("interpret-evidence", a.request)).status).toBe(422);
+    expect(
+      (
+        await b.post(
+          "challenge",
+          challengeRequest(a.hypothesisInput, a.hypothesis),
+        )
+      ).status,
+    ).toBe(422);
+    expect(b.network).not.toHaveBeenCalled();
+  });
+
   it.each([
     "goal",
     "candidate-id",

@@ -212,6 +212,40 @@ async function fixture(realTime = false) {
   };
 }
 describe("staged private Scientist operator", () => {
+  it("wires the private diagnostic callback without replacing failed phase or granting a retry", async () => {
+    const x = await fixture();
+    const secret = "PRIVATE_DIAGNOSTIC_UNKNOWN_KEY";
+    x.network.mockResolvedValue(
+      Response.json(
+        envelope({ [secret]: secret }, { model: x.h.commitment.study.model }),
+      ),
+    );
+    const observed: unknown[] = [];
+    x.options.observePrivateFailureDiagnostic = (value) => {
+      observed.push(value);
+      throw new Error(secret);
+    };
+    const op = await stageScientistOperator(x.options);
+    await expect(op.propose(new AbortController().signal)).rejects.toThrow(
+      "Staged Scientist operation unavailable.",
+    );
+    expect(op.status().phase).toBe("failed");
+    expect(observed).toEqual([
+      expect.objectContaining({
+        schemaVersion: "scientist-private-failure-diagnostic.local.v2",
+        stage: "content_parse",
+        step: "propose",
+        errorClass: "ZOD_ERROR",
+        payloadSha256: x.approved[0],
+      }),
+    ]);
+    expect(JSON.stringify(observed)).not.toContain(secret);
+    await expect(op.propose(new AbortController().signal)).rejects.toThrow(
+      "Scientist phase already consumed or unavailable.",
+    );
+    expect(x.network).toHaveBeenCalledTimes(1);
+    expect(op.transportObservations()).toHaveLength(1);
+  });
   it("retains sanitized layer diagnostics when a failed observer throws and cannot retry", async () => {
     const x = await fixture();
     const secret = "PRIVATE_ERROR_BODY_NEVER_RETAIN";

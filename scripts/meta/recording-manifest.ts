@@ -4,7 +4,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { canonicalJson } from "../../src/lib/report/canonical";
-import { META_LIMITS, PROMPT_VERSION } from "../../src/lib/foresight/prompts";
+import {
+  RECORDED_META_LIMITS_V1 as META_LIMITS,
+  RECORDED_PROMPT_VERSION_V1 as PROMPT_VERSION,
+} from "./historical-scientist-payload-v1";
 import {
   requestSchemas,
   validateFlowOutput,

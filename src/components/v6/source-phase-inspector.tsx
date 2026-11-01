@@ -31,7 +31,7 @@ export function SourceHistory({
       <p>
         {tree
           ? "The publication provides this source identity; a complete source snapshot and dependency topology are not published."
-          : "No approved prepared/final tree is available for this selection. Proposed architecture is not observed source."}
+          : "No approved original, prepared, or final snapshot is available for this selection. Proposed architecture is not observed source."}
       </p>
       {tree && (
         <dl>

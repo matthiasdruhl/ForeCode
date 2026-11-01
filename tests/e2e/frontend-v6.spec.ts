@@ -147,6 +147,9 @@ test("intent revision invalidates conceptual inspection without losing the real 
   await expect(
     page.getByText("Confirmed by you", { exact: true }),
   ).toBeVisible();
+  await expect(
+    page.locator(".lab-introduction .trace-requirement"),
+  ).toContainText("CONFIRMED BY YOU");
   await page.goBack();
   await expect(
     page.locator(".lab-introduction .trace-focus-label"),

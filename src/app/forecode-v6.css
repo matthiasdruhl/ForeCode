@@ -1338,3 +1338,15 @@ select {
 code {
   font-family: var(--mono);
 }
+
+.trace-requirement > span:last-child {
+  max-width: 46ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.case-context > :nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  flex: 1;
+}

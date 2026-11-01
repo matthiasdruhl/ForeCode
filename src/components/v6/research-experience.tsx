@@ -86,6 +86,7 @@ export function ResearchExperience({
 }) {
   const [chapter, setChapter] = useState<Chapter>("case");
   const [revision, setRevision] = useState(0);
+  const [confirmedTitle, setConfirmedTitle] = useState<string | null>(null);
   const [studyId, setStudyId] = useState(tournaments.studies[0]?.studyId);
   const study = tournaments.studies.find((item) => item.studyId === studyId);
   const contextIdentity = traceIdentity(study, revision);
@@ -219,7 +220,8 @@ export function ResearchExperience({
       document.getElementById(origin.trigger)?.focus(),
     );
   }
-  function invalidate(nextRevision: number) {
+  function invalidate(nextRevision: number, title: string | null) {
+    setConfirmedTitle(title);
     setRevision(nextRevision);
     const identity = traceIdentity(study, nextRevision);
     const next = initialTraceFocus(identity);
@@ -230,7 +232,10 @@ export function ResearchExperience({
     <ChangeTrace
       focus={focus}
       onSelect={select}
-      requirement={study ? "Published future task" : "Team permissions"}
+      requirement={
+        study ? "Published future task" : (confirmedTitle ?? "Team permissions")
+      }
+      requirementConfirmed={!study && confirmedTitle !== null}
     />
   );
   const activeName = chapters.find(([key]) => key === chapter)![1];
@@ -283,7 +288,10 @@ export function ResearchExperience({
         <div className="case-context">
           <span>BOOKING / 01</span>
           <span>
-            {study?.studyId ?? "Team permissions · proposed future requirement"}
+            {study?.studyId ??
+              (confirmedTitle
+                ? `${confirmedTitle} · confirmed by you`
+                : "Team permissions · proposed future requirement")}
           </span>
           <span>
             {focus.arm} / {focus.sourceId ?? focus.responsibility} ·{" "}

@@ -9,6 +9,7 @@ type Props = {
   focus: TraceFocus;
   onSelect: (selection: Partial<Omit<TraceFocus, "contextIdentity">>) => void;
   requirement?: string;
+  requirementConfirmed?: boolean;
 };
 const notes = {
   Routes:
@@ -26,6 +27,7 @@ export function ChangeTrace({
   focus,
   onSelect,
   requirement = "Team permissions",
+  requirementConfirmed = false,
 }: Props) {
   const description = useId();
   return (
@@ -56,7 +58,11 @@ export function ChangeTrace({
             <span className="requirement-diamond" aria-hidden="true" />
             <span>
               {requirement}
-              <small>UPCOMING REQUIREMENT</small>
+              <small>
+                {requirementConfirmed
+                  ? "CONFIRMED BY YOU"
+                  : "UPCOMING REQUIREMENT"}
+              </small>
             </span>
           </div>
           {(["A", "B"] as const).map((arm) => (

@@ -32,7 +32,7 @@ import {
   browserSyntheticResponse,
 } from "../support/foresight";
 
-const origin = "https://forecode.example.test";
+const origin = "http://127.0.0.1:3189";
 const env = {
   META_MODEL_API_KEY: "synthetic-secret-never-send",
   META_MODEL: "muse-spark-1.3-contributor",
@@ -40,6 +40,8 @@ const env = {
   META_CALLS_ENABLED: "true",
   META_SPENDING_APPROVED: "true",
   FORECODE_ORIGIN: origin,
+  FORECODE_RESEARCH_MODE: "local-single-operator",
+  FORECODE_RESEARCH_PROCESSES: "1",
 };
 function harness(
   responder?: (

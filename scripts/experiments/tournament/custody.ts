@@ -14,29 +14,12 @@ import { canonicalJson } from "../../../src/lib/report/canonical";
 import { sha256 } from "../../../src/lib/report/digests";
 import { disjoint, privateDirectory, protectedRead } from "../artifacts/files";
 
-export const CustodianRecordSchema = z.strictObject({
-  schemaVersion: z.literal("tournament-custodian-record.local.v1"),
-  id: IdSchema,
-  studyId: IdSchema,
-  kind: z.enum([
-    "protocol",
-    "preparation",
-    "prepared",
-    "runtime",
-    "telemetry",
-    "execution",
-    "disclosure",
-  ]),
-  subjectSha256: Sha256Schema,
-  predecessorSha256: Sha256Schema.nullable(),
-  heldAt: UtcTimestampSchema,
-  expiresAt: UtcTimestampSchema,
-});
-const EnvelopeSchema = z.strictObject({
-  record: CustodianRecordSchema,
-  signature: z.string().regex(/^[A-Za-z0-9+/]{86}==$/),
-});
-export type CustodianRecord = z.infer<typeof CustodianRecordSchema>;
+export { CustodianRecordSchema } from "../../../src/lib/experiment/scientist-custody";
+import {
+  CustodianEnvelopeSchema as EnvelopeSchema,
+  type CustodianRecord,
+} from "../../../src/lib/experiment/scientist-custody";
+export type { CustodianRecord } from "../../../src/lib/experiment/scientist-custody";
 export type HeldRecord = Readonly<{ record: CustodianRecord; sha256: string }>;
 export type CustodyConfig = {
   // Supplied only by independently reviewed operator composition, never a draft.

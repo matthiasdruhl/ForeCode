@@ -68,6 +68,7 @@ function validateProvisioning(config: ApprovedTournamentConfig) {
 // Validation and original authentication repeat on EVERY read; no result cache.
 export function createTournamentPublicationReader(
   config: ApprovedTournamentConfig | null,
+  now = Date.now,
 ) {
   function currentConfig() {
     if (config !== null) validateProvisioning(config);
@@ -76,14 +77,14 @@ export function createTournamentPublicationReader(
   return Object.freeze({
     async loadTournaments(): Promise<TournamentCatalog> {
       try {
-        return await loadTournamentRecordings(currentConfig());
+        return await loadTournamentRecordings(currentConfig(), now());
       } catch {
         return { state: "unavailable", studies: [], unavailableCount: 1 };
       }
     },
     async loadReports(): Promise<DecisionReportCatalog> {
       try {
-        return await loadDecisionReports(currentConfig());
+        return await loadDecisionReports(currentConfig(), now());
       } catch {
         return { state: "unavailable", reports: [], unavailableCount: 1 };
       }

@@ -42,6 +42,7 @@ import {
   syntheticContent,
   envelope,
 } from "../support/foresight";
+import { scientistFixture } from "../support/scientist-registration";
 import { publicationFixture } from "../support/tournament-publication";
 
 // Test-local reviewed source identity for the existing inert signed fixture.
@@ -107,7 +108,7 @@ async function harness(
     response?: (c: InterpretationContext) => unknown | Promise<Response>;
   } = {},
 ) {
-  let at = Date.parse("2026-10-28T12:01:00.000Z");
+  let at = Date.parse("2026-10-28T12:00:00.000Z");
   let seq = 0;
   let link: EvidenceLink | null = null;
   let registration: ProspectiveRegistration | null = null;
@@ -115,8 +116,14 @@ async function harness(
   const loadReports = vi.fn(() => catalog());
   const adapter = createEvidenceAdapter({
     loadReports,
-    resolveLink: async () => structuredClone(link),
-    resolveRegistration: async () => structuredClone(registration),
+    resolveLink: async (id, record) =>
+      link && digest(link) === linkPin
+        ? originals.linkReader.resolveLink(id, record)
+        : null,
+    resolveRegistration: async (id, record) =>
+      registration && digest(registration) === registrationPin
+        ? originals.registrationReader.resolveRegistration(id, record)
+        : null,
   });
   const env: Record<string, string | undefined> = { ...environment };
   const network = vi.fn<typeof fetch>(async (_url, init) => {
@@ -169,6 +176,8 @@ async function harness(
     serviceTransport,
     () => at,
     options.production ? undefined : adapter,
+    async (id, record) =>
+      originals.registrationReader.resolveRegistration(id, record),
   );
   const http = createForesightHttp(service, () => env);
   async function post(
@@ -188,6 +197,9 @@ async function harness(
     );
   }
   const input = proposalRequest();
+  input.intents[0]!.id = f.study.definition.protocol.intentRevision.id;
+  input.intents[0]!.revision =
+    f.study.definition.protocol.intentRevision.revision;
   const proposal = (await (
     await post("propose", input)
   ).json()) as ProposeResponse;
@@ -199,6 +211,8 @@ async function harness(
   const issued: IssuedHypothesis = {
     hypothesis: h,
     issuedAt: at,
+    proposalStartedAt: at - 11_000,
+    proposalInputSha256: digest(input),
     contextSha256: digest({
       intents: hypothesisInput.intents,
       graph: hypothesisInput.graph,
@@ -243,6 +257,15 @@ async function harness(
     context: structuredClone(hypothesisInput),
     study: prospectiveStudy,
   };
+  const originals = await scientistFixture(
+    f,
+    registration,
+    link,
+    issued,
+    () => at,
+  );
+  const registrationPin = digest(registration);
+  const linkPin = digest(link);
   at = f.now;
   const request = {
     schemaVersion: "scientist-interpret-request.v2",
@@ -255,6 +278,7 @@ async function harness(
     request,
     issued,
     adapter,
+    originals,
     network,
     env,
     transport,
@@ -596,9 +620,7 @@ describe("authenticated interpretation through #45 loader and synthetic Meta tra
           return contentFor(c);
         },
       });
-      expect((await h.post("interpret-evidence", h.request)).status).toBe(
-        kind === "link-changed" ? 503 : 422,
-      );
+      expect((await h.post("interpret-evidence", h.request)).status).toBe(422);
       expect(h.network).toHaveBeenCalledTimes(1);
     },
   );
@@ -662,6 +684,22 @@ describe("authenticated interpretation through #45 loader and synthetic Meta tra
         )
       ).state,
     ).toBe("unavailable");
+  });
+  it("rejects actual custody revocation during synthetic inference", async () => {
+    const h = await harness(undefined, {
+      afterCall: async (step) => {
+        if (step !== "interpret-evidence") return;
+        const file = `${h.originals.root}/revocations.json`;
+        await chmod(file, 0o600);
+        await writeFile(
+          file,
+          JSON.stringify({ revokedIds: [h.originals.ids.bindingId] }),
+        );
+        await chmod(file, 0o400);
+      },
+    });
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(422);
+    expect(h.network).toHaveBeenCalledTimes(1);
   });
   it("does not weaken the shared process budget and gives interpretation only the existing per-endpoint allowance", async () => {
     const h = await harness();

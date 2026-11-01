@@ -1,4 +1,10 @@
 import "server-only";
+import { validateProspectiveRegistration } from "./prospective-lineage";
+import { approvedScientistLineage } from "./approved-scientist-lineage";
+import {
+  isAuthenticatedRegistration,
+  type RegistrationResolver,
+} from "./registration-reader";
 import { randomUUID } from "node:crypto";
 import {
   InterpretRequestSchema,
@@ -33,15 +39,19 @@ type ProposalBinding = Binding & {
   sourceContext: string;
   intentIds: string[];
   hypothesisGeneration: number;
+  proposalStartedAt: number;
+  proposalInputSha256: string;
 };
 export function createForesightService(
   transport: ReturnType<typeof createMetaTransport>,
   now = Date.now,
   evidenceAdapter: EvidenceAdapter = createEvidenceAdapter(),
+  registrationResolver: RegistrationResolver = approvedScientistLineage.resolveRegistration,
 ) {
   let sequence = 0;
   const pendingProposals = new Set<{
     sequence: number;
+    startedAt: number;
     sourceContext: string;
     intentIds: string[];
     obsolete: boolean;
@@ -219,6 +229,7 @@ export function createForesightService(
       step === "propose"
         ? {
             sequence: ++sequence,
+            startedAt: now(),
             sourceContext: digest(request.graph),
             intentIds: request.intents.map((i) => i.id),
             obsolete: false,
@@ -316,6 +327,8 @@ export function createForesightService(
             sourceContext,
             intentIds,
             hypothesisGeneration: 0,
+            proposalStartedAt: pending!.startedAt,
+            proposalInputSha256: digest(request),
           });
         // A later accepted request wins over older still-pending overlapping
         // proposals. Failed replacements never invalidate accepted state.
@@ -365,6 +378,8 @@ export function createForesightService(
             hypothesis: structuredClone(hypothesis),
             issuedAt: now(),
             contextSha256,
+            proposalStartedAt: selectedProposal!.proposalStartedAt,
+            proposalInputSha256: selectedProposal!.proposalInputSha256,
             proposalKey: selectedProposal!.context,
             intents: request.intents.map((i) => ({
               id: i.id,
@@ -381,5 +396,39 @@ export function createForesightService(
       if (pending) pendingProposals.delete(pending);
     }
   }
-  return { run, interpret };
+  // Private operator method only; there is intentionally no HTTP enrollment
+  // route. A replay cannot consume another study, resurrect issuance or renew TTL.
+  const completed = new Set<string>();
+  const registering = new Set<string>();
+  async function register(registrationId: string, hypothesisId: string) {
+    if (
+      registering.has(hypothesisId) ||
+      completed.has(hypothesisId) ||
+      completed.has(registrationId)
+    )
+      throw new RequestFailure("INVALID_REFERENCE");
+    const record = resolveHypothesis(hypothesisId);
+    registering.add(hypothesisId);
+    try {
+      const original = await registrationResolver(registrationId, record);
+      resolveHypothesis(hypothesisId);
+      if (
+        !isAuthenticatedRegistration(original) ||
+        original.registration.id !== registrationId
+      )
+        throw new RequestFailure("UNTRUSTED_EVIDENCE");
+      validateProspectiveRegistration(original.registration, record, now());
+      if (digest(original.hypothesis) !== digest(record.hypothesis))
+        throw new RequestFailure("UNTRUSTED_EVIDENCE");
+      completed.add(hypothesisId);
+      completed.add(registrationId);
+      return original;
+    } catch (error) {
+      if (error instanceof RequestFailure) throw error;
+      throw new RequestFailure("UNTRUSTED_EVIDENCE");
+    } finally {
+      registering.delete(hypothesisId);
+    }
+  }
+  return { run, interpret, register };
 }

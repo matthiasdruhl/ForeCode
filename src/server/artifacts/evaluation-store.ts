@@ -1,4 +1,6 @@
 import "server-only";
+import { CustodianEnvelopeSchema } from "@/lib/experiment/scientist-custody";
+import { jsonDigest } from "@/lib/report/digests";
 import { constants } from "node:fs";
 import { createPublicKey, verify } from "node:crypto";
 import {
@@ -96,7 +98,10 @@ async function boundedRead(root: string, relative: string): Promise<Buffer> {
     within(root, await realpath(target)),
     "Artifact resolves outside protected root.",
   );
-  const handle = await open(target, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const handle = await open(
+    target,
+    constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+  );
   try {
     const stat = await handle.stat();
     invariant(
@@ -259,6 +264,7 @@ type PublicationArtifact = ReturnType<typeof PublicationArtifactSchema.parse>;
 export type TrustedTournamentPublication = Readonly<{
   artifact: PublicationArtifact;
   disclosureId: string;
+  disclosureHeldAt: string;
 }>;
 const authenticatedPublications = new WeakSet<object>();
 export function isTrustedTournamentPublication(
@@ -268,6 +274,46 @@ export function isTrustedTournamentPublication(
     !!value && typeof value === "object" && authenticatedPublications.has(value)
   );
 }
+async function privateRoot(input: string) {
+  const root = await realpath(input),
+    stat = await lstat(root);
+  invariant(
+    root === path.resolve(input) &&
+      stat.isDirectory() &&
+      stat.uid === process.getuid?.() &&
+      (stat.mode & 0o077) === 0,
+    "Invalid private publication custody.",
+  );
+  return root;
+}
+async function publicationRead(
+  base: string,
+  relative: string,
+  privateMode = false,
+) {
+  const filename = path.join(base, relative),
+    before = await lstat(filename);
+  invariant(
+    before.isFile() &&
+      before.nlink === 1 &&
+      before.uid === process.getuid?.() &&
+      (before.mode & 0o222) === 0 &&
+      (!privateMode || (before.mode & 0o777) === 0o400),
+    "Publication original custody invalid.",
+  );
+  const bytes = await boundedRead(base, relative),
+    after = await lstat(filename);
+  invariant(
+    before.ino === after.ino &&
+      before.dev === after.dev &&
+      before.size === after.size &&
+      before.mtimeMs === after.mtimeMs &&
+      before.ctimeMs === after.ctimeMs,
+    "Publication original changed during read.",
+  );
+  return bytes;
+}
+
 export async function createProtectedTournamentPublicationStore(config: {
   root: string;
   authorityRoot: string;
@@ -277,18 +323,6 @@ export async function createProtectedTournamentPublicationStore(config: {
   revocationSha256: string;
   entries: ReadonlyMap<string, TournamentPublicationEntry>;
 }) {
-  async function privateRoot(input: string) {
-    const root = await realpath(input),
-      stat = await lstat(root);
-    invariant(
-      root === path.resolve(input) &&
-        stat.isDirectory() &&
-        stat.uid === process.getuid?.() &&
-        (stat.mode & 0o077) === 0,
-      "Invalid private publication custody.",
-    );
-    return root;
-  }
   const root = await privateRoot(config.root),
     authorityRoot = await privateRoot(config.authorityRoot);
   const separate = (a: string, b: string) =>
@@ -297,33 +331,10 @@ export async function createProtectedTournamentPublicationStore(config: {
       "Overlapping publication custody.",
     );
   separate(root, authorityRoot);
-  // Used only for disjointness comparisons, never as a filesystem read root.
   const repository = process.cwd();
   for (const directory of [root, authorityRoot]) {
     separate(directory, repository);
     separate(directory, path.resolve(repository, "../AgentHarness-Planning"));
-  }
-  async function publicationRead(base: string, relative: string) {
-    const filename = path.join(base, relative),
-      before = await lstat(filename);
-    invariant(
-      before.isFile() &&
-        before.nlink === 1 &&
-        before.uid === process.getuid?.() &&
-        (before.mode & 0o222) === 0,
-      "Publication original custody invalid.",
-    );
-    const bytes = await boundedRead(base, relative),
-      after = await lstat(filename);
-    invariant(
-      before.ino === after.ino &&
-        before.dev === after.dev &&
-        before.size === after.size &&
-        before.mtimeMs === after.mtimeMs &&
-        before.ctimeMs === after.ctimeMs,
-      "Publication original changed during read.",
-    );
-    return bytes;
   }
   invariant(
     config.agentWorkspaceRoots.length > 0,
@@ -425,9 +436,138 @@ export async function createProtectedTournamentPublicationStore(config: {
           ),
           "Unauthenticated disclosure.",
         );
-        const loaded = deepFreeze({ artifact, disclosureId: record.id });
+        const loaded = deepFreeze({
+          artifact,
+          disclosureId: record.id,
+          disclosureHeldAt: record.heldAt,
+        });
         authenticatedPublications.add(loaded);
         return loaded;
+      } catch {
+        return null;
+      }
+    },
+  });
+}
+
+// Registration uses the SAME independently pinned Ed25519 custody envelopes as
+// the operator. Only fixed allowlisted files can be read; no signing or writes.
+export type ScientistCustodyConfig = {
+  originalRoot: string;
+  publicKeyPem: string;
+  publicKeySha256: string;
+  revocationSha256: string;
+  workspaceRoots: readonly string[];
+  entries: ReadonlyMap<
+    string,
+    {
+      file: string;
+      sha256: string;
+      documentFile: string;
+      documentSha256: string;
+    }
+  >;
+};
+export async function createProtectedScientistCustodyStore(
+  input: ScientistCustodyConfig,
+) {
+  const root = await privateRoot(input.originalRoot);
+  const separate = (other: string) =>
+    invariant(
+      !within(root, other) && !within(other, root),
+      "Overlapping scientist custody.",
+    );
+  separate(process.cwd());
+  separate(path.resolve(process.cwd(), "../AgentHarness-Planning"));
+  invariant(input.workspaceRoots.length > 0, "Workspace inventory required.");
+  for (const workspace of input.workspaceRoots)
+    separate(await realpath(workspace));
+  const pem = input.publicKeyPem;
+  invariant(
+    sha256(pem) === Sha256Schema.parse(input.publicKeySha256),
+    "Authority changed.",
+  );
+  const key = createPublicKey(pem);
+  invariant(
+    key.asymmetricKeyType === "ed25519",
+    "Exact custody authority required.",
+  );
+  const revocationSha256 = Sha256Schema.parse(input.revocationSha256);
+  const files = new Set(["revocations.json"]),
+    hashes = new Set<string>();
+  invariant(input.entries.size <= 256, "Excessive scientist originals.");
+  const entries = new Map(
+    [...input.entries].map(([id, value]) => {
+      IdSchema.parse(id);
+      const entry = { ...value };
+      for (const [file, hash] of [
+        [entry.file, entry.sha256],
+        [entry.documentFile, entry.documentSha256],
+      ] as const) {
+        invariant(
+          /^[A-Za-z0-9_-]+\.json$/.test(file) &&
+            !files.has(file) &&
+            !hashes.has(hash),
+          "Duplicate or unsafe original.",
+        );
+        files.add(file);
+        hashes.add(Sha256Schema.parse(hash));
+      }
+      return [id, deepFreeze(entry)] as const;
+    }),
+  );
+  return Object.freeze({
+    async load(id: string) {
+      try {
+        const entry = entries.get(id);
+        if (!entry) return null;
+        await privateRoot(root);
+        const revocations = await publicationRead(
+          root,
+          "revocations.json",
+          true,
+        );
+        invariant(
+          sha256(revocations) === revocationSha256,
+          "Revocation state changed.",
+        );
+        const revoked = z
+          .strictObject({ revokedIds: z.array(IdSchema).max(10000) })
+          .parse(JSON.parse(revocations.toString("utf8")));
+        invariant(!revoked.revokedIds.includes(id), "Original revoked.");
+        const bytes = await publicationRead(root, entry.file, true);
+        const documentBytes = await publicationRead(
+          root,
+          entry.documentFile,
+          true,
+        );
+        invariant(
+          sha256(bytes) === entry.sha256 &&
+            sha256(documentBytes) === entry.documentSha256,
+          "Original bytes changed.",
+        );
+        const { record, signature } = CustodianEnvelopeSchema.parse(
+          JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+        );
+        const document: unknown = JSON.parse(
+          new TextDecoder("utf-8", { fatal: true }).decode(documentBytes),
+        );
+        invariant(
+          record.id === id &&
+            record.subjectSha256 === jsonDigest(document) &&
+            Date.parse(record.heldAt) < Date.parse(record.expiresAt),
+          "Original subject mismatch.",
+        );
+        invariant(
+          verify(
+            null,
+            Buffer.from(canonicalJson(record)),
+            key,
+            Buffer.from(signature, "base64"),
+          ),
+          "Unauthenticated custody original.",
+        );
+        return deepFreeze({ record, sha256: entry.sha256, document });
       } catch {
         return null;
       }

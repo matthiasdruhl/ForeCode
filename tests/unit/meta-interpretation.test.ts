@@ -31,6 +31,8 @@ import {
 import type {
   ProposeResponse,
   HypothesizeResponse,
+  FlowRequest,
+  Step,
 } from "@/lib/foresight/flow";
 import {
   proposalRequest,
@@ -97,6 +99,8 @@ async function harness(
   f = fixtures[0]!,
   options: {
     production?: boolean;
+    proposal?: (request: FlowRequest) => ReturnType<typeof syntheticContent>;
+    afterCall?: (step: Step | "interpret-evidence") => Promise<void>;
     response?: (c: InterpretationContext) => unknown | Promise<Response>;
   } = {},
 ) {
@@ -125,7 +129,10 @@ async function harness(
           : "candidates" in request
             ? "hypothesize"
             : "propose";
-      content = syntheticContent(step, request);
+      content =
+        step === "propose" && options.proposal
+          ? options.proposal(request)
+          : syntheticContent(step, request);
     }
     return Response.json(
       envelope(content, { id: `synthetic-interpret-${++seq}` }),
@@ -136,8 +143,25 @@ async function harness(
     fetch: network,
     now: () => at,
   });
+  // Hold a real, validated synthetic reply after the transport has released its
+  // network lock, allowing a newer accepted proposal before service continuation.
+  const serviceTransport = {
+    ...transport,
+    call: async (
+      step: Step | "interpret-evidence",
+      request: FlowRequest | InterpretationContext,
+      signal: AbortSignal,
+    ) => {
+      const result =
+        step === "interpret-evidence"
+          ? await transport.call(step, request as InterpretationContext, signal)
+          : await transport.call(step, request as FlowRequest, signal);
+      await options.afterCall?.(step);
+      return result;
+    },
+  };
   const service = createForesightService(
-    transport,
+    serviceTransport,
     () => at,
     options.production ? undefined : adapter,
   );
@@ -581,6 +605,273 @@ describe("authenticated interpretation through #45 loader and synthetic Meta tra
     expect(
       h.transport.observations().filter((o) => o.step === "interpret-evidence"),
     ).toHaveLength(4);
+  });
+});
+
+describe("accepted research context lifecycle", () => {
+  it.each([
+    "goal",
+    "candidate-id",
+    "candidate-content",
+    "goal-and-candidates",
+    "intent-revision",
+    "overlapping-intents",
+  ])(
+    "retires %s changes and prevents old candidate-array replay",
+    async (kind) => {
+      let replace = false;
+      const h = await harness(undefined, {
+        proposal: (request) => {
+          const c = syntheticContent("propose", request);
+          if (replace && c.candidates) {
+            if (kind === "candidate-id" || kind === "goal-and-candidates")
+              c.candidates[1]!.id += "-new";
+            if (kind === "candidate-content" || kind === "goal-and-candidates")
+              c.candidates[1]!.description += " Changed policy approach.";
+          }
+          return c;
+        },
+      });
+      expect((await h.post("interpret-evidence", h.request)).status).toBe(200);
+      replace = true;
+      const updated = structuredClone(h.input);
+      if (kind === "goal" || kind === "goal-and-candidates")
+        updated.goal += " New research goal.";
+      if (kind === "intent-revision") updated.intents[0]!.revision++;
+      if (kind === "overlapping-intents")
+        updated.intents.push({
+          ...updated.intents[0]!,
+          id: "intent-additional",
+        });
+      const replacement = await h.post("propose", updated);
+      expect(replacement.status).toBe(200);
+      const proposal = (await replacement.json()) as ProposeResponse;
+      h.network.mockClear();
+      expect((await h.post("interpret-evidence", h.request)).status).toBe(422);
+      expect((await h.post("hypothesize", h.hypothesisInput)).status).toBe(422);
+      expect(
+        (
+          await h.post(
+            "challenge",
+            challengeRequest(h.hypothesisInput, h.hypothesis),
+          )
+        ).status,
+      ).toBe(422);
+      expect(h.network).not.toHaveBeenCalled();
+      const newInput = hypothesisRequest(updated, proposal);
+      const next = await h.post("hypothesize", newInput);
+      expect(next.status).toBe(200);
+      const hypothesis = (await next.json()) as HypothesizeResponse;
+      expect(
+        (await h.post("challenge", challengeRequest(newInput, hypothesis)))
+          .status,
+      ).toBe(200);
+    },
+  );
+  it("keeps unchanged accepted context usable without replacing hypothesis identity/provenance or extending its TTL", async () => {
+    const h = await harness();
+    const again = await h.post("propose", h.input);
+    expect(again.status).toBe(200);
+    expect((await again.json()).candidates).toEqual(h.proposal.candidates);
+    h.network.mockClear();
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(200);
+    const payload = JSON.parse(h.network.mock.calls[0]![1]!.body as string);
+    expect(JSON.parse(payload.messages[1].content).hypothesis).toEqual(
+      h.issued.hypothesis,
+    );
+    expect(
+      (
+        await h.post(
+          "challenge",
+          challengeRequest(h.hypothesisInput, h.hypothesis),
+        )
+      ).status,
+    ).toBe(200);
+    h.link().expiresAt += META_LIMITS.artifactTtlMs;
+    h.advance(META_LIMITS.artifactTtlMs - (h.now() - h.issued.issuedAt));
+    h.network.mockClear();
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(422);
+    expect(h.network).not.toHaveBeenCalled();
+  });
+  it("preserves disjoint intent contexts even when their candidate arrays are identical", async () => {
+    const h = await harness();
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(200);
+    const unrelated = structuredClone(h.input);
+    unrelated.intents[0]!.id = "intent-unrelated";
+    unrelated.goal = "Separate requirement research";
+    const response = await h.post("propose", unrelated);
+    expect(response.status).toBe(200);
+    const proposal = (await response.json()) as ProposeResponse;
+    expect(proposal.candidates).toEqual(h.proposal.candidates);
+    const input = hypothesisRequest(unrelated, proposal);
+    const next = await h.post("hypothesize", input);
+    expect(next.status).toBe(200);
+    const hypothesis = (await next.json()) as HypothesizeResponse;
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(200);
+    expect(
+      (
+        await h.post(
+          "challenge",
+          challengeRequest(h.hypothesisInput, h.hypothesis),
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (await h.post("challenge", challengeRequest(input, hypothesis))).status,
+    ).toBe(200);
+  });
+  it.each([
+    "provider-failure",
+    "malformed-output",
+    "invalid-output",
+    "aborted-before",
+    "aborted-after",
+    "missing-consent",
+    "rejected-intent",
+  ])("does not supersede valid context after %s replacement", async (kind) => {
+    let replace = false;
+    const controller = new AbortController();
+    const h = await harness(undefined, {
+      proposal: (request) => {
+        const c = syntheticContent("propose", request);
+        if (replace) {
+          if (kind === "provider-failure") throw new Error("Synthetic failure");
+          if (kind === "malformed-output" && c.candidates)
+            c.candidates[1]!.description = "";
+          if (kind === "invalid-output" && c.candidates)
+            c.candidates[1]!.baselineCommit = "f".repeat(40);
+          if (kind === "aborted-after") controller.abort();
+        }
+        return c;
+      },
+    });
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(200);
+    replace = true;
+    const updated = {
+      ...structuredClone(h.input),
+      goal: "Replacement research",
+    };
+    if (kind === "aborted-before") controller.abort();
+    if (kind === "missing-consent") Object.assign(updated, { consent: false });
+    if (kind === "rejected-intent") updated.intents[0]!.status = "rejected";
+    expect((await h.post("propose", updated, controller.signal)).status).toBe(
+      kind === "missing-consent" ? 400 : kind === "rejected-intent" ? 422 : 503,
+    );
+    h.network.mockClear();
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(200);
+    expect(h.network).toHaveBeenCalledTimes(1);
+    expect(
+      (
+        await h.post(
+          "challenge",
+          challengeRequest(h.hypothesisInput, h.hypothesis),
+        )
+      ).status,
+    ).toBe(200);
+  });
+  it("never revives a retired hypothesis when the old context is later proposed again", async () => {
+    const h = await harness();
+    expect(
+      (await h.post("propose", { ...h.input, goal: "Replacement goal" }))
+        .status,
+    ).toBe(200);
+    expect((await h.post("propose", h.input)).status).toBe(200);
+    h.network.mockClear();
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(422);
+    expect(
+      (
+        await h.post(
+          "challenge",
+          challengeRequest(h.hypothesisInput, h.hypothesis),
+        )
+      ).status,
+    ).toBe(422);
+    expect(h.network).not.toHaveBeenCalled();
+    const next = await h.post("hypothesize", h.hypothesisInput);
+    expect(next.status).toBe(200);
+    expect((await next.json()).hypotheses[0].id).not.toBe(
+      h.request.hypothesisId,
+    );
+  });
+  it.each(["interpret-evidence", "hypothesize", "challenge"] as const)(
+    "rejects %s if its context is superseded before the async reply is consumed",
+    async (stage) => {
+      let release!: () => void;
+      let entered!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const started = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let hold = false;
+      const h = await harness(undefined, {
+        afterCall: async (step) => {
+          if (hold && step === stage) {
+            entered();
+            await pending;
+          }
+        },
+      });
+      const input =
+        stage === "interpret-evidence"
+          ? h.request
+          : stage === "hypothesize"
+            ? h.hypothesisInput
+            : challengeRequest(h.hypothesisInput, h.hypothesis);
+      hold = true;
+      const response = h.post(stage, input);
+      try {
+        await started;
+        const replacement = await h.post("propose", {
+          ...h.input,
+          goal: "Changed during pending response",
+        });
+        expect(replacement.status).toBe(200);
+      } finally {
+        release();
+      }
+      expect((await response).status).toBe(422);
+      h.network.mockClear();
+      expect((await h.post("interpret-evidence", h.request)).status).toBe(422);
+      expect(h.network).not.toHaveBeenCalled();
+    },
+  );
+  it("rejects a superseded hypothesis after genuinely different goal and candidates", async () => {
+    let replace = false;
+    const h = await harness(undefined, {
+      proposal: (request) => {
+        const content = syntheticContent("propose", request);
+        if (replace && content.candidates)
+          for (const candidate of content.candidates) {
+            candidate.id += "-replacement";
+            candidate.description += " Replacement architecture context.";
+          }
+        return content;
+      },
+    });
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(200);
+    replace = true;
+    const updated = {
+      ...h.input,
+      goal: "A genuinely different approved research goal",
+    };
+    const replacement = await h.post("propose", updated);
+    expect(replacement.status).toBe(200);
+    const proposal = (await replacement.json()) as ProposeResponse;
+    expect(proposal.candidates.map((c) => c.id)).not.toEqual(
+      h.proposal.candidates.map((c) => c.id),
+    );
+    h.network.mockClear();
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(422);
+    expect(h.network).not.toHaveBeenCalled();
+    const input = hypothesisRequest(updated, proposal);
+    const response = await h.post("hypothesize", input);
+    expect(response.status).toBe(200);
+    const hypothesis = (await response.json()) as HypothesizeResponse;
+    expect(
+      (await h.post("challenge", challengeRequest(input, hypothesis))).status,
+    ).toBe(200);
   });
 });
 

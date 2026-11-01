@@ -1464,6 +1464,12 @@ select {
   .replay-requirement {
     gap: 14px;
   }
+  .replay-requirement > div {
+    flex-basis: calc(100% - 54px);
+  }
+  .replay-catalog-state {
+    flex-basis: calc(100% - 44px);
+  }
   .replay-requirement p {
     font-size: 17px;
   }

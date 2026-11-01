@@ -107,6 +107,18 @@ test("v6 responsive story and report print have no document overflow or console 
           fullPage: true,
         });
       if (chapter === "time") {
+        if (width === 390) {
+          const requirement = await page
+            .locator(".replay-requirement > div")
+            .boundingBox();
+          const status = await page
+            .locator(".replay-catalog-state")
+            .boundingBox();
+          expect(requirement!.width).toBeGreaterThan(260);
+          expect(status!.y).toBeGreaterThanOrEqual(
+            requirement!.y + requirement!.height,
+          );
+        }
         await page
           .getByRole("button", { name: "03 / After", exact: true })
           .click();

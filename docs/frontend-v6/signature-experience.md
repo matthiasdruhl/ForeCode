@@ -39,6 +39,8 @@ The existing Lab and Tournament retain their v6.4 layout. The new selection styl
 
 Delivery-only files: this report, the appended section in `docs/IMPLEMENTATION-LOG.md`, and every exact artifact path listed in `signature/visual-qa.json`.
 
+CI follow-up: `tests/unit/installed-launcher.test.ts` changes only its harmless synthetic output-limit child. Foundation run `41312424508` on Ubuntu observed `reason=output_limit` with natural exit code 0, racing the test's expected SIGKILL exit code -9. The sample now stays alive after flushing its fixed output so the existing launcher's forced termination determines the exit code. All original output-limit, exit-code, command, timeout and bounded-output assertions remain. Launcher/runtime source is unchanged. The focused four-case launcher suite passed locally; the follow-up full-check and GitHub results are recorded with the PR.
+
 ## Continuity and provenance
 
 - Arm, reviewed source selection, responsibility, source phase, study, replay stage and evidence question/event survive chapter navigation and browser history. Replay stage is an independent selection from Before/Prepared/After source phase.

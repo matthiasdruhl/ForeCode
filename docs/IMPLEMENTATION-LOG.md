@@ -2399,3 +2399,15 @@ Observed validation on Node 24.16.0 with the existing locked dependencies:
 Initial new-test fixture/schema, isolated browser-bundle environment and focus-synchronization failures were corrected; no existing check was weakened. Visual QA corrected the mobile requirement width and small effort-table type. Full checks/browser tests were repeated after the final implementation edits. Genuine public evidence remains absent; populated artifacts are explicitly synthetic UI tests, never experimental results. No provider call, paid inference, experiment, protected evaluation, private evidence read, approval/disclosure change, deployment or merge occurred.
 
 Next step: human visual/source review of the focused PR. Presentation edits can change the trusted implementation closure. Keep the branch isolated and do not merge during an active source-bound experiment without explicit experiment-owner approval. Full source snapshots/topology, a common event clock, manual VoiceOver, WebKit, physical devices and physical printing remain outside this validation.
+
+### PR61 CI follow-up — deterministic synthetic output-limit child
+
+GitHub Foundation run `41312424508`, job `124865404660`, failed in the existing `tests/unit/installed-launcher.test.ts` output-limit case: the reason was correctly `output_limit`, but Linux could let the finite synthetic writer exit 0 before SIGKILL, while the test required -9. All other 1,623 unit tests passed; the later CI steps were skipped. This was not a frontend or launcher implementation failure.
+
+Changed only the harmless Python sample embedded in that test to wait after emitting and flushing its fixed 100,000-byte output. The child remains alive until the real launcher's output-limit process-group kill. All original reason/exit-code/output-bound/command assertions are retained. No runtime, evaluator, isolation configuration, application, provider or evidence code changes. The user explicitly requested repair of the PR's failing checks.
+
+- `npx vitest run tests/unit/installed-launcher.test.ts`: exit 0, 4 cases.
+- `META_CALLS_ENABLED=false META_SPENDING_APPROVED=false npm run check`: exit 0, lint, both strict typechecks, 1,624 unit tests / 73 files and both production builds.
+- Changed-file Prettier and `git diff --check`: exit 0.
+
+Next step: push this test-only repair to PR61 and verify the complete Ubuntu Foundation workflow, including browser/fixture/export checks. No merge or source-bound experiment activation.

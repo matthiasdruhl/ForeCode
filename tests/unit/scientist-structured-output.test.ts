@@ -10,6 +10,7 @@ import {
   PROMPT_VERSION,
 } from "@/lib/foresight/prompts";
 import { requestSchemas } from "@/lib/foresight/flow";
+import { metaCompatibleSchema } from "@/lib/foresight/provider-schema";
 import { jsonDigest } from "@/lib/report/digests";
 import { createMetaTransport } from "@/server/meta/transport";
 import {
@@ -72,11 +73,11 @@ describe("Scientist2 schema-constrained requests (offline only)", () => {
       expect(format.json_schema.name).toBe(`forecode_${step}_v2`);
       expect(format.json_schema.strict).toBe(true);
       expect(format.json_schema.schema).toEqual(
-        z.toJSONSchema(contentSchemas[step]),
+        metaCompatibleSchema(z.toJSONSchema(contentSchemas[step])),
       );
       expect(inspectSchema(format.json_schema.schema)).toBeGreaterThan(1);
       expect(payload.messages[0]!.content).toContain(
-        JSON.stringify(format.json_schema.schema),
+        JSON.stringify(z.toJSONSchema(contentSchemas[step])),
       );
       expect(payload.messages[0]!.content).toContain(
         "ForeCode booking-scientist-2;",

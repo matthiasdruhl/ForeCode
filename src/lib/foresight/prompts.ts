@@ -10,6 +10,7 @@ import {
 import { actionWeights } from "../contracts/validation";
 import { canonicalJson } from "../report/canonical";
 import type { FlowRequest, Step } from "./flow";
+import { metaCompatibleSchema } from "./provider-schema";
 
 export const PROMPT_VERSION = "booking-scientist-2";
 export const META_LIMITS = Object.freeze({
@@ -81,7 +82,11 @@ export function buildMetaPayload(
     reasoning_effort: "minimal",
     response_format: {
       type: "json_schema",
-      json_schema: { name: `forecode_${step}_v2`, schema, strict: true },
+      json_schema: {
+        name: `forecode_${step}_v2`,
+        schema: metaCompatibleSchema(schema),
+        strict: true,
+      },
     },
     stream: false,
     store: false,

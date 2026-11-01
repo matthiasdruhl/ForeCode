@@ -29,6 +29,7 @@ import {
   metaEgressProspectiveTeamStudyId,
   contentGateProspectiveTeamStudyId,
   schemaConstrainedProspectiveTeamStudyId,
+  portableSchemaProspectiveTeamStudyId,
   isProspectiveTeamStudy,
 } from "../../scripts/experiments/tournament/team-config";
 
@@ -71,6 +72,7 @@ describe("unsigned study approval preparation (synthetic inputs only)", () => {
     metaEgressProspectiveTeamStudyId,
     contentGateProspectiveTeamStudyId,
     schemaConstrainedProspectiveTeamStudyId,
+    portableSchemaProspectiveTeamStudyId,
   ] as const)(
     "allocates %s with fresh trial identities after a retained failure",
     (targetStudyId) => {

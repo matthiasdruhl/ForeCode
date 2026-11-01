@@ -22,6 +22,7 @@ import {
   configuredTeamRuntimes,
   prospectiveTeamStudyId,
   nextProspectiveTeamStudyId,
+  recoveryProspectiveTeamStudyId,
   isProspectiveTeamStudy,
 } from "../../scripts/experiments/tournament/team-config";
 
@@ -55,44 +56,47 @@ function build() {
 }
 
 describe("unsigned study approval preparation (synthetic inputs only)", () => {
-  it("allocates a distinct registered slot and fresh trial identities after a failed registration", () => {
-    const prior = build();
-    const next = buildStudyApprovalPacket({
-      targetStudyId: nextProspectiveTeamStudyId,
-      sourceDefinition: fixture.input.definition,
-      originalManifest: fixture.input.evidence.originalManifest,
-      reviewedGitManifest: fixture.input.evidence.originalManifest,
-    });
-    expect(next.definition.protocol.studyId).toBe(nextProspectiveTeamStudyId);
-    expect(
-      next.definition.protocol.arms.every((arm) =>
-        prior.definition.protocol.arms.every(
-          (previous) => previous.runId !== arm.runId,
+  it.each([nextProspectiveTeamStudyId, recoveryProspectiveTeamStudyId] as const)(
+    "allocates %s with fresh trial identities after a retained failure",
+    (targetStudyId) => {
+      const prior = build();
+      const next = buildStudyApprovalPacket({
+        targetStudyId,
+        sourceDefinition: fixture.input.definition,
+        originalManifest: fixture.input.evidence.originalManifest,
+        reviewedGitManifest: fixture.input.evidence.originalManifest,
+      });
+      expect(next.definition.protocol.studyId).toBe(targetStudyId);
+      expect(
+        next.definition.protocol.arms.every((arm) =>
+          prior.definition.protocol.arms.every(
+            (previous) => previous.runId !== arm.runId,
+          ),
         ),
-      ),
-    ).toBe(true);
-    expect(next.definition.protocol.intentRevision.id).not.toBe(
-      prior.definition.protocol.intentRevision.id,
-    );
-    expect(next.definition.protocol.scenario.id).not.toBe(
-      prior.definition.protocol.scenario.id,
-    );
-    const first = configuredTeamRuntimes.get(prospectiveTeamStudyId)!;
-    const second = configuredTeamRuntimes.get(nextProspectiveTeamStudyId)!;
-    expect(first.registrationRoot).not.toBe(second.registrationRoot);
-    expect(second.publicKeyPem).toBe(first.publicKeyPem);
-    expect(isProspectiveTeamStudy(prospectiveTeamStudyId)).toBe(true);
-    expect(isProspectiveTeamStudy(nextProspectiveTeamStudyId)).toBe(true);
-    expect(isProspectiveTeamStudy("forecode-team-20261031-case-14")).toBe(
-      false,
-    );
-    expect(next.definition.protocol.conditions).toEqual(
-      prior.definition.protocol.conditions,
-    );
-    expect(next.definition.protocol.task).toEqual(
-      prior.definition.protocol.task,
-    );
-  });
+      ).toBe(true);
+      expect(next.definition.protocol.intentRevision.id).not.toBe(
+        prior.definition.protocol.intentRevision.id,
+      );
+      expect(next.definition.protocol.scenario.id).not.toBe(
+        prior.definition.protocol.scenario.id,
+      );
+      const first = configuredTeamRuntimes.get(prospectiveTeamStudyId)!;
+      const second = configuredTeamRuntimes.get(targetStudyId)!;
+      expect(first.registrationRoot).not.toBe(second.registrationRoot);
+      expect(second.publicKeyPem).toBe(first.publicKeyPem);
+      expect(isProspectiveTeamStudy(prospectiveTeamStudyId)).toBe(true);
+      expect(isProspectiveTeamStudy(targetStudyId)).toBe(true);
+      expect(isProspectiveTeamStudy("forecode-team-20261031-case-14")).toBe(
+        false,
+      );
+      expect(next.definition.protocol.conditions).toEqual(
+        prior.definition.protocol.conditions,
+      );
+      expect(next.definition.protocol.task).toEqual(
+        prior.definition.protocol.task,
+      );
+    },
+  );
   it("creates fresh IDs with exact task/conditions and no architecture, approval, usage or run times", () => {
     const before = canonicalJson(fixture.input.definition);
     const packet = build(),

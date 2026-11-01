@@ -16,7 +16,10 @@ import {
   createProtectedMetricObservationReader,
   isAuthenticatedMetricObservation,
   metricMeasurementStatus,
+  metricBaselineEvaluationRunId,
 } from "../../scripts/experiments/tournament/metric-observation";
+import { GradeIdentitySchema } from "../../scripts/evaluator/booking-v1/grade-profile";
+import { validRun } from "../../scripts/evaluator/booking-v1/lifecycle.mjs";
 import {
   collectSealedMetricSnapshot,
   validateMetricManifest,
@@ -35,6 +38,29 @@ async function fixture(
   return f;
 }
 describe("SYNTHETIC protected metric integration — test-owned custody only", () => {
+  it("uses the prospectively fixed v2 baseline UUID accepted by the actual guest identity gate", () => {
+    const downstream = "11111111-1111-4111-8111-111111111111";
+    const baseline = metricBaselineEvaluationRunId(downstream);
+    expect(baseline).toBe("3981c268-f829-421a-a8e0-44c50883754a");
+    expect(() => validRun(baseline)).not.toThrow();
+    expect(() =>
+      GradeIdentitySchema.parse({
+        runId: baseline,
+        evaluatedTreeSha256: "a".repeat(64),
+        evaluatorSha256: "b".repeat(64),
+        testSuiteSha256: "c".repeat(64),
+        requiredPolicySha256: "d".repeat(64),
+      }),
+    ).not.toThrow();
+    expect(baseline).not.toBe(downstream);
+    expect(
+      metricBaselineEvaluationRunId("22222222-2222-4222-8222-222222222222"),
+    ).not.toBe(baseline);
+    expect(() => validRun(`metric-baseline-${downstream}`)).toThrow();
+    expect(() =>
+      metricBaselineEvaluationRunId(`metric-baseline-${downstream}`),
+    ).toThrow();
+  });
   it.each([
     ['import "./service";', "", "supported", 1, 0],
     ["", "", "contradicted", 0, 0],

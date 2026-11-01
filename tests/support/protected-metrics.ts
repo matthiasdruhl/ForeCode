@@ -19,6 +19,7 @@ import {
   createProtectedMetricObservationReader,
   metricMeasurementStatus,
   metricBaselineEvaluationRunId,
+  MetricSnapshotOriginalV1Schema,
   type MetricObservationReaderConfig,
   type SupplementaryMetricOriginalSchema,
 } from "../../scripts/experiments/tournament/metric-observation";
@@ -113,7 +114,19 @@ export async function protectedMetricFixture(
   >
     ? Map<K, V>
     : never = new Map();
-  const arms: z.infer<typeof SupplementaryMetricOriginalSchema>["arms"] = [];
+  const arms: (Omit<
+    z.infer<typeof SupplementaryMetricOriginalSchema>["arms"][number],
+    "baseline" | "final"
+  > & {
+    baseline: {
+      custodyId: string;
+      original: z.infer<typeof MetricSnapshotOriginalV1Schema>;
+    } | null;
+    final: {
+      custodyId: string;
+      original: z.infer<typeof MetricSnapshotOriginalV1Schema>;
+    } | null;
+  })[] = [];
   const observations: MetricObservations = {
     schemaVersion: "prospective-tournament-observations.v1",
     studyId: p.studyId,
@@ -215,7 +228,10 @@ export async function protectedMetricFixture(
       baseline: null,
       final: null,
     };
-    const projected: MetricObservations["arms"][number] = {
+    const projected: Extract<
+      MetricObservations,
+      { schemaVersion: "prospective-tournament-observations.v1" }
+    >["arms"][number] = {
       variant,
       runId: original.run.id,
       status: original.run.status,
@@ -236,24 +252,26 @@ export async function protectedMetricFixture(
               : "pass",
         })),
       };
-      const snapshot = await collectMetricSnapshotOriginal({
-        protocol: p,
-        variant,
-        runId: original.run.id,
-        role,
-        directory: sources.get(variant)![role]!,
-        manifest:
-          role === "baseline"
-            ? original.initialManifest
-            : original.finalManifest,
-        treeSha256: evaluation.entry.identity.evaluatedTreeSha256,
-        authorization,
-        evaluation: evaluation.loaded,
-        clock: () =>
-          role === "baseline"
-            ? "2026-10-28T12:05:45.000Z"
-            : "2026-10-28T12:09:40.000Z",
-      });
+      const snapshot = MetricSnapshotOriginalV1Schema.parse(
+        await collectMetricSnapshotOriginal({
+          protocol: p,
+          variant,
+          runId: original.run.id,
+          role,
+          directory: sources.get(variant)![role]!,
+          manifest:
+            role === "baseline"
+              ? original.initialManifest
+              : original.finalManifest,
+          treeSha256: evaluation.entry.identity.evaluatedTreeSha256,
+          authorization,
+          evaluation: evaluation.loaded,
+          clock: () =>
+            role === "baseline"
+              ? "2026-10-28T12:05:45.000Z"
+              : "2026-10-28T12:09:40.000Z",
+        }),
+      );
       const custodyId = `metric-${role}-${variant}`;
       await f.hold({
         id: custodyId,
@@ -291,7 +309,7 @@ export async function protectedMetricFixture(
     subjectSha256: historySubject(f.study, f.loaded),
     predecessorSha256: f.study.prepared.sha256,
   });
-  const original: z.infer<typeof SupplementaryMetricOriginalSchema> = {
+  const original = {
     schemaVersion: "protected-tournament-metrics.local.v1",
     evidenceOrigin: "synthetic",
     protocol: p,
@@ -301,7 +319,7 @@ export async function protectedMetricFixture(
     observations,
     status: metricMeasurementStatus(p, observations),
     arms,
-  };
+  } satisfies z.infer<typeof SupplementaryMetricOriginalSchema>;
   let sequence = 0;
   async function publish() {
     const filename = path.join(root, "metric-observation.json");

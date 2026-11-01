@@ -1,5 +1,5 @@
 // Concrete fixed host dispatch. Production has no injected executables/adapters.
-import { mkdir, open, readFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
@@ -23,6 +23,7 @@ import {
 } from "../../../src/server/artifacts/evaluation-store";
 import {
   captureReviewedTree,
+  freezeCandidate,
   privateDirectory,
   disjoint,
   protectedRead,
@@ -48,6 +49,7 @@ import {
   loadRegisteredTeamRuntime,
   assertTeamRegistrationCurrent,
   teamCompositionDigest,
+  prospectiveTeamStudyId,
   type TeamRuntimeRegistration,
 } from "./team-config";
 import {
@@ -59,6 +61,13 @@ import { teamEnforcementPlan } from "./team-policy";
 import { collectTeamInventory, teamInventoryProgram } from "./team-inventory";
 import { retainTeamControlFailure } from "./team-control-diagnostics";
 import { BrokerStopSchema } from "./team-termination";
+import { withOptionalAuthorizationExport } from "./optional-authorization-export";
+import {
+  isRegisteredMeasurementSession,
+  isProductionRegisteredMeasurementSession,
+  collectFinalMeasurementBatch,
+  type RegisteredMeasurementSession,
+} from "./registered-measurement";
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const uuid = z.string().uuid();
 const processSchema = z.strictObject({
@@ -114,6 +123,7 @@ type RunState = {
     report: ReturnType<typeof validateGradeReport>;
     startedAt: string;
     finishedAt: string;
+    authorizationExport?: unknown;
   };
   evaluation?: TrustedEvaluation;
   entry?: EvaluationAllowlistEntry;
@@ -130,6 +140,7 @@ function buildControls(
   study: PreparedStudy,
   mode: "production" | "synthetic",
   deps: Dependencies,
+  measurement?: RegisteredMeasurementSession,
 ) {
   invariant(isPreparedStudy(study), "Authenticated prepared study required.");
   const config = immutable(TeamRuntimeConfigSchema.parse(registration.runtime));
@@ -147,6 +158,40 @@ function buildControls(
   };
   const compositionSha256 = teamCompositionDigest(config);
   const implementation = expected.implementationSha256;
+  invariant(
+    !measurement || isRegisteredMeasurementSession(measurement),
+    "Authenticated registered measurement session required.",
+  );
+  invariant(
+    !measurement ||
+      (measurement.definitionSha256 === jsonDigest(study.definition) &&
+        measurement.implementationSha256 === implementation),
+    "Registered measurement source differs from installed composition.",
+  );
+  invariant(
+    !measurement ||
+      measurement.protocol.schemaVersion !==
+        "prospective-tournament-metrics.v2" ||
+      jsonDigest(measurement.baselineEvaluationRunIds) ===
+        jsonDigest(config.baselineRunIds),
+    "Registered v2 baseline identities differ from installed composition.",
+  );
+  invariant(
+    study.definition.protocol.studyId !== prospectiveTeamStudyId || measurement,
+    "Prospective study requires live registered measurement orchestration.",
+  );
+  invariant(
+    study.definition.protocol.studyId !== prospectiveTeamStudyId ||
+      measurement?.protocol.schemaVersion ===
+        "prospective-tournament-metrics.v2",
+    "Prospective study requires final-only authorization metric protocol v2.",
+  );
+  invariant(
+    mode !== "production" ||
+      !measurement ||
+      isProductionRegisteredMeasurementSession(measurement),
+    "Production measurement requires the wall-clock staged service resolver.",
+  );
   invariant(
     expected.enforcementSha256 === jsonDigest(plan) &&
       (mode === "synthetic" ||
@@ -182,6 +227,14 @@ function buildControls(
   const states = new Map<string, RunState>();
   const baselines = new Map<Variant, TrustedEvaluation>();
   const baselineAttempts = new Set<Variant>();
+  const metricEntries = new Map<string, EvaluationAllowlistEntry>();
+  const measurementFailures: string[] = [];
+  async function sealMetricDirectories(directory: string): Promise<void> {
+    for (const entry of await readdir(directory, { withFileTypes: true }))
+      if (entry.isDirectory())
+        await sealMetricDirectories(path.join(directory, entry.name));
+    await chmod(directory, 0o500);
+  }
   const observations: {
     operation: string;
     commandSha256: string;
@@ -563,7 +616,48 @@ function buildControls(
       ),
       "Required protected observations absent.",
     );
-    return { result, report };
+    let authorizationExport: unknown;
+    if (measurement && input.evaluationProfile) {
+      return withOptionalAuthorizationExport(
+        { result, report },
+        async () =>
+          JSON.parse(
+            await exec(
+              [
+                "exec",
+                "-i",
+                "-u",
+                "root",
+                config.graderSandbox,
+                "/opt/forecode-booking/bin/node",
+                "--conditions=react-server",
+                "--import",
+                "/opt/forecode-booking/node_modules/tsx/dist/loader.mjs",
+                "/opt/forecode-booking/controller/team-authorization-export.ts",
+              ],
+              signal,
+              JSON.stringify({
+                profile: input.evaluationProfile,
+                identity: {
+                  runId,
+                  evaluatedTreeSha256,
+                  evaluatorSha256,
+                  testSuiteSha256,
+                  requiredPolicySha256,
+                },
+              }),
+              1_048_576,
+              30_000,
+            ),
+          ),
+        async (error) => {
+          measurementFailures.push("AUTHORIZATION_EXPORT_INCOMPLETE");
+          await retainFailure("grading", error, input.runId);
+        },
+        report.checks,
+      );
+    }
+    return { result, report, authorizationExport };
   }
   async function cleanupRuntime(
     runId: string | null,
@@ -705,17 +799,19 @@ function buildControls(
   }
   async function reloadEvaluation(runId: string) {
     const s = states.get(runId);
-    if (!s?.entry) return null;
+    const entry = s?.entry ?? metricEntries.get(runId);
+    if (!entry) return null;
     const store = await createProtectedEvaluationStore({
       root: config.evaluationRoot,
       agentWorkspaceRoot: config.sources.A,
-      entries: new Map([[runId, s.entry]]),
+      entries: new Map([[runId, entry]]),
     });
     return store.load(runId);
   }
   const controls: NoInferenceTeamControls = {
     inspect,
     async loadBaseline(variant, tree, signal) {
+      if (measurement) signal = measurement.bindSignal(signal);
       const runId = config.baselineRunIds[variant];
       invariant(
         !activeBaseline && !baselineAttempts.has(variant),
@@ -743,17 +839,122 @@ function buildControls(
         finishedAt = now();
       await cleanupRuntime(runId, undefined, AbortSignal.timeout(90000));
       activeBaseline.cleaned = true;
-      const { loaded } = await publish(input, report, startedAt, finishedAt);
+      const { entry, loaded } = await publish(
+        input,
+        report,
+        startedAt,
+        finishedAt,
+      );
       baselines.set(variant, loaded);
+      if (measurement) {
+        const { metricBaselineEvaluationRunId } =
+          await import("./metric-observation");
+        const downstreamRunId = study.draft.plan.manifest.arms.find(
+          (a) => a.variant === variant,
+        )!.runId!;
+        const baselineStaticOnly =
+          measurement.protocol.schemaVersion ===
+          "prospective-tournament-metrics.v2";
+        const metricRunId = baselineStaticOnly
+          ? runId
+          : metricBaselineEvaluationRunId(downstreamRunId);
+        invariant(
+          baselineStaticOnly ||
+            ![
+              ...Object.values(config.baselineRunIds),
+              ...study.draft.plan.manifest.arms.map((a) => a.runId),
+            ].includes(metricRunId),
+          "Metric baseline UUID collision.",
+        );
+        if (!baselineStaticOnly)
+          activeBaseline = {
+            variant,
+            runId: metricRunId,
+            gradeTouched: false,
+            cleaned: false,
+          };
+        const source = await captureReviewedTree(
+          config.sources[variant],
+          metricRunId,
+        );
+        const sealed = await freezeCandidate(
+          source,
+          metricRunId,
+          path.join(config.protectedRoot, `metric-baseline-${metricRunId}`),
+          source,
+        );
+        await sealMetricDirectories(sealed.directory);
+        invariant(
+          sealed.treeSha256 === tree,
+          "Metric baseline source changed.",
+        );
+        if (baselineStaticOnly) {
+          metricEntries.set(metricRunId, entry);
+          await measurement.captureBaseline(
+            {
+              variant,
+              directory: sealed.directory,
+              manifest: sealed.manifest,
+              treeSha256: tree,
+              evaluation: loaded,
+              reloadEvaluation: () => reloadEvaluation(metricRunId),
+              authorizationExport: null,
+            },
+            signal,
+          );
+          return loaded;
+        }
+        const metricInput = validateGradeInput({
+          runId: metricRunId,
+          evaluatedTreeSha256: tree,
+          evaluatorSha256: plan.profile.evaluatorSha256,
+          testSuiteSha256: plan.profile.testSuiteSha256,
+          requiredPolicySha256: plan.profile.requiredPolicySha256,
+          candidate: sealed.envelope,
+          workerImage: plan.runtime.workerImage,
+          evaluationProfile: plan.profile,
+        });
+        const metricStartedAt = now();
+        activeBaseline.gradeTouched = true;
+        const graded = await gradeFixed(metricInput, signal),
+          metricFinishedAt = now();
+        await cleanupRuntime(
+          metricRunId,
+          undefined,
+          AbortSignal.timeout(90000),
+        );
+        activeBaseline.cleaned = true;
+        const published = await publish(
+          metricInput,
+          graded.report,
+          metricStartedAt,
+          metricFinishedAt,
+        );
+        metricEntries.set(metricRunId, published.entry);
+        await measurement.captureBaseline(
+          {
+            variant,
+            directory: sealed.directory,
+            manifest: sealed.manifest,
+            treeSha256: tree,
+            evaluation: published.loaded,
+            reloadEvaluation: () => reloadEvaluation(metricRunId),
+            authorizationExport: graded.authorizationExport,
+          },
+          signal,
+        );
+      }
       return loaded;
     },
     retainFailure: (runId, stage, error) => retainFailure(stage, error, runId),
     async prepare(request, signal) {
+      if (measurement) signal = measurement.bindSignal(signal);
       invariant(!recovering && !failedCleanup, "Cleanup fences preparation.");
       invariant(
         baselines.size === 2 && !states.has(request.runId),
         "Both protected baselines and unused UUID required.",
       );
+      if (measurement) await measurement.release(signal);
       await inspect(signal);
       const s: RunState = {
         request: immutable(request),
@@ -771,6 +972,7 @@ function buildControls(
       return ack;
     },
     async agent(runId, nonce, signal) {
+      if (measurement) signal = measurement.bindSignal(signal);
       const s = state(runId, nonce);
       try {
         invariant(
@@ -778,6 +980,7 @@ function buildControls(
           "One unfenced worker start required.",
         );
         s.startRequested = true;
+        if (measurement) await measurement.release(signal);
         await inspect(signal);
         await helper("start", s, signal);
         for (;;) {
@@ -832,6 +1035,7 @@ function buildControls(
       return result;
     },
     async grade(input, signal) {
+      if (measurement) signal = measurement.bindSignal(signal);
       const s = states.get(input.runId);
       invariant(!recovering && !s?.cancelled, "Cleanup fences grading.");
       invariant(
@@ -841,13 +1045,17 @@ function buildControls(
         "Only finalized fixed team source may be graded.",
       );
       const startedAt = now(),
-        { result, report } = await gradeFixed(input, signal),
+        { result, report, authorizationExport } = await gradeFixed(
+          input,
+          signal,
+        ),
         finishedAt = now();
       s.pending = {
         input: immutable(input),
         report: immutable(report),
         startedAt,
         finishedAt,
+        authorizationExport,
       };
       return {
         exitCode: 0,
@@ -947,6 +1155,7 @@ function buildControls(
       mode === "production" && states.get(runId)?.observed
         ? immutable({ runId, observed: true as const })
         : null,
+    measurementFailures: () => [...measurementFailures],
     async recordOriginals(outcome: {
       studyId: string;
       attempts: import("./paired").PairedAttempt[];
@@ -960,6 +1169,9 @@ function buildControls(
       );
       const { RuntimeObservationSchema } = await import("./measured");
       const records: { runId: string; sha256: string }[] = [];
+      const finalCaptures: Parameters<
+        RegisteredMeasurementSession["captureFinal"]
+      >[0][] = [];
       for (const attempt of outcome.attempts) {
         const s = states.get(attempt.run.id);
         if (!s?.observed) continue; // Retained controller journal is unconfirmed, never relabelled actual.
@@ -1090,6 +1302,61 @@ function buildControls(
           await diagnostics.close();
         }
         records.push({ runId: attempt.run.id, sha256: sha256(bytes) });
+        if (
+          measurement &&
+          future &&
+          finalManifest &&
+          attempt.candidateTreeSha256
+        ) {
+          const directory = path.join(
+            config.protectedRoot,
+            `paired-${outcome.studyId}`,
+            `candidate-${attempt.variant}`,
+          );
+          finalCaptures.push({
+            variant: attempt.variant,
+            directory,
+            manifest: finalManifest,
+            treeSha256: attempt.candidateTreeSha256,
+            evaluation: future,
+            reloadEvaluation: () => reloadEvaluation(attempt.run.id),
+            authorizationExport: s.pending?.authorizationExport,
+            runEndedAt: attempt.run.endedAt,
+            runtimeOriginalSha256: sha256(bytes),
+          });
+        }
+      }
+      if (measurement) {
+        for (const input of finalCaptures) {
+          try {
+            await sealMetricDirectories(input.directory);
+          } catch (error) {
+            measurementFailures.push("FINAL_MEASUREMENT_OR_CUSTODY_INCOMPLETE");
+            try {
+              await retainFailure(
+                "finalization",
+                error,
+                input.evaluation.receipt.runId,
+              );
+            } catch {
+              /* Original runtime records are already retained. */
+            }
+          }
+        }
+        const failures = await collectFinalMeasurementBatch(
+          measurement,
+          finalCaptures,
+          async (variant, error) =>
+            retainFailure(
+              "finalization",
+              error,
+              study.draft.plan.manifest.arms.find((a) => a.variant === variant)!
+                .runId!,
+            ),
+          new AbortController().signal,
+        );
+        if (failures.length)
+          measurementFailures.push("FINAL_MEASUREMENT_OR_CUSTODY_INCOMPLETE");
       }
       return records;
     },
@@ -1097,7 +1364,10 @@ function buildControls(
     assertCurrent: current,
   });
 }
-export async function createInstalledTeamControls(study: PreparedStudy) {
+export async function createInstalledTeamControls(
+  study: PreparedStudy,
+  measurement?: RegisteredMeasurementSession,
+) {
   const id = study.definition.protocol.studyId;
   const loaded = await loadRegisteredTeamRuntime(id);
   invariant(
@@ -1105,15 +1375,22 @@ export async function createInstalledTeamControls(study: PreparedStudy) {
     "No code-owned enabled team composition.",
   );
   const registration = loaded.registration;
-  return buildControls(registration, study, "production", {
-    run: boundedProcess,
-    cliBytes: () => readFile(registration.runtime.sbx),
-    implementationIdentity: async () => (await freezeBooking()).evaluatorSha256,
-    reloadStudy: async () => {
-      await assertTeamRegistrationCurrent(id, loaded.sha256);
-      return loadOperatorStudy(registration.studyRoot, registration.study);
+  return buildControls(
+    registration,
+    study,
+    "production",
+    {
+      run: boundedProcess,
+      cliBytes: () => readFile(registration.runtime.sbx),
+      implementationIdentity: async () =>
+        (await freezeBooking()).evaluatorSha256,
+      reloadStudy: async () => {
+        await assertTeamRegistrationCurrent(id, loaded.sha256);
+        return loadOperatorStudy(registration.studyRoot, registration.study);
+      },
     },
-  });
+    measurement,
+  );
 }
 // Test-only injection is permanently synthetic; it cannot create actual-state,
 // a live transport marker, trusted finalization or an actual execution original.
@@ -1121,8 +1398,9 @@ export function createNoInferenceTeamSbxControls(
   registration: TeamRuntimeRegistration,
   study: PreparedStudy,
   deps: Dependencies,
+  measurement?: RegisteredMeasurementSession,
 ) {
-  return buildControls(registration, study, "synthetic", deps);
+  return buildControls(registration, study, "synthetic", deps, measurement);
 }
 export type InstalledTeamControls = Awaited<
   ReturnType<typeof createInstalledTeamControls>

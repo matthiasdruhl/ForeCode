@@ -135,7 +135,20 @@ function oracleProcess(kind: string, name?: string, data?: unknown) {
       input:
         data === undefined
           ? profile && kind.startsWith("team-permissions-")
-            ? JSON.stringify(profile)
+            ? JSON.stringify(
+                installed?.authorizationInstrumentationSha256
+                  ? {
+                      profile,
+                      authorizationIdentity: {
+                        runId: input.runId,
+                        evaluatedTreeSha256: input.evaluatedTreeSha256,
+                        evaluatorSha256: input.evaluatorSha256,
+                        testSuiteSha256: input.testSuiteSha256,
+                        requiredPolicySha256: input.requiredPolicySha256,
+                      },
+                    }
+                  : profile,
+              )
             : undefined
           : JSON.stringify(data),
       milliseconds: 60000,
@@ -242,7 +255,10 @@ try {
           exitCode === null
             ? "Oracle process interrupted."
             : future
-              ? "Protected team oracle process observed; private diagnostics withheld."
+              ? "Protected team oracle process observed; private diagnostics withheld." +
+                (result.stdout.endsWith(" Authorization telemetry unavailable.")
+                  ? " Authorization telemetry unavailable."
+                  : "")
               : result.stdout.slice(0, 2048),
       });
     } catch {

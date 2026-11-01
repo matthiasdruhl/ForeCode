@@ -10,6 +10,7 @@ import {
 import {
   EvaluationIdentitySchema,
   isTrustedEvaluation,
+  hasAuthorizationTelemetryFailure,
 } from "../../../src/server/artifacts/evaluation-store";
 import { futureCheckIds } from "./future";
 
@@ -31,6 +32,10 @@ export function readProtectedAuthorizationCases(
   invariant(
     isTrustedEvaluation(evaluation),
     "Authenticated protected receipt required.",
+  );
+  invariant(
+    !hasAuthorizationTelemetryFailure(evaluation),
+    "Protected authorization telemetry unavailable.",
   );
   const r = evaluation.receipt,
     identity = observed.identity;

@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { inspectTeamInstallation } from "../../scripts/evaluator/booking-v1/team-installation";
+import { authorizationInstrumentationDigest } from "../../scripts/evaluator/booking-v1/team-authorization";
 import {
   syntheticOracleBytes,
   teamGradeData,
@@ -57,6 +58,42 @@ describe("private-installation custody using inert synthetic files, never import
     expect((await data.inspect()).oracleSha256).toBe(
       data.profile.testSuiteSha256,
     );
+  });
+  it("pins additive case instrumentation in the same immutable two-file package", async () => {
+    const data = await fixture();
+    const authorization = {
+      schemaVersion: "booking-team-authorization-instrumentation.v1",
+      semanticsSha256: "a".repeat(64),
+      cases: [{ caseId: "synthetic-case", checkId: "team-permissions-domain" }],
+    };
+    await chmod(data.manifest, 0o600);
+    await writeFile(
+      data.manifest,
+      JSON.stringify({
+        schemaVersion: "booking-team-oracle-installation.v1",
+        profile: data.profile,
+        authorization,
+      }),
+    );
+    await chmod(data.manifest, 0o400);
+    expect(await data.inspect()).toMatchObject({
+      authorizationInstrumentationSha256:
+        authorizationInstrumentationDigest(authorization),
+    });
+    await chmod(data.manifest, 0o600);
+    await writeFile(
+      data.manifest,
+      JSON.stringify({
+        schemaVersion: "booking-team-oracle-installation.v1",
+        profile: data.profile,
+        authorization: {
+          ...authorization,
+          cases: [...authorization.cases, ...authorization.cases],
+        },
+      }),
+    );
+    await chmod(data.manifest, 0o400);
+    await expect(data.inspect()).rejects.toThrow();
   });
   it.each([
     "changed-source",

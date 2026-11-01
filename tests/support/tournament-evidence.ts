@@ -16,6 +16,7 @@ export async function syntheticEvaluation(input: {
   finishedAt: string;
   fail?: string;
   missing?: string;
+  authorizationTelemetryFailure?: string;
 }) {
   const { identity } = input,
     directory = identity.runId;
@@ -33,6 +34,14 @@ export async function syntheticEvaluation(input: {
     const bytes = JSON.stringify({
       evidenceOrigin: "synthetic",
       checkId: observed.id,
+      ...(input.authorizationTelemetryFailure === observed.id
+        ? {
+            observation: {
+              detail:
+                "Trusted observation. Authorization telemetry unavailable.",
+            },
+          }
+        : {}),
     });
     observed.artifactSha256 = sha256(bytes);
     await writeFile(

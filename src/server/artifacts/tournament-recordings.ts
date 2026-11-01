@@ -1,4 +1,6 @@
 import "server-only";
+import { Sha256Schema } from "@/lib/contracts/common";
+import { jsonDigest } from "@/lib/report/digests";
 import { invariant, sameIds } from "@/lib/contracts/validation";
 import {
   tournamentRequiredChecks,
@@ -20,18 +22,43 @@ export type TournamentRecordingConfig = {
   evaluations: Parameters<typeof createProtectedEvaluationStore>[0];
   registrations: readonly {
     studyId: string;
+    // Mandatory at the production composition seam; optional for existing callers.
+    projectionSha256?: string;
     arms: ReadonlyMap<
       "A" | "B",
       { baselineEvaluationId: string; futureEvaluationId: string | null }
     >;
   }[];
 };
-export async function loadTournamentRecordings(
+export type PublicationFailureCode =
+  | "CONFIGURATION_INVALID"
+  | "STORE_UNAVAILABLE"
+  | "DISCLOSURE_UNAVAILABLE"
+  | "APPROVED_PROJECTION_MISMATCH"
+  | "BASELINE_EVIDENCE_UNAVAILABLE"
+  | "BASELINE_IDENTITY_MISMATCH"
+  | "FUTURE_EVIDENCE_UNAVAILABLE"
+  | "FUTURE_IDENTITY_MISMATCH"
+  | "CHECK_PROJECTION_MISMATCH";
+export type TournamentInspection = {
+  state: TournamentCatalog["state"];
+  availableCount: number;
+  unavailableCount: number;
+  failures: {
+    registrationIndex: number | null;
+    code: PublicationFailureCode;
+  }[];
+};
+
+// Diagnostics describe validation stages, never caught messages or original data.
+async function readTournamentRecordings(
   config: TournamentRecordingConfig | null,
-  now = Date.now(),
+  now: number,
+  failures: TournamentInspection["failures"],
 ): Promise<TournamentCatalog> {
   if (!config || config.registrations.length === 0)
     return { state: "empty", studies: [], unavailableCount: 0 };
+  let stage: PublicationFailureCode = "CONFIGURATION_INVALID";
   try {
     invariant(
       config.registrations.length <= 20 &&
@@ -39,13 +66,18 @@ export async function loadTournamentRecordings(
           config.registrations.length,
       "Duplicate or excessive study registrations.",
     );
+    stage = "STORE_UNAVAILABLE";
     const publications = await createProtectedTournamentPublicationStore(
         config.publications,
       ),
       evaluations = await createProtectedEvaluationStore(config.evaluations);
     const studies: PublicTournament[] = [];
     let unavailableCount = 0;
-    for (const registration of config.registrations) {
+    for (const [
+      registrationIndex,
+      registration,
+    ] of config.registrations.entries()) {
+      let code: PublicationFailureCode = "DISCLOSURE_UNAVAILABLE";
       try {
         const publication = await publications.load(registration.studyId, now);
         invariant(
@@ -53,6 +85,13 @@ export async function loadTournamentRecordings(
           "Current original disclosure required.",
         );
         const projection = publication.artifact.projection;
+        code = "APPROVED_PROJECTION_MISMATCH";
+        if (registration.projectionSha256 !== undefined)
+          invariant(
+            jsonDigest(projection) ===
+              Sha256Schema.parse(registration.projectionSha256),
+            "Projection differs from approved registration.",
+          );
         invariant(
           sameIds(
             projection.arms.map((x) => x.variant),
@@ -67,6 +106,7 @@ export async function loadTournamentRecordings(
         for (const arm of projection.arms) {
           const entry = registration.arms.get(arm.variant);
           invariant(entry, "Arm registration missing.");
+          code = "BASELINE_EVIDENCE_UNAVAILABLE";
           const baseline = await evaluations.load(entry.baselineEvaluationId),
             future = entry.futureEvaluationId
               ? await evaluations.load(entry.futureEvaluationId)
@@ -75,6 +115,7 @@ export async function loadTournamentRecordings(
             isTrustedEvaluation(baseline),
             "Fresh original protected evidence required.",
           );
+          code = "BASELINE_IDENTITY_MISMATCH";
           const a = baseline.receipt;
           invariant(!baselineRuns.has(a.runId), "Baseline reuse.");
           baselineRuns.add(a.runId);
@@ -92,9 +133,11 @@ export async function loadTournamentRecordings(
               baseline.verification.verdict === arm.baselineVerdict,
             "Baseline projection differs from originals.",
           );
+          code = "FUTURE_EVIDENCE_UNAVAILABLE";
           if (arm.receiptId === null) {
             invariant(
-              future === null &&
+              entry.futureEvaluationId === null &&
+                future === null &&
                 arm.verdict === "INSUFFICIENT_EVIDENCE" &&
                 arm.checks.every((check) => check.status === "not_run"),
               "Missing evidence cannot support a check claim.",
@@ -105,6 +148,7 @@ export async function loadTournamentRecordings(
             isTrustedEvaluation(future),
             "Original future evidence unavailable.",
           );
+          code = "FUTURE_IDENTITY_MISMATCH";
           const b = future.receipt;
           invariant(
             b.id === arm.receiptId &&
@@ -118,6 +162,7 @@ export async function loadTournamentRecordings(
               future.verification.verdict === arm.verdict,
             "Future projection differs from originals.",
           );
+          code = "CHECK_PROJECTION_MISMATCH";
           invariant(
             sameIds(
               arm.checks.map((x) => x.id),
@@ -134,6 +179,7 @@ export async function loadTournamentRecordings(
         }
         studies.push(projection);
       } catch {
+        failures.push({ registrationIndex, code });
         unavailableCount++;
       }
     }
@@ -143,10 +189,31 @@ export async function loadTournamentRecordings(
       unavailableCount,
     };
   } catch {
+    failures.push({ registrationIndex: null, code: stage });
     return {
       state: "unavailable",
       studies: [],
       unavailableCount: config.registrations.length,
     };
   }
+}
+
+export async function loadTournamentRecordings(
+  config: TournamentRecordingConfig | null,
+  now = Date.now(),
+): Promise<TournamentCatalog> {
+  return readTournamentRecordings(config, now, []);
+}
+
+export async function inspectTournamentRecordings(
+  config: TournamentRecordingConfig | null,
+): Promise<TournamentInspection> {
+  const failures: TournamentInspection["failures"] = [];
+  const catalog = await readTournamentRecordings(config, Date.now(), failures);
+  return {
+    state: catalog.state,
+    availableCount: catalog.studies.length,
+    unavailableCount: catalog.unavailableCount,
+    failures,
+  };
 }

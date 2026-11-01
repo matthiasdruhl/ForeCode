@@ -1,5 +1,7 @@
 # Protected metric installation and review package
 
+The coordinating operator subsequently corrected the host packet writer's OS temporary-directory portability. Current source is `2be4cb8518cbac11658e1a2fd9ba1fd3c30643f8c35f1bdb4200b4224d97a2ec`; installed guest/controller bytes and the private oracle proposal are unchanged. This report's original installation records retain their `fc10619c…` source identity. A fresh read-only diagnostic under the current source again verified unchanged public bytes, historical package/diagnostics, explicit NOT_ADMITTED policy mismatch and stopped/lease-free cleanup. Current unsigned manifest identities are in [the approval handoff](STUDY-READY-FOR-APPROVAL.md).
+
 November 1, 2026. This continuation prepares a concrete protected measurement channel and a private instrumentation proposal for review before new Scientist generation or architecture selection. No coding-agent execution, inference, actual protected grading, independent signature, runtime enablement or historical-original rewrite is performed by this workstream.
 
 ## Implemented source channel

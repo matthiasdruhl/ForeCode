@@ -29,7 +29,7 @@ node --conditions=react-server --import tsx \
   scripts/experiments/tournament/study-approval-packet.ts
 ```
 
-`--help` is the only supported argument. No request/JSON/environment option selects a source registration, signing key, authority, provider or runtime activation. The tool creates a fresh canonical `/private/tmp/forecode-study-approval-*` directory. It never overwrites a previous packet. It writes and syncs exclusive mode-0400 files, then freezes the private directory to mode 0500:
+`--help` is the only supported argument. No request/JSON/environment option selects a source registration, signing key, authority, provider or runtime activation. The tool resolves the OS temporary directory to its canonical path and creates a fresh `forecode-study-approval-*` directory there. It never overwrites a previous packet. It writes and syncs exclusive mode-0400 files, then freezes the private directory to mode 0500:
 
 | File                            | Review purpose                                                                                          |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------- |

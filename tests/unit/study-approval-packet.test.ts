@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { chmod, lstat, readFile, rm } from "node:fs/promises";
+import { chmod, lstat, readFile, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   buildStudyApprovalPacket,
@@ -215,8 +216,9 @@ describe("unsigned study approval preparation (synthetic inputs only)", () => {
     const packet = build(),
       written = await writeStudyApprovalPacket(packet);
     outputs.push(written.directory);
-    expect(written.directory).toMatch(
-      /^\/private\/tmp\/forecode-study-approval-/,
+    expect(path.dirname(written.directory)).toBe(await realpath(tmpdir()));
+    expect(path.basename(written.directory)).toMatch(
+      /^forecode-study-approval-/,
     );
     expect((await lstat(written.directory)).mode & 0o777).toBe(0o500);
     const bytes = await readFile(path.join(written.directory, "manifest.json"));

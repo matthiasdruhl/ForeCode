@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { chmod, mkdtemp, open, realpath } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
@@ -299,7 +300,9 @@ export async function writeStudyApprovalPacket(packet: StudyApprovalPacket) {
     jsonDigest(validated) === jsonDigest(packet),
     "Draft packet changed.",
   );
-  const root = await mkdtemp("/private/tmp/forecode-study-approval-");
+  const root = await mkdtemp(
+    path.join(await realpath(tmpdir()), "forecode-study-approval-"),
+  );
   invariant((await realpath(root)) === root, "Draft output aliases forbidden.");
   await chmod(root, 0o700);
   const files = {
@@ -416,7 +419,7 @@ if (
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === "--help") {
     process.stdout.write(
-      "Usage: node --conditions=react-server --import tsx scripts/experiments/tournament/study-approval-packet.ts\nCreates one new unsigned private /private/tmp packet from the fixed registered definition and verified original source. No provider call, signing, activation or execution.\n",
+      "Usage: node --conditions=react-server --import tsx scripts/experiments/tournament/study-approval-packet.ts\nCreates one new unsigned private packet in the canonical OS temporary directory from the fixed registered definition and verified original source. No provider call, signing, activation or execution.\n",
     );
   } else if (args.length) {
     process.stderr.write("Unsupported draft packet arguments. Use --help.\n");

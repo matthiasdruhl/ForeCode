@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   calculateProspectiveMetrics,
   MetricProtocolSchema,
+  MetricSourcePathSchema,
   type MetricProtocol,
   type MetricObservations,
 } from "@/lib/experiment/prospective-metrics";
 import { jsonDigest } from "@/lib/report/digests";
+import { collectBoundaryMetrics } from "../../scripts/experiments/tournament/boundary-metrics";
 const hash = "a".repeat(64),
   edge = { from: "src/server/http.ts", to: "src/server/booking-store.ts" };
 function fixture() {
@@ -20,6 +22,7 @@ function fixture() {
     suiteSha256: hash,
     policySha256: hash,
     externalPackages: [],
+    stylesheetPaths: [],
     boundaryRules: [{ id: "http-store", ...edge }],
     authorizationCaseIds: ["private-owner", "team-cancel"],
     observationWindow: "prepared_baseline_and_sealed_final_tree",
@@ -68,6 +71,59 @@ function fixture() {
   return { p, o, calculate: () => calculateProspectiveMetrics(p, o) };
 }
 describe("prospective boundary and authorization measurement", () => {
+  it.each([
+    "src/app/api/bookings/[id]/route.ts",
+    "src/app/[...slug]/page.tsx",
+    "src/app/[[...slug]]/page.tsx",
+  ])("accepts supplementary route paths %s", (path) => {
+    expect(MetricSourcePathSchema.safeParse(path).success).toBe(true);
+    const f = fixture();
+    f.p.boundaryRules[0]!.from = path;
+    expect(MetricProtocolSchema.safeParse(f.p).success).toBe(true);
+  });
+  it.each([
+    "/src/a.ts",
+    "src/../a.ts",
+    "src/app/./a.ts",
+    "src//a.ts",
+    "src/app/[../a]/route.ts",
+    "src/app/%2e%2e/a.ts",
+    "src/app\\a.ts",
+  ])("rejects traversal or noncanonical path %s", (path) => {
+    expect(MetricSourcePathSchema.safeParse(path).success).toBe(false);
+  });
+  it.each([
+    'module.require("./booking-store")',
+    'module["require"]("./booking-store")',
+    'const load = require; load("./booking-store")',
+    'import {createRequire as factory} from "node:module"; factory(import.meta.url)("./booking-store")',
+  ])(
+    "abstains instead of supporting fewer edges for unsupported loader %s",
+    (code) => {
+      const f = fixture();
+      f.p.externalPackages = ["node:module"];
+      f.o.protocolSha256 = jsonDigest(f.p);
+      const collect = (source: string) =>
+        collectBoundaryMetrics(
+          {
+            [edge.from]: source,
+            [edge.to]: "export const store = 1;",
+          },
+          f.p,
+        );
+      f.o.arms[0]!.final!.boundary = collect(
+        'import {store} from "./booking-store"',
+      );
+      f.o.arms[1]!.final!.boundary = collect(code);
+      const result = f.calculate();
+      expect(result.arms[0]!.final.boundaryViolations).toBe(1);
+      expect(result.arms[1]!.final.boundaryViolations).toBeNull();
+      expect(result.predictionAssessment).toBe("not_established");
+      expect(result.abstentionReason).toBe(
+        "INCOMPLETE_OR_MISSING_MEASUREMENTS",
+      );
+    },
+  );
   it("abstains on a failed starting authorization baseline", () => {
     const f = fixture();
     f.o.arms[0]!.baseline!.authorization[0]!.outcome = "fail";
@@ -167,6 +223,18 @@ describe("prospective boundary and authorization measurement", () => {
     expect(() => h.calculate()).toThrow();
     expect(() =>
       MetricProtocolSchema.parse({ ...fixture().p, verified: true }),
+    ).toThrow();
+    expect(() =>
+      MetricProtocolSchema.parse({
+        ...fixture().p,
+        stylesheetPaths: ["src/app/style.css", "src/app/style.css"],
+      }),
+    ).toThrow();
+    expect(() =>
+      MetricProtocolSchema.parse({
+        ...fixture().p,
+        stylesheetPaths: ["src/server/booking-store.ts"],
+      }),
     ).toThrow();
   });
 });

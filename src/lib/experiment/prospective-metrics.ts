@@ -5,10 +5,21 @@ import { Sha256Schema, IdSchema } from "../contracts/common";
 import { jsonDigest } from "../report/digests";
 import { invariant } from "../contracts/validation";
 
-const path = z
+// Supplementary grammar includes Next dynamic/catch-all directories without
+// permitting absolute paths, empty segments, or . / .. traversal segments.
+const metricPathPrefix = String.raw`^src/(?:(?:[A-Za-z0-9_-]+|\[(?:\.\.\.)?[A-Za-z0-9_-]+\]|\[\[\.\.\.[A-Za-z0-9_-]+\]\])/)*[A-Za-z0-9_.-]+`;
+export const MetricSourcePathSchema = z
   .string()
-  .regex(/^src\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.(?:ts|tsx)$/);
-const edge = z.strictObject({ from: path, to: path });
+  .max(512)
+  .regex(new RegExp(metricPathPrefix + String.raw`\.(?:ts|tsx)$`));
+export const MetricStylesheetPathSchema = z
+  .string()
+  .max(512)
+  .regex(new RegExp(metricPathPrefix + String.raw`\.css$`));
+const edge = z.strictObject({
+  from: MetricSourcePathSchema,
+  to: MetricSourcePathSchema,
+});
 const unique = (values: readonly string[]) =>
   new Set(values).size === values.length;
 export const MetricProtocolSchema = z
@@ -31,6 +42,9 @@ export const MetricProtocolSchema = z
           .regex(/^(?:[a-z][a-z0-9-]*|@[a-z0-9-]+\/[a-z0-9-]+|node:[a-z_]+)$/),
       )
       .max(100),
+    // Exact frozen non-source assets; only side-effect imports may omit an edge.
+    // Their bytes must still be present in the sealed inventory/tree manifest.
+    stylesheetPaths: z.array(MetricStylesheetPathSchema).max(100),
     boundaryRules: z
       .array(z.strictObject({ id: IdSchema, ...edge.shape }))
       .min(1)
@@ -43,6 +57,7 @@ export const MetricProtocolSchema = z
   .superRefine((p, c) => {
     if (
       !unique(p.externalPackages) ||
+      !unique(p.stylesheetPaths) ||
       !unique(p.boundaryRules.map((r) => r.id)) ||
       !unique(p.boundaryRules.map((r) => `${r.from}\0${r.to}`)) ||
       !unique(p.authorizationCaseIds)

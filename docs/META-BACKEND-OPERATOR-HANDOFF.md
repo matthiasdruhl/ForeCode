@@ -52,6 +52,8 @@ node --conditions=react-server --import tsx scripts/experiments/tournament/team-
 
 Recording verification must exit0 with offline consistency only; it does not authenticate historical HTTPS, actual source execution, catalog calls, concealed failed attempts, tariff authenticity, cleanup, private credential handling or invoices. The reviewed source pin is an explicit expectation of this historical verifier, not observed source metadata from a provider signature. Original response-byte hashes use compact `Response.json` reconstruction; provider IDs' raw-string and canonical-string hashes remain distinct and cannot be converted without missing raw IDs.
 
+The verifier rejects a downstream request dispatched at or after any parent's latest possible expiry (parent client completion plus the recorded TTL). Client start/end times cannot establish exact server issuance or acceptance. A response received after expiry may have been accepted before it; passing these conservative bounds does not prove exact server-side TTL compliance.
+
 Publication status currently exits2 with empty counts. Team status currently exits2 with `execution:DISABLED`. Neither admits a runtime, accesses hidden assertions, discloses private outcomes or spends money. Do not treat these expected gate exits as a failed experiment or override them to obtain a success display.
 
 Only after separate fresh approvals and reviewed **private** registration, an authorized operator can run the existing command grammar below. Placeholders describe required private inputs; they are not current granted authority:

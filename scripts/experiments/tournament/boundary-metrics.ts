@@ -4,25 +4,46 @@
 import ts from "typescript";
 import { posix } from "node:path";
 import { invariant } from "../../../src/lib/contracts/validation";
-import type { MetricProtocol } from "../../../src/lib/experiment/prospective-metrics";
-const sourcePath = /^src\/(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+\.(?:ts|tsx)$/;
+import {
+  MetricSourcePathSchema,
+  MetricStylesheetPathSchema,
+  type MetricProtocol,
+} from "../../../src/lib/experiment/prospective-metrics";
+const loaderNames = new Set([
+  "require",
+  "module",
+  "createRequire",
+  "getBuiltinModule",
+]);
 export function collectBoundaryMetrics(
   files: Readonly<Record<string, string>>,
-  protocol: Pick<MetricProtocol, "boundaryRules" | "externalPackages">,
+  protocol: Pick<
+    MetricProtocol,
+    "boundaryRules" | "externalPackages" | "stylesheetPaths"
+  >,
 ) {
-  const { boundaryRules: rules, externalPackages } = protocol;
+  const { boundaryRules: rules, externalPackages, stylesheetPaths } = protocol;
   invariant(
     externalPackages.every((p) =>
       /^(?:[a-z][a-z0-9-]*|@[a-z0-9-]+\/[a-z0-9-]+|node:[a-z_]+)$/.test(p),
     ),
     "Unsupported external package",
   );
+  invariant(
+    stylesheetPaths.every(
+      (p) => MetricStylesheetPathSchema.safeParse(p).success,
+    ) && new Set(stylesheetPaths).size === stylesheetPaths.length,
+    "Invalid stylesheet policy",
+  );
   const entries = Object.entries(files);
   invariant(
     entries.length > 0 &&
       entries.length <= 1000 &&
       entries.every(
-        ([p, s]) => sourcePath.test(p) && Buffer.byteLength(s) <= 262144,
+        ([p, s]) =>
+          (MetricSourcePathSchema.safeParse(p).success ||
+            stylesheetPaths.includes(p)) &&
+          Buffer.byteLength(s) <= 262144,
       ),
     "Invalid source inventory",
   );
@@ -32,19 +53,35 @@ export function collectBoundaryMetrics(
   );
   const edges: { from: string; to: string }[] = [];
   let unresolvedImports = 0;
-  function dependency(from: string, value: string) {
+  function dependency(from: string, value: string, sideEffect = false) {
     const packageName = value.startsWith("@")
       ? value.split("/").slice(0, 2).join("/")
       : value.split("/")[0]!;
+    // Even a frozen external module package can manufacture a CommonJS loader.
+    if (["module", "node:module"].includes(packageName)) {
+      unresolvedImports++;
+      return;
+    }
     if (externalPackages.includes(packageName)) return;
     let base: string;
     if (value.startsWith("./") || value.startsWith("../"))
       base = posix.normalize(posix.join(posix.dirname(from), value));
-    else if (value.startsWith("@/")) base = "src/" + value.slice(2);
+    else if (value.startsWith("@/"))
+      base = posix.normalize("src/" + value.slice(2));
     else {
       unresolvedImports++;
       return;
     }
+    if (!base.startsWith("src/")) {
+      unresolvedImports++;
+      return;
+    }
+    if (
+      sideEffect &&
+      stylesheetPaths.includes(base) &&
+      Object.hasOwn(files, base)
+    )
+      return;
     if (base.endsWith(".js")) base = base.slice(0, -3);
     const targets = [
       base,
@@ -52,7 +89,10 @@ export function collectBoundaryMetrics(
       `${base}.tsx`,
       `${base}/index.ts`,
       `${base}/index.tsx`,
-    ].filter((p) => Object.hasOwn(files, p));
+    ].filter(
+      (p) =>
+        MetricSourcePathSchema.safeParse(p).success && Object.hasOwn(files, p),
+    );
     const unique = [...new Set(targets)];
     if (unique.length !== 1) {
       unresolvedImports++;
@@ -61,6 +101,7 @@ export function collectBoundaryMetrics(
     edges.push({ from, to: unique[0]! });
   }
   for (const [file, text] of entries) {
+    if (stylesheetPaths.includes(file)) continue; // Frozen non-source assets only.
     const ast = ts.createSourceFile(
       file,
       text,
@@ -73,14 +114,22 @@ export function collectBoundaryMetrics(
     const diagnostics = (
       ast as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }
     ).parseDiagnostics;
-    unresolvedImports += diagnostics.length;
+    unresolvedImports +=
+      diagnostics.length +
+      ast.referencedFiles.length +
+      ast.typeReferenceDirectives.length +
+      ast.libReferenceDirectives.length;
     function visit(n: ts.Node) {
       if (
         (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) &&
         n.moduleSpecifier
       ) {
         if (ts.isStringLiteral(n.moduleSpecifier))
-          dependency(file, n.moduleSpecifier.text);
+          dependency(
+            file,
+            n.moduleSpecifier.text,
+            ts.isImportDeclaration(n) && !n.importClause,
+          );
         else unresolvedImports++;
       }
       if (ts.isImportTypeNode(n)) {
@@ -92,22 +141,34 @@ export function collectBoundaryMetrics(
         else unresolvedImports++;
       }
       if (ts.isImportEqualsDeclaration(n)) unresolvedImports++;
+      // Conservatively refuse loader references even when aliased or extracted;
+      // this is not a runtime capability/alias analysis. Literal bracket access
+      // is checked separately because its property is not an Identifier node.
+      if (ts.isIdentifier(n) && loaderNames.has(n.text)) unresolvedImports++;
+      if (
+        ts.isElementAccessExpression(n) &&
+        (ts.isStringLiteral(n.argumentExpression) ||
+          ts.isNoSubstitutionTemplateLiteral(n.argumentExpression)) &&
+        loaderNames.has(n.argumentExpression.text)
+      )
+        unresolvedImports++;
       if (
         ts.isCallExpression(n) &&
-        (n.expression.kind === ts.SyntaxKind.ImportKeyword ||
-          (ts.isIdentifier(n.expression) && n.expression.text === "require"))
+        n.expression.kind === ts.SyntaxKind.ImportKeyword
       )
         unresolvedImports++;
       ts.forEachChild(n, visit);
     }
     visit(ast);
   }
-  // Count a forbidden edge once, including type imports and reexports. Empty
-  // imports do not create edges. Dynamic/CommonJS syntax makes coverage unknown.
+  // The calculator deduplicates source edges. Declared side-effect stylesheets
+  // create no TS edge. Dynamic/CommonJS syntax makes coverage unknown.
   return {
-    complete: rules.every(
-      (r) => Object.hasOwn(files, r.from) && Object.hasOwn(files, r.to),
-    ),
+    complete:
+      stylesheetPaths.every((p) => Object.hasOwn(files, p)) &&
+      rules.every(
+        (r) => Object.hasOwn(files, r.from) && Object.hasOwn(files, r.to),
+      ),
     unresolvedImports,
     scannedRuleIds: rules.map((r) => r.id),
     edges,

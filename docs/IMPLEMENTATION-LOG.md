@@ -2307,3 +2307,30 @@ Final observed local validation on Node `v24.16.0` and locked unchanged dependen
 The first restricted check's two Unix-socket denials, first browser guard failures and all corrected development-test assumptions are recorded above; no assertions or safeguards were weakened. No no-inference test used provider credentials or incurred paid inference. No actual candidate, protected oracle, private-original report, sandbox installation/admission, genuine prospective tournament, publication or deployment ran. No architecture winner or Meta added-value claim is made. Production evidence interpretation remains fail-closed because authoritative prospective Scientist custody is absent; new metric observations also lack an installed protected custody extension. Source/code validation is implemented and tested; actual execution/interpretation/disclosure remain authorization/infrastructure gates.
 
 Delivery is organized as recording/metrics, lifecycle/lineage and technical-handoff commits. The PR and final message report the pushed final SHA and actual GitHub Actions outcomes, which cannot be inferred from these local checks. Next operator steps are in `META-BACKEND-OPERATOR-HANDOFF.md`; no confirmation is needed to review these concrete changes, and no approval for paid/protected operation is inferred.
+
+## PR49 independent-review remediation — November 1, 2026
+
+The owner authorized fixing the independent review findings on PR49 head `96621912e45e2c49958cdf2a16747db746639e84`. Changes remain local and uncommitted; no push, merge, protected-artifact access, runtime admission, provider inference or spending occurred.
+
+Shared supplementary source-path validation now accepts Next dynamic/catch-all directories without allowing traversal. The source-only collector accepts the actual complete reviewed booking TypeScript inventory plus its explicitly frozen CSS asset. The draft metric protocol now requires `stylesheetPaths` (empty if none): only present, declared side-effect CSS imports omit a TypeScript edge; missing assets, value imports, reexports and undeclared assets cannot silently produce clean measurements. This changes the unregistered supplementary protocol, not frozen v1 contracts or any historical recording.
+
+CommonJS loader references (including property/bracket access and extracted aliases), module-factory imports even when externally allowlisted, and triple-slash references make the measurement unknown. Collector-to-calculator controls reproduce the former false-supported result and now require abstention. This is conservative syntax coverage, not exhaustive runtime capability analysis; unrelated uses of reserved loader names can require abstention too.
+
+Recording chronology rejects downstream dispatch at or beyond every parent's latest possible expiry. Only conservative operator-time bounds are available: parent client completion bounds issuance from above, while child client start bounds admission from below. Client receipt after expiry does not prove late server acceptance, so a straddling response is not falsely rejected. Exact server issuance/acceptance times remain explicitly unverified. Original recording bytes are unchanged.
+
+Observed validation on Node24 with provider calls/spending disabled and synthetic credentials:
+
+- `npm test -- tests/unit/boundary-metrics.test.ts tests/unit/live-recording.test.ts` before the fixes: exit1, six failing regression cases and43passes, reproducing the review defects (including the unsupported triple-slash case). No candidate code executed.
+- `npm test -- tests/unit/live-recording.test.ts tests/unit/boundary-metrics.test.ts tests/unit/prospective-metrics.test.ts` on the final implementation: exit0,92tests. Coverage includes the real fixture inventory, stylesheet policy failures, dynamic/catch-all and traversal paths, loader-to-assessment abstention, hour-delayed handoff, exact TTL dispatch boundaries and possible receipt after expiry.
+- `META_CALLS_ENABLED=false META_SPENDING_APPROVED=false META_MODEL_API_KEY=synthetic-fix-disabled META_APPROVED_PAYLOAD_SHA256=disabled NEXT_TELEMETRY_DISABLED=1 npm run check`: exit1. Final repeat passed lint and both strict typechecks;1364tests passed, two preexisting Unix-socket controls failed with `PermissionError: [Errno 1] Operation not permitted` (`agent-supervision` and `supervised-team`). The same two controls failed during the independent review before these changes. No assertions or restrictions were bypassed; the chained build did not run after the test failure.
+- Same disabled/synthetic environment, `npm run build` separately: exit0, both production builds.
+- `PLAN_REFERENCE_ROOT=../AgentHarness-Planning npm run test:plan` with provider/spending disabled: exit0,128tests against the normative immutable pin.
+- `node --import tsx scripts/meta/verify-live-recording.ts docs/recordings/live-meta-scientist-20261101`: exit0 on unchanged originals, offline consistency only.
+- Disabled/synthetic environment, `npm run test:e2e` and `npm run test:fixture-e2e`: both exit1 before browser execution because loopback listeners3100/3101 are denied with `listen EPERM`. No capability escalation was requested.
+- Changed-file Prettier and `git diff --check`: exit0. Historical recordings, frozen contracts and lockfile have no diff.
+
+Next ticket: review these local fixes and run socket/browser checks in the normally authorized CI environment before updating/merging PR49. Genuine prospective custody, protected metric instrumentation, runtime/spending/disclosure approvals and production lineage remain separate gates; these fixes do not enable them.
+
+### Authorized GitHub delivery
+
+The owner subsequently authorized staging, committing and pushing these nine reviewed files to the existing `codex/meta-backend-readiness` branch for PR49. `git diff --check` passes and the branch still starts at reviewed head `96621912e45e2c49958cdf2a16747db746639e84`; the validation results and restricted-environment limitations above remain applicable. No merge, paid inference or runtime activation is authorized by this delivery instruction.

@@ -28,8 +28,80 @@ const fresh = () =>
 const rehash = (f: ReturnType<typeof fresh>, name: string) => {
   f["manifest.json"].files[name] = jsonDigest(f[name]);
 };
+const retime = (
+  f: ReturnType<typeof fresh>,
+  step: string,
+  start: number,
+  end: number,
+) => {
+  const name = `${step}-provider-observation.json`,
+    o = f[name],
+    m = f["manifest.json"];
+  o.startedAt = new Date(start).toISOString();
+  o.completedAt = new Date(end).toISOString();
+  o.providerCreatedUnixSeconds = Math.floor(start / 1000);
+  Object.assign(
+    m.steps.find((s: { step: string }) => s.step === step),
+    { startedAt: o.startedAt, completedAt: o.completedAt },
+  );
+  if (step === "challenge") m.runCompletedAt = o.completedAt;
+  rehash(f, name);
+};
 
 describe("offline live recording consistency", () => {
+  it("rejects a consistently rehashed recording with an hour-delayed hypothesis handoff", () => {
+    const f = fresh(),
+      m = f["manifest.json"];
+    for (const step of ["hypothesize", "challenge"]) {
+      const name = `${step}-provider-observation.json`,
+        o = f[name];
+      for (const key of ["startedAt", "completedAt"])
+        o[key] = new Date(Date.parse(o[key]) + 3_600_000).toISOString();
+      o.providerCreatedUnixSeconds += 3600;
+      Object.assign(
+        m.steps.find((s: { step: string }) => s.step === step),
+        {
+          startedAt: o.startedAt,
+          completedAt: o.completedAt,
+        },
+      );
+      rehash(f, name);
+    }
+    m.runCompletedAt = m.steps[2].completedAt;
+    expect(() => verifyRecording(f)).toThrow(/lifetime/i);
+  });
+  it.each([-1, 0, 1])(
+    "checks challenge dispatch against proposal expiry at offset %i ms",
+    (offset) => {
+      const f = fresh(),
+        m = f["manifest.json"];
+      const expiry =
+        Date.parse(m.steps[0].completedAt) + m.limits.artifactTtlMs;
+      retime(f, "challenge", expiry + offset, expiry + offset + 5000);
+      if (offset < 0) expect(() => verifyRecording(f)).not.toThrow();
+      else
+        expect(() => verifyRecording(f)).toThrow(
+          "Parent propose artifact lifetime exceeded",
+        );
+    },
+  );
+  it("rejects a hypothesis dispatched exactly at proposal expiry", () => {
+    const f = fresh(),
+      m = f["manifest.json"];
+    const expiry = Date.parse(m.steps[0].completedAt) + m.limits.artifactTtlMs;
+    retime(f, "hypothesize", expiry, expiry + 2000);
+    retime(f, "challenge", expiry + 10_000, expiry + 15_000);
+    expect(() => verifyRecording(f)).toThrow(
+      "Parent propose artifact lifetime exceeded",
+    );
+  });
+  it("rejects a challenge dispatched after hypothesis expiry", () => {
+    const f = fresh(),
+      m = f["manifest.json"];
+    const expiry = Date.parse(m.steps[1].completedAt) + m.limits.artifactTtlMs;
+    retime(f, "challenge", expiry, expiry + 5000);
+    expect(() => verifyRecording(f)).toThrow(/lifetime/);
+  });
   it("accepts untouched historical originals and lists unverifiable claims", () => {
     expect(verifyRecordingDirectory(directory)).toContain(
       "does not independently authenticate",

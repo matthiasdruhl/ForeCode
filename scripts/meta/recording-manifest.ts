@@ -281,6 +281,17 @@ export function verifyManifest(files: Record<string, unknown>) {
           m.limits.intervalMs,
         "Call interval",
       );
+    // Issuance happened no later than the parent's observed completion. With
+    // no intervening proposal refresh in this fixed recording, neither parent
+    // can survive beyond that latest possible expiry. The child's request start
+    // bounds its server admission from below; client receipt time does not bound
+    // server acceptance from below. Do not reject a possibly valid response just
+    // because it was received after expiry. Exact server times remain unverified.
+    for (const parent of m.steps.slice(0, index))
+      assert(
+        start < Date.parse(parent.completedAt) + m.limits.artifactTtlMs,
+        `Parent ${parent.step} artifact lifetime exceeded`,
+      );
     assert(
       o.providerCreatedUnixSeconds >= Math.floor(start / 1000) &&
         o.providerCreatedUnixSeconds <= Math.ceil(end / 1000),
@@ -428,6 +439,7 @@ export function verifyManifest(files: Record<string, unknown>) {
     verified: "OFFLINE_CONSISTENCY_ONLY",
     unchecked: [
       "Historical HTTPS/source execution",
+      "Exact server issuance and acceptance times",
       "Catalog call and concealed attempts",
       "Pricing authenticity and actual invoice",
       "Cleanup and credential handling",

@@ -50,8 +50,10 @@ function Arrow() {
 export function IntentWorkspace({
   configuration,
   onResearchRevision,
+  projectEpoch = 0,
 }: {
   configuration: PublicForesightConfiguration;
+  projectEpoch?: number;
   onResearchRevision?: (
     revision: number,
     confirmedTitle: string | null,
@@ -530,7 +532,7 @@ export function IntentWorkspace({
             )}
           </section>
           <ForesightWorkspace
-            key={researchRevision}
+            key={`${projectEpoch}:${researchRevision}`}
             intents={intents}
             configuration={configuration}
             editing={editingId !== null}

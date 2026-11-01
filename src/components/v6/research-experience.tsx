@@ -25,6 +25,7 @@ import type { ProspectiveEvidenceCatalog } from "@/server/artifacts/prospective-
 import type { PublicTournament } from "@/lib/experiment/tournament-publication";
 import type { TournamentReplayCatalog } from "@/lib/replay";
 import { ReplayHistory } from "./replay-history";
+import { ProjectExplorer } from "../projects/project-explorer";
 
 const chapters = [
   ["case", "Case"],
@@ -33,6 +34,7 @@ const chapters = [
   ["time", "Time Machine"],
   ["evidence", "Evidence Laboratory"],
   ["report", "Decision Report"],
+  ["projects", "Local Projects"],
 ] as const;
 type Chapter = (typeof chapters)[number][0];
 const questions: Record<EvidenceQuestion, [string, string]> = {
@@ -94,6 +96,8 @@ export function ResearchExperience({
 }) {
   const [chapter, setChapter] = useState<Chapter>("case");
   const [revision, setRevision] = useState(0);
+  const [projectEpoch, setProjectEpoch] = useState(0);
+  const chapterRef = useRef<Chapter>("case");
   const [confirmedTitle, setConfirmedTitle] = useState<string | null>(null);
   const [studyId, setStudyId] = useState(tournaments.studies[0]?.studyId);
   const study = tournaments.studies.find((item) => item.studyId === studyId);
@@ -123,11 +127,18 @@ export function ResearchExperience({
   useEffect(() => {
     function restore(event?: PopStateEvent | HashChangeEvent) {
       const url = new URL(window.location.href);
-      setChapter(chapterAt(url));
+      const restoredChapter = chapterAt(url);
+      const changedProject =
+        (chapterRef.current === "projects") !==
+        (restoredChapter === "projects");
+      if (changedProject) setProjectEpoch((value) => value + 1);
+      chapterRef.current = restoredChapter;
+      setChapter(restoredChapter);
       setQuestion(questionAt(url));
       const historyContext = window.history.state?.forecodeContext;
       setSelection(
-        historyContext && historyContext !== contextRef.current
+        changedProject ||
+          (historyContext && historyContext !== contextRef.current)
           ? initialTraceFocus(contextRef.current)
           : readTraceSelection(url, contextRef.current),
       );
@@ -201,7 +212,14 @@ export function ResearchExperience({
     );
   }
   function navigate(next: Chapter, nextFocus = focus) {
+    if ((chapter === "projects") !== (next === "projects")) {
+      setProjectEpoch((value) => value + 1);
+      nextFocus = initialTraceFocus(contextIdentity);
+      setSelection(nextFocus);
+      setReturnTo(null);
+    }
     setChapter(next);
+    chapterRef.current = next;
     writeUrl(next, nextFocus);
     requestAnimationFrame(() => {
       title.current?.focus();
@@ -312,7 +330,7 @@ export function ResearchExperience({
           </nav>
           <span className="chapter-scroll-hint">Scroll chapters →</span>
         </div>
-        <div className="case-context">
+        <div className="case-context" hidden={chapter === "projects"}>
           <span>BOOKING / 01</span>
           <span>
             {study?.studyId ??
@@ -342,6 +360,18 @@ export function ResearchExperience({
             {activeName}
           </h1>
           <section
+            hidden={chapter !== "projects"}
+            aria-label="Local project workspace"
+          >
+            <ProjectExplorer
+              onSourceChange={() => {
+                setProjectEpoch((value) => value + 1);
+                setSelection(initialTraceFocus(contextIdentity));
+                setReturnTo(null);
+              }}
+            />
+          </section>
+          <section
             hidden={chapter !== "case"}
             className="case-story"
             aria-label="The booking case"
@@ -366,6 +396,12 @@ export function ResearchExperience({
                     onClick={() => navigate("lab")}
                   >
                     Explore the booking case <span aria-hidden="true">↗</span>
+                  </button>
+                  <button
+                    className="v6-text-link"
+                    onClick={() => navigate("projects")}
+                  >
+                    Import a local project ↗
                   </button>
                   <a
                     href="#comparison-explainer"
@@ -486,6 +522,7 @@ export function ResearchExperience({
             className="embedded-workspace"
           >
             <IntentWorkspace
+              projectEpoch={projectEpoch}
               configuration={configuration}
               onResearchRevision={invalidate}
             />

@@ -1,0 +1,34 @@
+{
+  "label": "GENUINE LIVE META OUTPUT",
+  "captureMethod": "Temporary operator fetch guard observed the real HTTPS response; existing production transport and service accepted it. Metadata below is a derived sanitized projection; assistant content is unchanged.",
+  "startedAt": "2026-11-01T04:08:03.333Z",
+  "completedAt": "2026-11-01T04:08:07.930Z",
+  "providerHttpStatus": 200,
+  "applicationHttpStatus": 200,
+  "model": "muse-spark-1.3-contributor",
+  "promptVersion": "booking-scientist-1",
+  "providerCreatedUnixSeconds": 1793506087,
+  "transportResponseIdentity": "meta-475b733c7ae46f2ff44fd8d3fdbab71833fd41d5071a1fa7585f21bb335ff0f5",
+  "operatorRawResponseIdSha256": "07394bf1f5b3adcae0c629612c271c0162c6b1292e8f3fa0906dfc87cb3c58b9",
+  "operatorRawRequestIdSha256": "b6a1359bff83c9ef324907b220f6131ca822169be369f4c70d6a3a40be618439",
+  "identityNote": "The transport hashes canonical JSON strings; the operator guard hashes raw ID strings. These are distinct hash conventions, not matching response IDs. Raw provider IDs were not retained. transportResponseIdentity is copied unchanged from the accepted transport-issued response.",
+  "payloadIdentity": "6a3018ce319ef5793ccab74155eb83bbc24bd372350467989ad852fcb31c55e2",
+  "contextIdentity": "7dc0cde350961dbc7b3e84c29e8c46579a5391293805e628c15682d39c9defb2",
+  "providerResponseBytes": 2249,
+  "originalApplicationResponseBytesSha256": "049592a92f3bf1baccaa5a6877fa71f541f0f75d50128a3bce87e08d9f499423",
+  "finishReason": "stop",
+  "usage": {
+    "completion_tokens": 436,
+    "prompt_tokens": 2401,
+    "total_tokens": 2837,
+    "completion_tokens_details": {
+      "reasoning_tokens": 69
+    },
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "estimatedCostUsd": 0.0003273,
+  "actualInvoicedCostUsd": null,
+  "originalAssistantContent": "{\"challenges\":[{\"schemaVersion\":\"meta-challenge.v1\",\"id\":\"challenge-team-boundary-bypass-01\",\"hypothesisId\":\"f26d3ed9-fb00-46d6-839d-362ed211f199\",\"targetCandidateId\":\"candidate-B-team-permissions\",\"baselineCommit\":\"a564da2fe36a5de3ea95f777c1f5a60fd80ad6f0\",\"change\":{\"id\":\"challenge-change-team-bypass-01\",\"request\":\"Propose adversarial team-cancel case where a non-owner team member cancels a private owner-only booking via the new team permission interface, bypassing owner checks while overlap rejection still holds.\",\"rationale\":\"Tests if advisory interface preserves owner authorization.\",\"acceptanceOutline\":[\"Non-owner team cancel of private booking is denied under owner-only rule.\",\"Owner cancel of own booking still succeeds.\",\"Overlapping booking creation remains rejected by store.\",\"No direct http-to-store import is introduced.\",\"Interface does not grant team cancel on private bookings.\"],\"intentIds\":[\"intent-live-meta-team-20261101\"]},\"failureMechanism\":\"New team permission interface at service layer is interpreted broadly, allowing team-member cancellation to match private bookings. Domain boundary isolates cancellation rules but does not enforce owner-vs-team distinction, so owner-only authorization is bypassed while overlap safety appears intact.\",\"potentialDisconfirmation\":\"Hypothesis is disconfirmed if candidate B permits team cancel of private booking or shows equal/higher boundary violations than status quo A on team-cancel and overlap-safety scenarios.\",\"reviewStatus\":\"proposed\",\"visibility\":\"model_generated_not_heldout\",\"limitations\":[\"Advisory proposal only, no execution or measurement.\",\"No team membership or production auth in reviewed graph.\",\"Model-generated scenario, not heldout evidence.\"]}]}"
+}

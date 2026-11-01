@@ -1,0 +1,167 @@
+{
+  "schemaVersion": "live-meta-scientist-operational-record.v1",
+  "label": "GENUINE LIVE META OUTPUT",
+  "presentationMode": "recorded",
+  "sourceCommit": "8749d243c7f17bb641d47f24807e7da8cc540334",
+  "sourceNote": "Actual application source used for all three calls; recording and offline verifier were authored afterward.",
+  "pullRequest47": {
+    "state": "MERGED",
+    "mergedAt": "2026-11-01T04:01:57Z",
+    "correctedHead": "3420536915c3fc6afb982f236bfc04d729c7a1e9",
+    "mergeWorkflow": "https://github.com/matthiasdruhl/ForeCode/actions/runs/41271468295",
+    "conclusion": "SUCCESS"
+  },
+  "runStartedAt": "2026-11-01T04:07:16.212Z",
+  "runCompletedAt": "2026-11-01T04:08:07.930Z",
+  "model": "muse-spark-1.3-contributor",
+  "promptVersion": "booking-scientist-1",
+  "endpoint": "https://api.meta.ai/v1/chat/completions",
+  "localOrigin": "http://127.0.0.1:3189",
+  "graph": {
+    "id": "booking-reviewed-20261027",
+    "baselineCommit": "a564da2fe36a5de3ea95f777c1f5a60fd80ad6f0"
+  },
+  "intentRevisions": [
+    {
+      "id": "intent-live-meta-team-20261101",
+      "revision": 1
+    }
+  ],
+  "scenarioRevisions": [
+    {
+      "id": "scenario-team-cancel-01",
+      "revision": null,
+      "frozen": false,
+      "origin": "meta_generated"
+    },
+    {
+      "id": "scenario-overlap-safety-02",
+      "revision": null,
+      "frozen": false,
+      "origin": "meta_generated"
+    }
+  ],
+  "scenarioRevisionNote": "Frozen scenario.v1 has no revision field. Exact immutable snapshots and canonical hashes identify these visible unfrozen proposals; null is not an invented revision.",
+  "proposalCandidates": [
+    "candidate-A-status-quo",
+    "candidate-B-team-permissions"
+  ],
+  "proposalContextIdentity": "dd268183f2a27e1495d17382073e699aa14cf272ec78e5f9f05d5174e4250a9b",
+  "hypothesisId": "f26d3ed9-fb00-46d6-839d-362ed211f199",
+  "challengeId": "challenge-team-boundary-bypass-01",
+  "challengeHypothesisId": "f26d3ed9-fb00-46d6-839d-362ed211f199",
+  "steps": [
+    {
+      "step": "propose",
+      "startedAt": "2026-11-01T04:07:16.212Z",
+      "completedAt": "2026-11-01T04:07:22.672Z",
+      "providerResponseIdentity": "meta-db0c1dac4895c963fd838db36503cc79894c8ce116acf90f35553c2141e70cbd",
+      "schemaValidation": "PASS",
+      "contextBindingValidation": "PASS",
+      "providerHttpStatus": 200,
+      "applicationHttpStatus": 200,
+      "safeError": null,
+      "estimatedCostUsd": 0.0003559
+    },
+    {
+      "step": "hypothesize",
+      "startedAt": "2026-11-01T04:07:46.363Z",
+      "completedAt": "2026-11-01T04:07:50.267Z",
+      "providerResponseIdentity": "meta-dad56ac07fd9049791bd4309ef7f49ce622d2caea61588c070706e03cb6c1b1d",
+      "schemaValidation": "PASS",
+      "contextBindingValidation": "PASS",
+      "providerHttpStatus": 200,
+      "applicationHttpStatus": 200,
+      "safeError": null,
+      "estimatedCostUsd": 0.000308
+    },
+    {
+      "step": "challenge",
+      "startedAt": "2026-11-01T04:08:03.333Z",
+      "completedAt": "2026-11-01T04:08:07.930Z",
+      "providerResponseIdentity": "meta-475b733c7ae46f2ff44fd8d3fdbab71833fd41d5071a1fa7585f21bb335ff0f5",
+      "schemaValidation": "PASS",
+      "contextBindingValidation": "PASS",
+      "providerHttpStatus": 200,
+      "applicationHttpStatus": 200,
+      "safeError": null,
+      "estimatedCostUsd": 0.0003273
+    }
+  ],
+  "providerCalls": {
+    "billableInferenceAttempts": 3,
+    "successful": 3,
+    "failed": 0,
+    "automaticRetries": 0,
+    "additionalAttempts": 0,
+    "maximumAuthorized": 6,
+    "nonBillableModelCatalogChecks": 1,
+    "interpretEvidenceCalls": 0
+  },
+  "spending": {
+    "ownerCeilingUsd": 10,
+    "accountFunding": "Owner confirmed active credits/billing in this session; no independent current billing dashboard inspection. Authenticated model catalog returned HTTP 200 before inference.",
+    "inputTokens": 6302,
+    "outputTokensIncludingReasoning": 1805,
+    "totalTokens": 8107,
+    "reasoningTokensIncludedInOutput": 420,
+    "cachedInputTokens": 0,
+    "priceSource": "https://dev.meta.ai/docs/pricing-rate-limits",
+    "pricingCheckedOn": "2026-11-01",
+    "inputUsdPerMillion": 0.1,
+    "outputUsdPerMillion": 0.2,
+    "estimatedCostUsd": 0.0009912,
+    "actualInvoicedCostUsd": null,
+    "maximumSixAttemptReservationUsd": 0.6340608,
+    "reservationBasis": "Six times the full 1,048,576-token model context as uncached input plus 4,096 output tokens at current Contributor rates, without tools. Exceeds actual bounded payload needs. Rate-card upper reservation, not a provider invoice or provider dollar hard cap.",
+    "providerDollarHardCap": "Unavailable according to current official Meta billing help; alerts are not hard caps.",
+    "unknowns": [
+      "Actual invoiced charge",
+      "Provider credit debit",
+      "Any account-specific adjustment"
+    ]
+  },
+  "limits": {
+    "approvedCallLimit": 6,
+    "totalPerProcessRepositoryLimit": 12,
+    "perEndpointPerHour": 4,
+    "concurrent": 1,
+    "intervalMs": 10000,
+    "timeoutMs": 30000,
+    "inputBytes": 49152,
+    "outputBytes": 65536,
+    "outputTokensIncludingReasoning": 4096,
+    "artifactTtlMs": 1800000,
+    "automaticRetries": 0
+  },
+  "assessment": {
+    "propose": "YES",
+    "hypothesize": "YES",
+    "challenge": "YES",
+    "schemaAndBindingValidation": "PASS",
+    "liveProviderProvenancePreserved": true,
+    "usableForHackathonDemonstration": "WITH LIMITATIONS",
+    "reasoningUsefulness": "Useful scoped architectural research, with a concrete authorization bypass challenge. Boundary-violation counting is not operationally specified, existing import separation could yield a zero baseline, and the challenge partly tests authorization correctness rather than the exact declared metric. No effectiveness claim."
+  },
+  "cleanup": {
+    "ownedLiveServerStopped": true,
+    "listener3189Remaining": false,
+    "temporarySpendingFlagsPersisted": false,
+    "credentialsCopied": false,
+    "originalSecretStorageModified": false,
+    "standardTestsUsedRealCredentials": false
+  },
+  "files": {
+    "propose-request.json": "9e7b748fa3a9790626170de7c5ea01ab58f8fc906296017b3e4b2a75127632b3",
+    "propose-response.json": "caab0f7e3cd53a9edfdace3442fd5e84d35cb58b3f3859f8e1aeccf961d341b4",
+    "propose-provider-observation.json": "75cef33a0b38a0f8d061aafa6c54b2038549428885744b8f1393f79c53b8e285",
+    "hypothesize-request.json": "8df0cf516c803be8ebadef8541949d9f09f39e7299b6370e25e8780547475a0d",
+    "hypothesize-response.json": "dd889cb01d70a63d52855054d301190d5a1034f1dbfedc39701118976e3ec6b0",
+    "hypothesize-provider-observation.json": "f61c61e97a049e09f864dc008a87c34e50bbaa77aa9b94cb4fbaeadac95ac15d",
+    "challenge-request.json": "7dc0cde350961dbc7b3e84c29e8c46579a5391293805e628c15682d39c9defb2",
+    "challenge-response.json": "221c5531b66067280e7816f57791077de64f3d1e0bb19a0f2b902e2d44f97549",
+    "challenge-provider-observation.json": "579f0d52f8dda7a3d531f361924ad06fdabb749cb5d68f20dbf9bc5ccef062fd"
+  },
+  "hypothesisIdentity": "f3571db2bb6958aece7f8ae981f84b91bdb00c82d46c204be851f13dd1f84707",
+  "scenarioSnapshotsIdentity": "f47a211d925f588a13b297b701cb6ec724cfcbfb6549a821fbd51f9d9fe84a64"
+}

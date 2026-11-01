@@ -1,0 +1,230 @@
+{
+  "intents": [
+    {
+      "schemaVersion": "intent.v1",
+      "id": "intent-live-meta-team-20261101",
+      "title": "Team-level booking permissions and cancellation",
+      "statement": "Add team-level booking permissions and cancellation behavior without breaking existing owner-only authorization and overlapping-booking safety.",
+      "status": "confirmed",
+      "priority": "high",
+      "horizon": "near",
+      "source": {
+        "kind": "user_confirmed",
+        "reference": "manual-intent-editor"
+      },
+      "dependencies": [],
+      "revision": 1,
+      "updatedAt": "2026-11-01T04:05:25.990Z"
+    }
+  ],
+  "graph": {
+    "schemaVersion": "graph.v1",
+    "id": "booking-reviewed-20261027",
+    "repoCommit": "a564da2fe36a5de3ea95f777c1f5a60fd80ad6f0",
+    "modules": [
+      {
+        "id": "booking",
+        "path": "src/domain/booking.ts",
+        "kind": "source"
+      },
+      {
+        "id": "errors",
+        "path": "src/domain/errors.ts",
+        "kind": "source"
+      },
+      {
+        "id": "store",
+        "path": "src/server/booking-store.ts",
+        "kind": "source"
+      },
+      {
+        "id": "service",
+        "path": "src/server/booking-service.ts",
+        "kind": "source"
+      },
+      {
+        "id": "http",
+        "path": "src/server/http.ts",
+        "kind": "source"
+      },
+      {
+        "id": "runtime",
+        "path": "src/server/runtime.ts",
+        "kind": "source"
+      },
+      {
+        "id": "collection",
+        "path": "src/app/api/bookings/route.ts",
+        "kind": "route"
+      },
+      {
+        "id": "resources",
+        "path": "src/app/api/resources/route.ts",
+        "kind": "route"
+      },
+      {
+        "id": "session",
+        "path": "src/app/api/session/route.ts",
+        "kind": "route"
+      }
+    ],
+    "edges": [
+      {
+        "from": "store",
+        "to": "booking",
+        "kind": "static_import"
+      },
+      {
+        "from": "store",
+        "to": "errors",
+        "kind": "static_import"
+      },
+      {
+        "from": "service",
+        "to": "booking",
+        "kind": "static_import"
+      },
+      {
+        "from": "service",
+        "to": "errors",
+        "kind": "static_import"
+      },
+      {
+        "from": "service",
+        "to": "store",
+        "kind": "static_import"
+      },
+      {
+        "from": "http",
+        "to": "errors",
+        "kind": "static_import"
+      },
+      {
+        "from": "http",
+        "to": "service",
+        "kind": "static_import"
+      },
+      {
+        "from": "runtime",
+        "to": "service",
+        "kind": "static_import"
+      },
+      {
+        "from": "runtime",
+        "to": "http",
+        "kind": "static_import"
+      },
+      {
+        "from": "collection",
+        "to": "runtime",
+        "kind": "static_import"
+      },
+      {
+        "from": "resources",
+        "to": "runtime",
+        "kind": "static_import"
+      },
+      {
+        "from": "session",
+        "to": "runtime",
+        "kind": "static_import"
+      },
+      {
+        "from": "session",
+        "to": "http",
+        "kind": "static_import"
+      }
+    ],
+    "unknowns": [
+      "Standalone booking-v1: routes delegate to a shared runtime and HTTP adapter; booking-service checks a fixed demo viewer and owner-only access, validates creation and delegates synchronous writes to an in-memory BookingStore. The store rejects active room/time overlaps and cancels bookings. Domain data defines two rooms and synthetic initial bookings. No team membership, delegated permissions, durable storage or production authentication exists.",
+      "Partial manual static-import review only; includes type imports. External packages, UI, configuration and tests are omitted. No runtime graph completeness claim.",
+      "The dynamic booking detail route exists but its bracketed path cannot be represented by the frozen v1 path grammar; omitted, not renamed. Its runtime behavior is outside this graph.",
+      "Only these existing reviewed paths may be proposed in this slice. New file paths require a separately reviewed context. No repository scanning or execution occurs.",
+      "No private evaluator diagnostics, heldout cases or Workstream A reports are included. Proposed visible scenarios are model-generated, never heldout or measured evidence."
+    ]
+  },
+  "consent": true,
+  "candidates": [
+    {
+      "schemaVersion": "architecture-candidate.v1",
+      "id": "candidate-A-status-quo",
+      "label": "A - Status quo owner-only",
+      "baselineCommit": "a564da2fe36a5de3ea95f777c1f5a60fd80ad6f0",
+      "description": "Status quo: owner-only authorization in booking-service and overlap rejection in booking-store remain unchanged. No team permissions or cancellation behavior changes. Advisory only, no verification or measurement.",
+      "changePlan": [],
+      "constraints": [],
+      "estimatedUpfrontCost": 0,
+      "estimatedCostUnit": "modeled_effort_points_v1",
+      "metaProvenance": "live",
+      "modelId": "muse-spark-1.3-contributor",
+      "promptVersion": "booking-scientist-1",
+      "limitations": [
+        "No team membership or delegated permissions exists in this graph slice.",
+        "Proposal is advisory only, not verification, measurement, or certificate."
+      ]
+    },
+    {
+      "schemaVersion": "architecture-candidate.v1",
+      "id": "candidate-B-team-permissions",
+      "label": "B - Team permission interface",
+      "baselineCommit": "a564da2fe36a5de3ea95f777c1f5a60fd80ad6f0",
+      "description": "Scoped alternative: add team permission interface at service layer and boundary around domain cancellation rules, keeping store overlap safety and owner authorization intact. Advisory proposal only.",
+      "changePlan": [
+        {
+          "module": "src/server/booking-service.ts",
+          "action": "add_interface",
+          "rationale": "Define team permission and cancellation policy interface while preserving owner checks and overlap safety."
+        },
+        {
+          "module": "src/domain/booking.ts",
+          "action": "introduce_boundary",
+          "rationale": "Isolate team cancellation rules from core booking invariants as advisory boundary."
+        }
+      ],
+      "constraints": [
+        {
+          "kind": "forbid_import",
+          "from": "src/server/http.ts",
+          "to": "src/server/booking-store.ts"
+        }
+      ],
+      "estimatedUpfrontCost": 5,
+      "estimatedCostUnit": "modeled_effort_points_v1",
+      "metaProvenance": "live",
+      "modelId": "muse-spark-1.3-contributor",
+      "promptVersion": "booking-scientist-1",
+      "limitations": [
+        "No durable storage, production auth, or team membership in reviewed graph.",
+        "Unit modeled_effort_points_v1 is estimate, never measured savings."
+      ]
+    }
+  ],
+  "visibleScenarios": [
+    {
+      "schemaVersion": "scenario.v1",
+      "id": "scenario-team-cancel-01",
+      "intentIds": ["intent-live-meta-team-20261101"],
+      "request": "Team member cancels team booking without breaking owner-only rules for private bookings.",
+      "assumptions": [
+        "Fixed demo viewer context persists",
+        "Overlap safety must be preserved"
+      ],
+      "acceptanceIds": [],
+      "frozen": false,
+      "baselineCommit": "a564da2fe36a5de3ea95f777c1f5a60fd80ad6f0",
+      "origin": "meta_generated"
+    },
+    {
+      "schemaVersion": "scenario.v1",
+      "id": "scenario-overlap-safety-02",
+      "intentIds": ["intent-live-meta-team-20261101"],
+      "request": "Overlapping booking remains rejected after team permission extension.",
+      "assumptions": ["In-memory store behavior unchanged"],
+      "acceptanceIds": [],
+      "frozen": false,
+      "baselineCommit": "a564da2fe36a5de3ea95f777c1f5a60fd80ad6f0",
+      "origin": "meta_generated"
+    }
+  ],
+  "goal": "Add team-level booking permissions and cancellation behavior without breaking existing owner-only authorization and overlapping-booking safety."
+}

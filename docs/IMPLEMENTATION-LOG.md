@@ -2197,3 +2197,69 @@ Actual validation on Node `v24.16.0`, ordinary provider calls/spending disabled:
 No live Meta inference, paid request, private experimental result access/publication, protected grading, new experiment, deployment or automatic PR merge occurred. PR47 is ready for review with local checks passing and current main integrated; repository-required remote checks/reviewer approval still govern merging. Next remains M6.6/M7/M8 genuine prospective lineage, separately approved provider disclosure and current authorization, plus a separately reviewed authenticated persistent session/revocation design if required. Production interpretation remains unprovisioned and fails closed.
 
 The first repair push was rejected (exit1) because GitHub's `23c5dfe22168ef445632dfcf187c2a2c7f0f536e` main-merge commit arrived on the PR branch between the final fetch and push. Inspected its complete delta: the same PR46 integration, with no interpretation changes and only a blank-line difference from local merge `a896aff`. Preserved that remote commit with a normal merge and retained both log entries plus the repair record. The final executable/test tree is identical to validated repair `152013e9eb5ea70edce536bd9346c8fb188b4033`; only this log changed during reconciliation. No force push or remote work was discarded.
+
+## M6.1–M6.4 genuine live Meta Scientist validation — November 1, 2026
+
+Assignment B began only after fetched main confirmed corrected PR47 merged as
+`8749d243c7f17bb641d47f24807e7da8cc540334`. Both PR checks and the exact merge's
+Foundation workflow passed. Created the separate
+`codex/live-meta-scientist-validation` branch/worktree from that merge. No contact
+with the tournament-publication agent or dependency on its work. No protected
+artifact, tournament, grader, original record or publication configuration changes.
+
+The owner explicitly delegated six maximum provider attempts/$10 for the exact
+reviewed synthetic booking context and confirmed future requirement, including
+dependent hypothesis/challenge payloads. Existing mode0600 secret storage contained
+the allowlisted Contributor model/base URL; authenticated non-billable exact-model
+catalog GET returned200. A factual current-funding question was answered “Active
+credits/billing confirmed”; no additional spending authorization was requested.
+Current official rates/context imply a conservative six-attempt reservation of
+$0.6340608. Provider dollar hard caps are unavailable; existing gates and stricter
+local attempt limits remained mandatory. No account or original secret setting
+was changed.
+
+The actual production Next server on loopback3189 used process-only call/spending
+flags and six-call limit, loading credentials directly into its runtime. An extra
+private operator guard pinned reviewed payload digests, restricted external fetch
+destinations and retained a bounded attempt ledger/observations without raw IDs,
+keys, headers or reasoning text. Separate network-free synthetic controls tested
+that guard before inference. Production transport/schema/binding checks remained
+intact. Genuine propose, hypothesize and challenge each returned provider200/app200
+between04:07:16.212Z and04:08:07.930Z: **3attempts,3successes,0failures,0retries**.
+Hypothesis UUID `f26d3ed9-fb00-46d6-839d-362ed211f199` is the actual server issuance;
+challenge targets it and the exact B. Provider-reported6,302input +1,805output
+=8,107tokens, including420reasoning and0cached input. Current-rate estimate
+$0.0009912; actual invoiced charges/credit debit remain unknown.
+
+[The validation report](LIVE-META-SCIENTIST-VALIDATION.md) links the bounded public-safe
+recording and original unchanged assistant content. Observation metadata is
+explicitly derived: the operator's raw-string ID hashes differ from the existing
+transport's canonical-JSON-string hashes; both are named distinctly, and public
+transport-issued identities are retained unchanged. No inference was repeated to
+change capture metadata. The offline verifier checks original content against
+documented server enrichment, frozen schemas, exact handoffs and context/payload/file
+digests. It is not an independent historical provider signature or issuance service.
+
+Reasoning is useful with limitations: B introduces service permission and domain
+cancellation boundaries; its falsifiable lower-boundary-violations prediction has
+an equal/higher falsifier but lacks an operational counting rule and could meet a
+zero-violation A. The concrete challenge exposes an overly broad team interface
+allowing private-booking cancellation while overlap checks pass, partly outside the
+declared metric. Demo readiness is WITH LIMITATIONS; no superiority, experiment,
+heldout authority or historical case13 hypothesis lineage is claimed. No live
+interpret-evidence call occurred. No backend interoperability fix was necessary.
+
+Observed on Node24.16.0: focused Meta suites exit0/141tests; disabled-spend
+`npm run check` exit0 (lint, both types,1,236tests/59files, both production builds);
+`npm run test:e2e` exit0/62tests; `npm run test:fixture-e2e` exit0/2tests;
+`PLAN_REFERENCE_ROOT=../AgentHarness-Planning npm run test:plan` exit0/128tests.
+Offline verifier and altered-file/handoff/model-content controls passed. Changed
+files passed Prettier and whitespace checks. Standard tests did not load real keys
+or make paid calls; the recording verifier has no network path and is not a live CI
+test. Owned server stopped by SIGTERM (exit143), with no remaining3189listener;
+temporary flags died with it and no credential copy exists.
+
+Next ticket: use the honestly labeled recorded reasoning sequence; independently
+predeclare metric/check policy and obtain separate prospective experiment/evidence
+permissions before any measured-benefit or interpretation claim. PR47's default
+interpretation lineage/disclosure behavior remains fail closed.

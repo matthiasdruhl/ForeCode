@@ -13,8 +13,9 @@ import type { TournamentRecordingConfig } from "../../src/server/artifacts/tourn
 import { measuredFixture } from "./tournament-measured";
 export async function publicationFixture(
   options: Parameters<typeof measuredFixture>[0] = {},
+  existing?: Awaited<ReturnType<typeof measuredFixture>>,
 ) {
-  const f = await measuredFixture(options);
+  const f = existing ?? (await measuredFixture(options));
   const report = buildMeasuredTournamentReport({
     study: f.study,
     arms: f.loaded,

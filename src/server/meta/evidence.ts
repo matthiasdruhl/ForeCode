@@ -1,13 +1,12 @@
 import "server-only";
+import { approvedScientistLineage } from "./approved-scientist-lineage";
+import { isAuthenticatedRegistration } from "./registration-reader";
+import { isAuthenticatedEvidenceLink } from "./evidence-link-reader";
 import { validateProspectiveRegistration } from "./prospective-lineage";
 import { z } from "zod";
-import { Sha256Schema } from "@/lib/contracts/common";
 import { MetaHypothesisV1Schema } from "@/lib/contracts/scientist";
 import { DecisionReportAnalysisSchema } from "@/lib/report/decision-report";
-import {
-  EvidenceSummarySchema,
-  OpaqueIdSchema,
-} from "@/lib/foresight/interpretation/contracts";
+import { EvidenceSummarySchema } from "@/lib/foresight/interpretation/contracts";
 import { loadApprovedDecisionReports } from "@/server/artifacts/recording-catalog";
 import type { DecisionReportCatalog } from "@/server/artifacts/decision-reports";
 import { digest } from "./transport";
@@ -17,27 +16,13 @@ export type IssuedHypothesis = {
   hypothesis: z.infer<typeof MetaHypothesisV1Schema>;
   issuedAt: number;
   contextSha256: string;
+  proposalStartedAt: number;
+  proposalInputSha256: string;
 };
 // An operator registration is a prerequisite, NOT a receipt or substitute trust
 // root. It can only narrow an already freshly authenticated #45 publication.
-export const EvidenceLinkSchema = z.strictObject({
-  evidenceSummaryId: OpaqueIdSchema,
-  prospectiveRegistrationId: OpaqueIdSchema,
-  hypothesisId: OpaqueIdSchema,
-  hypothesisSha256: Sha256Schema,
-  contextSha256: Sha256Schema,
-  // Pins *all* study/task/protocol/evaluator identities and both source trees,
-  // run/receipt IDs, check results, and metrics via the exact public projection.
-  projectionSha256: Sha256Schema,
-  studyId: z.string().min(1).max(128),
-  taskId: z.string().min(1).max(128),
-  baselineCommit: z.string().regex(/^[a-f0-9]{40}$/),
-  candidateId: z.string().min(1).max(128),
-  publicationApprovedAt: z.number().int().nonnegative(),
-  registeredAt: z.number().int().nonnegative(),
-  expiresAt: z.number().int().nonnegative(),
-});
-export type EvidenceLink = z.infer<typeof EvidenceLinkSchema>;
+export { EvidenceLinkSchema, type EvidenceLink } from "./prospective-lineage";
+import { EvidenceLinkSchema } from "./prospective-lineage";
 
 const limitations = [
   "MODEL INTERPRETATION is advisory; AUTHENTICATED VERIFICATION and the deterministic report decision remain unchanged.",
@@ -55,24 +40,39 @@ export function createEvidenceAdapter(
     loadReports?: () => Promise<DecisionReportCatalog>;
     // Both resolvers must freshly authenticate existing server-owned custody,
     // authorization and revocations. Never expose them as request dependencies.
-    resolveLink?: (id: string) => Promise<unknown>;
-    resolveRegistration?: (id: string) => Promise<unknown>;
+    resolveLink?: (id: string, issued: IssuedHypothesis) => Promise<unknown>;
+    resolveRegistration?: (
+      id: string,
+      issued: IssuedHypothesis,
+    ) => Promise<unknown>;
   } = {},
 ) {
   const loadReports = options.loadReports ?? loadApprovedDecisionReports;
   // #45 has no hypothesis/candidate/context lineage. No text matching, client
   // digest, environment switch or historical backfill can enable production.
-  const resolveLink = options.resolveLink ?? (async () => null);
-  const resolveRegistration = options.resolveRegistration ?? (async () => null);
+  const resolveLink =
+    options.resolveLink ?? approvedScientistLineage.resolveLink;
+  const resolveRegistration =
+    options.resolveRegistration ?? approvedScientistLineage.resolveRegistration;
   return async (id: string, issued: IssuedHypothesis, now: number) => {
     try {
-      const link = EvidenceLinkSchema.parse(await resolveLink(id));
+      const originalLink = await resolveLink(id, issued);
+      if (!isAuthenticatedEvidenceLink(originalLink))
+        throw new Error("Unauthenticated link");
+      const link = EvidenceLinkSchema.parse(originalLink.link);
+      const originalRegistration = await resolveRegistration(
+        link.prospectiveRegistrationId,
+        issued,
+      );
+      if (!isAuthenticatedRegistration(originalRegistration))
+        throw new Error("Unauthenticated registration");
       const registration = validateProspectiveRegistration(
-        await resolveRegistration(link.prospectiveRegistrationId),
+        originalRegistration.registration,
         issued,
         now,
       );
       if (
+        digest(originalLink.lineage) !== digest(originalRegistration.lineage) ||
         registration.id !== link.prospectiveRegistrationId ||
         registration.registeredAt !== link.registeredAt ||
         link.expiresAt > registration.expiresAt

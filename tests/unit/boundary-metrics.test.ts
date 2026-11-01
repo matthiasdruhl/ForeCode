@@ -19,6 +19,105 @@ const collect = (code: string, extra: Record<string, string> = {}) =>
     { boundaryRules: rules, externalPackages: [], stylesheetPaths: [] },
   );
 describe("prospective static observation collector", () => {
+  it.each(["[id]", "[...slug]", "[[...slug]]"])(
+    "resolves exact Next path %s and unique index/.js references",
+    (segment) => {
+      const from = `src/app/${segment}/route.ts`,
+        to = "src/server/store/index.tsx";
+      const result = collectBoundaryMetrics(
+        {
+          [from]:
+            'import type {T} from "@/server/store/index.js"; export * from "../../server/store";',
+          [to]: "",
+        },
+        {
+          boundaryRules: [{ id: "dynamic-store", from, to }],
+          externalPackages: [],
+          stylesheetPaths: [],
+        },
+      );
+      expect(result.edges[0]).toEqual({ from, to });
+      expect(result.edges).toEqual([
+        { from, to },
+        { from, to },
+      ]);
+      expect(result.unresolvedImports).toBe(0);
+    },
+  );
+  it("resolves a unique index module and rejects module/index ambiguity", () => {
+    const from = "src/server/http.ts",
+      to = "src/server/store/index.ts";
+    const policy = {
+      boundaryRules: [{ id: "index", from, to }],
+      externalPackages: [],
+      stylesheetPaths: [],
+    };
+    const files = { [from]: 'export * from "./store";', [to]: "" };
+    expect(collectBoundaryMetrics(files, policy)).toMatchObject({
+      unresolvedImports: 0,
+      edges: [{ from, to }],
+    });
+    expect(
+      collectBoundaryMetrics({ ...files, "src/server/store.ts": "" }, policy)
+        .unresolvedImports,
+    ).toBe(1);
+  });
+  it.each([
+    'import "./image.svg";',
+    'import "./booking-store?raw";',
+    'import "raw-loader!./booking-store";',
+    'import data from "./booking-store" with { type: "json" };',
+    'import x = require("./booking-store");',
+    'export * from "./missing.css";',
+  ])("abstains for unsupported asset/loader %s", (code) => {
+    expect(collect(code).unresolvedImports).toBeGreaterThan(0);
+  });
+  it("bounds files, bytes, total inventory and output edges", () => {
+    expect(() => collect(" ".repeat(262145))).toThrow();
+    expect(() =>
+      collect(
+        "",
+        Object.fromEntries(
+          Array.from({ length: 1001 }, (_, i) => [`src/a${i}.ts`, ""]),
+        ),
+      ),
+    ).toThrow();
+    expect(() =>
+      collect(
+        "",
+        Object.fromEntries(
+          Array.from({ length: 20 }, (_, i) => [
+            `src/a${i}.ts`,
+            " ".repeat(220000),
+          ]),
+        ),
+      ),
+    ).toThrow();
+    expect(collect('import "./booking-store";'.repeat(10001))).toMatchObject({
+      complete: false,
+      unresolvedImports: 1,
+      edges: [],
+    });
+  });
+  it("rejects duplicate direct-helper rules and packages", () => {
+    const files = {
+      "src/server/http.ts": "",
+      "src/server/booking-store.ts": "",
+    };
+    const p = {
+      boundaryRules: [...rules, { ...rules[0]!, to: "src/other.ts" }],
+      externalPackages: [],
+      stylesheetPaths: [],
+    };
+    expect(() => collectBoundaryMetrics(files, p)).toThrow("Duplicate");
+    expect(() =>
+      collectBoundaryMetrics(files, {
+        ...p,
+        boundaryRules: rules,
+        externalPackages: ["react", "react"],
+      }),
+    ).toThrow("Duplicate");
+  });
   it("accepts the complete reviewed booking fixture, including its dynamic route and stylesheet", () => {
     const root = "fixtures/booking-v1";
     function inventory(directory: string): [string, string][] {

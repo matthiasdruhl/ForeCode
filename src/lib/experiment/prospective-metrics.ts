@@ -65,7 +65,7 @@ export const MetricProtocolSchema = z
       c.addIssue({ code: "custom", message: "Duplicate rules/cases" });
   });
 export type MetricProtocol = z.infer<typeof MetricProtocolSchema>;
-const collection = z.strictObject({
+export const MetricBoundaryObservationSchema = z.strictObject({
   // Completeness is the evaluator's claim, to be independently authenticated by
   // its existing custody. A pure calculator deliberately cannot authenticate it.
   complete: z.boolean(),
@@ -73,14 +73,14 @@ const collection = z.strictObject({
   scannedRuleIds: z.array(IdSchema).max(100),
   edges: z.array(edge).max(10_000),
 });
-const authorization = z.strictObject({
+export const MetricAuthorizationCaseSchema = z.strictObject({
   caseId: IdSchema,
   outcome: z.enum(["pass", "fail", "not_run", "invalid"]),
 });
-const snapshot = z.strictObject({
+export const MetricSnapshotObservationSchema = z.strictObject({
   treeSha256: Sha256Schema,
-  boundary: collection,
-  authorization: z.array(authorization).max(100),
+  boundary: MetricBoundaryObservationSchema,
+  authorization: z.array(MetricAuthorizationCaseSchema).max(100),
 });
 export const MetricObservationsSchema = z.strictObject({
   schemaVersion: z.literal("prospective-tournament-observations.v1"),
@@ -103,8 +103,8 @@ export const MetricObservationsSchema = z.strictObject({
           "timed_out",
           "blocked",
         ]),
-        baseline: snapshot.nullable(),
-        final: snapshot.nullable(),
+        baseline: MetricSnapshotObservationSchema.nullable(),
+        final: MetricSnapshotObservationSchema.nullable(),
       }),
     )
     .length(2),
@@ -116,7 +116,10 @@ const same = (a: string[], b: string[]) =>
   a.length === b.length &&
   a.every((x) => b.includes(x));
 
-function measure(s: z.infer<typeof snapshot> | null, p: MetricProtocol) {
+function measure(
+  s: z.infer<typeof MetricSnapshotObservationSchema> | null,
+  p: MetricProtocol,
+) {
   if (!s) return { boundaryViolations: null, authorizationFailures: null };
   const b = s.boundary;
   const boundaryViolations =

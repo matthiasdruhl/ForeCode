@@ -1,3 +1,4 @@
+import { webOrigin } from "../support/browser-origins";
 import { expect, test } from "@playwright/test";
 
 test("interpretation route fails closed without issued IDs and rejects browser evidence", async ({
@@ -9,7 +10,7 @@ test("interpretation route fails closed without issued IDs and rejects browser e
     evidenceSummaryId: "23dc6959-7579-43b7-8112-5b1e0a36eb22",
     consent: true,
   };
-  const headers = { origin: "http://127.0.0.1:3100" };
+  const headers = { origin: webOrigin };
   const missing = await request.post("/api/foresight/interpret-evidence", {
     headers,
     data: input,

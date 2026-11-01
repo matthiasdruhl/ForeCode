@@ -6,8 +6,9 @@ import {
   requestSchemas,
   validateApprovedInput,
   toResearchContext,
+  validateSliceHypothesis,
 } from "@/lib/foresight/flow";
-import { validateHypothesis } from "@/lib/contracts/validation";
+import { ScientistPredictionV1Schema } from "@/lib/contracts/scientist";
 import { DecisionReportAnalysisSchema } from "@/lib/report/decision-report";
 import { META_LIMITS } from "@/lib/foresight/prompts";
 import { digest } from "./transport";
@@ -43,7 +44,7 @@ export function validateProspectiveRegistration(
   const r = ProspectiveRegistrationSchema.parse(raw),
     c = r.context;
   validateApprovedInput(c);
-  validateHypothesis(issued.hypothesis, toResearchContext(c));
+  validateSliceHypothesis(issued.hypothesis, toResearchContext(c));
   if (
     r.hypothesisId !== issued.hypothesis.id ||
     r.hypothesisSha256 !== digest(issued.hypothesis) ||
@@ -64,3 +65,75 @@ export function validateProspectiveRegistration(
     throw new Error("Invalid prospective binding");
   return r;
 }
+
+// Local, additive originals. None of these parsers confer authority.
+export const ScientistCommitmentSchema = z.strictObject({
+  schemaVersion: z.literal("scientist-initial-commitment.local.v1"),
+  study: ProspectiveRegistrationSchema.shape.study,
+  preselection: requestSchemas.propose,
+  prediction: ScientistPredictionV1Schema.pick({
+    metric: true,
+    direction: true,
+    comparison: true,
+  }),
+  studyProtocolSha256: Sha256Schema,
+  matchedConditionsSha256: Sha256Schema,
+  // Candidate-neutral measurement rules only. Issued UUID/context are bound by
+  // the later append-only supplement, without changing this original.
+  measurementPlan: z.record(z.string(), z.unknown()),
+  sourceManifest: z
+    .array(
+      z.strictObject({
+        path: z.string().min(1).max(512),
+        sha256: Sha256Schema,
+      }),
+    )
+    .min(1)
+    .max(10000),
+});
+export const RegistrationLineageSchema = z.strictObject({
+  studyId: z.string().min(1).max(128),
+  hypothesisId: OpaqueIdSchema,
+  contextSha256: Sha256Schema,
+  protocolSha256: Sha256Schema,
+  taskSha256: Sha256Schema,
+  matchedConditionsSha256: Sha256Schema,
+  evaluatorSha256: Sha256Schema,
+  suiteSha256: Sha256Schema,
+  policySha256: Sha256Schema,
+  studyProtocolSha256: Sha256Schema,
+  sourceTreeSha256: Sha256Schema,
+  sourceManifestSha256: Sha256Schema,
+  variants: z.tuple([
+    z.strictObject({
+      variant: z.literal("A"),
+      candidateId: z.string().min(1).max(128),
+      runId: z.string().uuid(),
+    }),
+    z.strictObject({
+      variant: z.literal("B"),
+      candidateId: z.string().min(1).max(128),
+      runId: z.string().uuid(),
+    }),
+  ]),
+});
+export type RegistrationLineage = z.infer<typeof RegistrationLineageSchema>;
+
+export const EvidenceLinkSchema = z.strictObject({
+  evidenceSummaryId: OpaqueIdSchema,
+  prospectiveRegistrationId: OpaqueIdSchema,
+  hypothesisId: OpaqueIdSchema,
+  hypothesisSha256: Sha256Schema,
+  contextSha256: Sha256Schema,
+  // Pins *all* study/task/protocol/evaluator identities and both source trees,
+  // run/receipt IDs, check results, and metrics via the exact public projection.
+  projectionSha256: Sha256Schema,
+  studyId: z.string().min(1).max(128),
+  taskId: z.string().min(1).max(128),
+  baselineCommit: z.string().regex(/^[a-f0-9]{40}$/),
+  candidateId: z.string().min(1).max(128),
+  publicationApprovedAt: z.number().int().nonnegative(),
+  registeredAt: z.number().int().nonnegative(),
+  expiresAt: z.number().int().nonnegative(),
+});
+export type EvidenceLink = z.infer<typeof EvidenceLinkSchema>;

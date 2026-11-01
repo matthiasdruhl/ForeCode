@@ -1,3 +1,4 @@
+import { disabledOrigin } from "../support/browser-origins";
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { createElement } from "react";
@@ -75,7 +76,7 @@ test("history is available on the provider-disabled server with only the frozen 
   page,
   request,
 }) => {
-  const response = await page.goto("http://127.0.0.1:3102/experiments");
+  const response = await page.goto(`${disabledOrigin}/experiments`);
   expect(response?.status()).toBe(200);
   expect(response?.headers()["cache-control"]).toContain("no-store");
   await expect(
@@ -83,7 +84,7 @@ test("history is available on the provider-disabled server with only the frozen 
       name: "No approved recorded evidence available",
     }),
   ).toBeVisible();
-  const repeated = await request.get("http://127.0.0.1:3102/experiments");
+  const repeated = await request.get(`${disabledOrigin}/experiments`);
   expect(repeated.status()).toBe(200);
   expect(await repeated.text()).not.toContain("synthetic-secret");
   expect(await (await request.get("/api/demo")).json()).toEqual({

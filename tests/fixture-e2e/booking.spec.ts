@@ -1,3 +1,4 @@
+import { fixtureOrigin } from "../support/browser-origins";
 import { expect, test } from "@playwright/test";
 
 test("synthetic session, owner isolation, conflicts and cancellation", async ({
@@ -7,8 +8,7 @@ test("synthetic session, owner isolation, conflicts and cancellation", async ({
   page.on("pageerror", (error) => errors.push(error.message));
   const requests: string[] = [];
   page.on("request", (request) => {
-    if (!request.url().startsWith("http://127.0.0.1:3101"))
-      requests.push(request.url());
+    if (!request.url().startsWith(fixtureOrigin)) requests.push(request.url());
   });
   expect((await page.request.get("/api/resources")).status()).toBe(200);
   expect(

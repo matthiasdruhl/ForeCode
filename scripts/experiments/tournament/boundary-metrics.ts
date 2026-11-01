@@ -35,7 +35,15 @@ export function collectBoundaryMetrics(
     ) && new Set(stylesheetPaths).size === stylesheetPaths.length,
     "Invalid stylesheet policy",
   );
-  const entries = Object.entries(files);
+  invariant(
+    new Set(rules.map((r) => r.id)).size === rules.length &&
+      new Set(rules.map((r) => `${r.from}\0${r.to}`)).size === rules.length &&
+      new Set(externalPackages).size === externalPackages.length,
+    "Duplicate metric rules/packages",
+  );
+  const entries = Object.entries(files).sort(([a], [b]) =>
+    a < b ? -1 : a > b ? 1 : 0,
+  );
   invariant(
     entries.length > 0 &&
       entries.length <= 1000 &&
@@ -124,6 +132,7 @@ export function collectBoundaryMetrics(
         (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) &&
         n.moduleSpecifier
       ) {
+        if (n.attributes) unresolvedImports++; // No custom asset/loader semantics.
         if (ts.isStringLiteral(n.moduleSpecifier))
           dependency(
             file,
@@ -163,6 +172,13 @@ export function collectBoundaryMetrics(
   }
   // The calculator deduplicates source edges. Declared side-effect stylesheets
   // create no TS edge. Dynamic/CommonJS syntax makes coverage unknown.
+  if (edges.length > 10_000)
+    return {
+      complete: false,
+      unresolvedImports: unresolvedImports + 1,
+      scannedRuleIds: rules.map((r) => r.id),
+      edges: [],
+    };
   return {
     complete:
       stylesheetPaths.every((p) => Object.hasOwn(files, p)) &&

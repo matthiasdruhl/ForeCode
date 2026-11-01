@@ -14,6 +14,7 @@ export default defineConfig({
     environment: "node",
     include: [
       "tests/unit/**/*.test.ts",
+      "tests/unit/**/*.test.tsx",
       "fixtures/booking-v1/tests/visible/**/*.test.ts",
     ],
   },

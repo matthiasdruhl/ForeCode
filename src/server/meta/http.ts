@@ -12,7 +12,7 @@ import { configuredOrigin } from "./configuration";
 import type { createForesightService } from "./service";
 
 export function createForesightHttp(
-  service: ReturnType<typeof createForesightService>,
+  service: Pick<ReturnType<typeof createForesightService>, "run" | "interpret">,
   env: () => Record<string, string | undefined>,
 ) {
   return async (

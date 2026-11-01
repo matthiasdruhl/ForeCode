@@ -120,6 +120,20 @@ test("synthetic stage lanes distinguish recorded failures, unassigned comparison
       );
     }
     if (stage === "verification") {
+      await expect(
+        page
+          .locator(".replay-arm")
+          .first()
+          .locator("details > summary")
+          .filter({ hasText: "Future task independent verification" }),
+      ).toContainText("REJECTED");
+      await expect(
+        page
+          .locator(".replay-arm")
+          .last()
+          .locator("details > summary")
+          .filter({ hasText: "Future task independent verification" }),
+      ).toContainText("VERIFIED");
       await page
         .locator(".replay-arm details")
         .first()

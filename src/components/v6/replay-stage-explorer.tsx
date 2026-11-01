@@ -12,6 +12,7 @@ import { ProvenanceKey } from "./provenance-key";
 import {
   ReplayEventDetail,
   ReplayEventProvenance,
+  replayEventStatus,
 } from "./replay-event-detail";
 
 export const stageLabels: Record<ReplayStage, string> = {
@@ -100,7 +101,10 @@ export function ReplayStageExplorer({
         <details>
           <summary>
             <strong>{event.label}</strong>
-            <span>{event.availability.replaceAll("_", " ")}</span>
+            <span>
+              {replayEventStatus(event) && <>{replayEventStatus(event)} · </>}
+              {event.availability.replaceAll("_", " ")}
+            </span>
           </summary>
           <ReplayEventDetail event={event} />
         </details>

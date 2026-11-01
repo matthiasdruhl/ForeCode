@@ -11,6 +11,20 @@ export function replayEventKind(event: ReplayEvent) {
     return "Independent observation";
   return "Recorded event";
 }
+/** Display the published status verbatim, independently of availability. */
+export function replayEventStatus(event: ReplayEvent) {
+  const data = event.data;
+  if (data.kind === "independent_verification") return data.verdict;
+  if (
+    data.kind === "independent_check" ||
+    data.kind === "coding_attempt" ||
+    data.kind === "preparation_attempt" ||
+    data.kind === "arm_outcome"
+  )
+    return data.status;
+  if (data.kind === "engineering_decision") return data.correctness;
+  return null;
+}
 export function ReplayEventProvenance({ event }: { event: ReplayEvent }) {
   const kind =
     event.basis === "unavailable_stage"

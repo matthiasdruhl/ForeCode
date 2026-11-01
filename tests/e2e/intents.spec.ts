@@ -1,3 +1,4 @@
+import { webOrigin } from "../support/browser-origins";
 import { expect, test } from "@playwright/test";
 
 test("confirm, revise, export and revoke a future requirement", async ({
@@ -57,7 +58,7 @@ test("confirm, revise, export and revoke a future requirement", async ({
 test("validation, local privacy and safe rendering", async ({ page }) => {
   const externalRequests: string[] = [];
   page.on("request", (request) => {
-    if (!request.url().startsWith("http://127.0.0.1:3100"))
+    if (!request.url().startsWith(webOrigin))
       externalRequests.push(request.url());
   });
   await page.goto("/");

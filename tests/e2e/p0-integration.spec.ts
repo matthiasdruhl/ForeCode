@@ -1,3 +1,4 @@
+import { disabledOrigin } from "../support/browser-origins";
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { browserSyntheticResponse } from "../support/foresight";
@@ -13,7 +14,7 @@ test("disabled provider offers an explicit local template through handoff withou
     if (request.url().includes("/api/foresight/"))
       providerRequests.push(request.url());
   });
-  await page.goto("http://127.0.0.1:3102");
+  await page.goto(disabledOrigin);
   await page
     .getByRole("button", { name: "Team permissions", exact: true })
     .click();

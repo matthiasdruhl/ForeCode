@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTraceContext } from "./v6/trace-context";
 import { bookingGraph } from "@/lib/foresight/booking-context";
 import type { ProposeResponse } from "@/lib/foresight/flow";
 
@@ -22,13 +23,43 @@ export function ArchitectureAtlas({
 }: {
   proposal?: ProposeResponse | null;
 }) {
-  const [arm, setArm] = useState<"A" | "B">("A");
-  const [selected, setSelected] = useState("service");
-  const [snapshot, setSnapshot] = useState<"initial" | "prepared" | "future">(
-    "initial",
-  );
+  const shared = useTraceContext();
+  const [localArm, setLocalArm] = useState<"A" | "B">("A");
+  const arm = shared?.focus.arm ?? localArm;
+  const setArm = (next: "A" | "B") => {
+    setLocalArm(next);
+    shared?.select({ arm: next, sourceId: shared.focus.sourceId });
+  };
+  const [selected, setSelected] = useState<string | null>(null);
+  const [localSnapshot, setLocalSnapshot] = useState<
+    "initial" | "prepared" | "future"
+  >("initial");
+  const snapshot = shared
+    ? ({ before: "initial", prepared: "prepared", after: "future" } as const)[
+        shared.focus.phase
+      ]
+    : localSnapshot;
+  const setSnapshot = (next: "initial" | "prepared" | "future") => {
+    setLocalSnapshot(next);
+    shared?.select({
+      phase: (
+        { initial: "before", prepared: "prepared", future: "after" } as const
+      )[next],
+      sourceId: shared.focus.sourceId,
+    });
+  };
+  const responsibilitySource = {
+    Routes: "collection",
+    Ownership: "service",
+    Policy: "service",
+    Storage: "store",
+  } as const;
+  const sourceSelection = shared
+    ? (shared.focus.sourceId ??
+      responsibilitySource[shared.focus.responsibility])
+    : (selected ?? "service");
   const selectedModule = bookingGraph.modules.find(
-    (item) => item.id === selected,
+    (item) => item.id === sourceSelection,
   )!;
   const candidate = proposal?.candidates[arm === "A" ? 0 : 1];
   const actions =
@@ -36,7 +67,7 @@ export function ArchitectureAtlas({
       (item) => item.module === selectedModule.path,
     ) ?? [];
   const dependencies = bookingGraph.edges.filter(
-    (edge) => edge.from === selected,
+    (edge) => edge.from === sourceSelection,
   );
   return (
     <section className="architecture-atlas" aria-labelledby="atlas-heading">
@@ -109,7 +140,7 @@ export function ArchitectureAtlas({
                     x2={x2 + (sameRow ? 0 : 105)}
                     y2={y2 + (sameRow ? 32 : 0)}
                     className={
-                      edge.from === selected
+                      edge.from === sourceSelection
                         ? "atlas-edge selected"
                         : "atlas-edge"
                     }
@@ -133,9 +164,23 @@ export function ArchitectureAtlas({
                   type="button"
                   className={`atlas-node${proposed ? " proposed" : ""}`}
                   style={{ left, top }}
-                  aria-pressed={selected === item.id}
+                  aria-pressed={sourceSelection === item.id}
                   aria-label={`Inspect ${item.path}`}
-                  onClick={() => setSelected(item.id)}
+                  onClick={() => {
+                    setSelected(item.id);
+                    if (shared)
+                      shared.select({
+                        sourceId: item.id,
+                        responsibility:
+                          item.id === "store" || item.id === "booking"
+                            ? "Storage"
+                            : item.kind === "route" ||
+                                item.id === "http" ||
+                                item.id === "runtime"
+                              ? "Routes"
+                              : "Ownership",
+                      });
+                  }}
                 >
                   <strong>{item.id}</strong>
                   <span>{item.path}</span>

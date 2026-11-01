@@ -1,3 +1,4 @@
+import { webOrigin, disabledOrigin } from "../support/browser-origins";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { browserSyntheticResponse } from "../support/foresight";
 import type { FlowRequest, Step, ProposeResponse } from "@/lib/foresight/flow";
@@ -323,7 +324,7 @@ test("production API rejects missing consent without browser response injection"
   await page.goto("/");
   // This checks the production route's consent gate with no synthetic response.
   const response = await page.request.post("/api/foresight/propose", {
-    headers: { origin: "http://127.0.0.1:3100" },
+    headers: { origin: webOrigin },
     data: { consent: false },
   });
   expect(response.status()).toBe(400);
@@ -337,7 +338,7 @@ test("disabled provider keeps the exact payload review accessible without dispat
   page.on("request", (request) => {
     if (request.url().includes("/api/foresight/")) requests.push(request.url());
   });
-  await page.goto("http://127.0.0.1:3102");
+  await page.goto(disabledOrigin);
   await page
     .getByRole("button", { name: "Team permissions", exact: true })
     .click();

@@ -1,3 +1,4 @@
+import { disabledOrigin } from "../support/browser-origins";
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { createElement } from "react";
@@ -66,7 +67,7 @@ test("navigate the empty certificate boundary with keyboard and no provider", as
   await page.getByRole("link", { name: "Back to workspace" }).click();
   await expect(page.getByLabel("Short title")).toBeVisible();
   expect(calls).toEqual([]);
-  const response = await request.get("http://127.0.0.1:3102/api/demo");
+  const response = await request.get(`${disabledOrigin}/api/demo`);
   expect(response.status()).toBe(200);
   expect(response.headers()["cache-control"]).toBe("no-store");
   expect(await response.json()).toEqual({
@@ -75,7 +76,7 @@ test("navigate the empty certificate boundary with keyboard and no provider", as
     certificates: [],
     mode: "recorded",
   });
-  const disabled = await request.get("http://127.0.0.1:3102/certificates");
+  const disabled = await request.get(`${disabledOrigin}/certificates`);
   expect(disabled.status()).toBe(200);
   expect(disabled.headers()["cache-control"]).toContain("no-store");
   expect(await disabled.text()).not.toContain("synthetic-secret");

@@ -49,8 +49,13 @@ function Arrow() {
 
 export function IntentWorkspace({
   configuration,
+  onResearchRevision,
 }: {
   configuration: PublicForesightConfiguration;
+  onResearchRevision?: (
+    revision: number,
+    confirmedTitle: string | null,
+  ) => void;
 }) {
   const metaStatus = configuration.status;
   const [researchRevision, setResearchRevision] = useState(0);
@@ -86,6 +91,7 @@ export function IntentWorkspace({
       ? reviseIntent(previous, parsed.data, new Date())
       : confirmIntent(parsed.data, `intent-${crypto.randomUUID()}`, new Date());
     setResearchRevision((revision) => revision + 1);
+    onResearchRevision?.(researchRevision + 1, intent.title);
     setIntents((current) =>
       previous
         ? current.map((item) => (item.id === intent.id ? intent : item))
@@ -103,6 +109,7 @@ export function IntentWorkspace({
 
   function edit(intent: IntentV1) {
     setResearchRevision((revision) => revision + 1);
+    onResearchRevision?.(researchRevision + 1, null);
     setEditingId(intent.id);
     setInput({
       title: intent.title,
@@ -119,6 +126,10 @@ export function IntentWorkspace({
 
   function revoke(intent: IntentV1) {
     setResearchRevision((revision) => revision + 1);
+    onResearchRevision?.(
+      researchRevision + 1,
+      confirmed.find((item) => item.id !== intent.id)?.title ?? null,
+    );
     setIntents((current) =>
       current.map((item) =>
         item.id === intent.id ? revokeIntent(item, new Date()) : item,

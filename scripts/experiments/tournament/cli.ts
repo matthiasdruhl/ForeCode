@@ -1,4 +1,5 @@
 import path from "node:path";
+import { inspectApprovedTournamentPublication } from "../../../src/server/artifacts/recording-catalog";
 import { fileURLToPath } from "node:url";
 import { protectedRead, privateDirectory } from "../artifacts/files";
 import { teamCompositionBlockers } from "./supervised-team";
@@ -23,6 +24,7 @@ export async function tournamentCli(args: readonly string[]): Promise<number> {
     process.stdout.write(
       "Developer-local, no-execution tournament preparation.\n" +
         "  --status                 report unavailable independent gates\n" +
+        "  --publication-status     read configured disclosure/receipt availability (safe codes only)\n" +
         "  --plan /absolute/plan.json validate a private local plan and report missing evidence\n" +
         "  --future-draft /absolute/draft.json validate task/oracle/preparation bindings (always blocked)\n" +
         "  --definition /absolute/study-root validate preselection definition (no B required)\n" +
@@ -34,6 +36,15 @@ export async function tournamentCli(args: readonly string[]): Promise<number> {
         "No approval, agent, provider, grader, artifact registration or certificate is invoked.\n",
     );
     return 0;
+  }
+  if (args.length === 1 && args[0] === "--publication-status") {
+    const inspection = await inspectApprovedTournamentPublication();
+    process.stdout.write(canonicalJson(inspection) + "\n");
+    return inspection.state === "available" && inspection.unavailableCount === 0
+      ? 0
+      : inspection.state === "empty"
+        ? 2
+        : 1;
   }
   if (args.length === 1 && args[0] === "--status") {
     process.stdout.write(

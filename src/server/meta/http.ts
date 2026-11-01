@@ -1,4 +1,5 @@
 import "server-only";
+import { assertLocalResearchDeployment } from "./deployment";
 import { InterpretRequestSchema } from "@/lib/foresight/interpretation/contracts";
 import {
   requestSchemas,
@@ -27,7 +28,9 @@ export function createForesightHttp(
           InterpretRequestSchema,
           origin,
         );
+        assertLocalResearchDeployment(env(), request);
         const output = await service.interpret(input, request.signal);
+        assertLocalResearchDeployment(env(), request);
         return Response.json(output, {
           headers: {
             "Cache-Control": "no-store",
@@ -40,7 +43,9 @@ export function createForesightHttp(
         requestSchemas[step],
         origin,
       );
+      assertLocalResearchDeployment(env(), request);
       const output = await service.run(step, input, request.signal);
+      assertLocalResearchDeployment(env(), request);
       return Response.json(output, {
         headers: {
           "Cache-Control": "no-store",

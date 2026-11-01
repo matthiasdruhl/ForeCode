@@ -1,4 +1,5 @@
 import "server-only";
+import { validateProspectiveRegistration } from "./prospective-lineage";
 import { z } from "zod";
 import { Sha256Schema } from "@/lib/contracts/common";
 import { MetaHypothesisV1Schema } from "@/lib/contracts/scientist";
@@ -21,6 +22,7 @@ export type IssuedHypothesis = {
 // root. It can only narrow an already freshly authenticated #45 publication.
 export const EvidenceLinkSchema = z.strictObject({
   evidenceSummaryId: OpaqueIdSchema,
+  prospectiveRegistrationId: OpaqueIdSchema,
   hypothesisId: OpaqueIdSchema,
   hypothesisSha256: Sha256Schema,
   contextSha256: Sha256Schema,
@@ -51,16 +53,31 @@ const limitations = [
 export function createEvidenceAdapter(
   options: {
     loadReports?: () => Promise<DecisionReportCatalog>;
+    // Both resolvers must freshly authenticate existing server-owned custody,
+    // authorization and revocations. Never expose them as request dependencies.
     resolveLink?: (id: string) => Promise<unknown>;
+    resolveRegistration?: (id: string) => Promise<unknown>;
   } = {},
 ) {
   const loadReports = options.loadReports ?? loadApprovedDecisionReports;
   // #45 has no hypothesis/candidate/context lineage. No text matching, client
   // digest, environment switch or historical backfill can enable production.
   const resolveLink = options.resolveLink ?? (async () => null);
+  const resolveRegistration = options.resolveRegistration ?? (async () => null);
   return async (id: string, issued: IssuedHypothesis, now: number) => {
     try {
       const link = EvidenceLinkSchema.parse(await resolveLink(id));
+      const registration = validateProspectiveRegistration(
+        await resolveRegistration(link.prospectiveRegistrationId),
+        issued,
+        now,
+      );
+      if (
+        registration.id !== link.prospectiveRegistrationId ||
+        registration.registeredAt !== link.registeredAt ||
+        link.expiresAt > registration.expiresAt
+      )
+        throw new Error("Unregistered lineage");
       const h = issued.hypothesis;
       if (
         link.evidenceSummaryId !== id ||
@@ -101,6 +118,9 @@ export function createEvidenceAdapter(
         report.assumedCriterion !== null
       )
         throw new Error("Wrong study");
+      for (const [key, value] of Object.entries(registration.study))
+        if (i[key as keyof typeof i] !== value)
+          throw new Error("Prospective study changed");
       const starts = [
         ...o.attempts.map((a) => a.startedAt),
         ...o.preparationAttempts.map((a) => a.startedAt),

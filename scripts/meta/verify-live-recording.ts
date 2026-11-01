@@ -1,8 +1,10 @@
 // Offline recording verification only: no credentials, provider calls or issuance.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, lstatSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { verifyManifest, recordingFiles } from "./recording-manifest";
 import { z } from "zod";
 import {
   requestSchemas,
@@ -31,16 +33,14 @@ const ObservationSchema = z.object({
   originalAssistantContent: z.string().min(2).max(65_536),
 });
 
-function verify(directory: string) {
-  function read(name: string): unknown {
-    const path = resolve(directory, name);
-    assert(statSync(path).size <= 262_144, "Recording file exceeds bound.");
-    return JSON.parse(readFileSync(path, "utf8"));
-  }
+export function verifyRecording(files: Record<string, unknown>) {
+  const read = (name: string): unknown => {
+    assert(Object.hasOwn(files, name), "Missing recording file.");
+    return files[name];
+  };
+  verifyManifest(files);
   const manifest = z
-    .object({
-      files: z.record(z.string(), z.string().regex(/^[a-f0-9]{64}$/)),
-    })
+    .object({ files: z.record(z.string(), z.string()) })
     .parse(read("manifest.json"));
   const records = new Map<
     Step,
@@ -143,17 +143,38 @@ function verify(directory: string) {
     ...challengeContext,
     hypotheses: hypothesis.response.hypotheses,
   });
-  console.log(
-    "PASS: offline schemas, exact handoffs, original model text, payload/context/file digests and recorded provenance consistency. No provider call. This does not independently authenticate the historical HTTPS exchange or restore expired server bindings.",
-  );
+  return "PASS: offline schemas, source/model/prompt pins, manifest/observation chronology, identities, exact handoffs, original model text, token/cost arithmetic and complete file digests. No provider call. This does not independently authenticate the historical HTTPS exchange or restore expired server bindings. Cleanup, concealed attempts, historical source execution, pricing authenticity and invoices remain unverified.";
 }
 
-try {
-  assert(process.argv.length === 3, "Provide one recording directory.");
-  verify(resolve(process.argv[2]!));
-} catch {
-  console.error(
-    "FAIL: live recording verification. No provider call was made.",
+export function verifyRecordingDirectory(directory: string) {
+  assert.deepEqual(
+    readdirSync(directory).sort(),
+    [...recordingFiles].sort(),
+    "Unexpected or missing files.",
   );
-  process.exitCode = 1;
+  const files: Record<string, unknown> = {};
+  for (const name of recordingFiles) {
+    const path = resolve(directory, name);
+    const stat = lstatSync(path);
+    assert(
+      stat.isFile() && !stat.isSymbolicLink() && stat.size <= 262_144,
+      "Invalid recording file.",
+    );
+    files[name] = JSON.parse(readFileSync(path, "utf8"));
+  }
+  return verifyRecording(files);
+}
+if (
+  process.argv[1] &&
+  resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+) {
+  try {
+    assert(process.argv.length === 3, "Provide one recording directory.");
+    console.log(verifyRecordingDirectory(resolve(process.argv[2]!)));
+  } catch {
+    console.error(
+      "FAIL: live recording verification. No provider call was made.",
+    );
+    process.exitCode = 1;
+  }
 }

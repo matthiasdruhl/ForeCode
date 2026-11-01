@@ -2355,3 +2355,8 @@ Observed on Node v24.16.0 and locked dependencies:
 Initial sandbox fetch failed DNS; authorized fetch succeeded. Connected GitHub inspection confirmed each input PR’s green Foundation workflow; these do not substitute for exact final integration-head CI, which is linked with the final delivery SHA. Full local checks used authorized local-process permissions for existing socket/browser tests; no test or assertion was weakened.
 
 Operational limits and next ticket: human review of this integration PR, then a separately authorized private pre-selection approval package and exact-source measurement/runtime admissions. No genuine registration, coding-agent run, protected A/B, paid inference, private historical outcome access, installation, deployment or disclosure was performed. No automatic merge. Full frontend remains honest NOT RUN / INSUFFICIENT EVIDENCE until authentic approved data exist. Historical logs above retain their original source identities and claims.
+
+
+### PR57 validation-table correction
+
+Corrected the final full-check and focused-test rows from pending to exit 0, verified against retained final logs: 1,539 tests / 68 files and 465 tests / 14 files respectively. Documentation only; implementation and prior validation remain unchanged. Changed-document Prettier and `git diff --check`: exit 0. Full application tests were not rerun for this text correction. Next step: human review of PR57; no automatic merge.

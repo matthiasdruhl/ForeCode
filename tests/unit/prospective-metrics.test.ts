@@ -224,6 +224,15 @@ describe("prospective boundary and authorization measurement", () => {
     expect(() =>
       MetricProtocolSchema.parse({ ...fixture().p, verified: true }),
     ).toThrow();
+    const ids = fixture().p;
+    ids.authorizationCaseIds.push(ids.authorizationCaseIds[0]!);
+    expect(() => MetricProtocolSchema.parse(ids)).toThrow();
+    const rules = fixture().p;
+    rules.boundaryRules.push({
+      ...rules.boundaryRules[0]!,
+      to: "src/other.ts",
+    });
+    expect(() => MetricProtocolSchema.parse(rules)).toThrow();
     expect(() =>
       MetricProtocolSchema.parse({
         ...fixture().p,

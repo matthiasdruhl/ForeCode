@@ -231,6 +231,7 @@ test("all six memo outcomes render with equal dignity from synthetic server DTOs
       createElement(DecisionMemo, {
         catalog,
         studyId: p.studyId,
+        projectionSha256: analysis.evidenceReferences?.projectionSha256,
         inspect: () => {},
       }),
     );

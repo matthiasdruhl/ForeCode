@@ -4,6 +4,7 @@ import {
   loadApprovedDecisionReports,
 } from "@/server/artifacts/recording-catalog";
 import { publicForesightConfiguration } from "@/server/meta/configuration";
+import { composeReplayPresentation } from "@/server/artifacts/replay-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +13,10 @@ export default async function Home() {
     loadApprovedTournamentRecordings(),
     loadApprovedDecisionReports(),
   ]);
+  const presentation = composeReplayPresentation(tournaments, reports);
   return (
     <ResearchExperience
-      tournaments={tournaments}
-      reports={reports}
+      {...presentation}
       configuration={publicForesightConfiguration(process.env)}
     />
   );

@@ -8,16 +8,20 @@ export function DecisionMemo({
   catalog,
   studyId,
   definitionSha256,
+  projectionSha256,
   inspect,
 }: {
   catalog: DecisionReportCatalog;
   studyId?: string;
   definitionSha256?: string;
+  projectionSha256?: string;
   inspect: (question: EvidenceQuestion, trigger: string) => void;
 }) {
   const report = catalog.reports.find(
     (item) =>
       item.analysis.identity?.studyId === studyId &&
+      Boolean(projectionSha256) &&
+      item.analysis.evidenceReferences?.projectionSha256 === projectionSha256 &&
       (!definitionSha256 ||
         item.analysis.identity?.definitionSha256 === definitionSha256),
   );

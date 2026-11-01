@@ -116,6 +116,7 @@ test("v6 responsive story and report print have no document overflow or console 
       }
     }
   }
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.emulateMedia({ media: "print" });
   await expect(page.locator(".decision-paper")).toBeVisible();
   await expect(page.locator(".research-header")).toBeHidden();
@@ -125,6 +126,7 @@ test("v6 responsive story and report print have no document overflow or console 
     path: info.outputPath("report-print.png"),
     fullPage: true,
   });
+  await page.pdf({ path: info.outputPath("report-print.pdf"), format: "A4" });
   expect(errors).toEqual([]);
 });
 

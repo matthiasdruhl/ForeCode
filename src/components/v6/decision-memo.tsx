@@ -10,12 +10,14 @@ export function DecisionMemo({
   definitionSha256,
   projectionSha256,
   inspect,
+  requirement = "Team permissions: delegate who can create, reschedule and cancel bookings.",
 }: {
   catalog: DecisionReportCatalog;
   studyId?: string;
   definitionSha256?: string;
   projectionSha256?: string;
   inspect: (question: EvidenceQuestion, trigger: string) => void;
+  requirement?: string;
 }) {
   const report = catalog.reports.find(
     (item) =>
@@ -39,9 +41,19 @@ export function DecisionMemo({
       </header>
       <div className="memo-intro">
         <p className="memo-state">{memo.state}</p>
+        <p className="memo-recommendation">
+          RECOMMENDATION / {report?.analysis.decision ?? "INCONCLUSIVE"}
+        </p>
         <h1 id="memo-headline">{memo.headline}</h1>
         <p className="memo-lead">{memo.basis}</p>
       </div>
+      <section
+        className="memo-subject"
+        aria-label="Future requirement under evaluation"
+      >
+        <span className="memo-kicker">THE FUTURE REQUIREMENT</span>
+        <p>{report?.analysis.question ?? requirement}</p>
+      </section>
       <dl className="memo-facts">
         {[
           ["Decision scope", memo.scope],
@@ -54,6 +66,47 @@ export function DecisionMemo({
           </div>
         ))}
       </dl>
+      <section
+        className="memo-observations"
+        aria-label="Independent correctness observations"
+      >
+        <h2>Independent correctness</h2>
+        <p>
+          Per-arm required-check outcomes. These are separate from the
+          architectural recommendation.
+        </p>
+        <div className="memo-arm-pair">
+          {(["A", "B"] as const).map((variant) => {
+            const arm = report?.analysis.observations?.arms.find(
+              (item) => item.variant === variant,
+            );
+            return (
+              <div key={variant}>
+                <span>
+                  {variant} / {variant === "A" ? "CURRENT" : "PREPARED"}
+                </span>
+                <strong>{arm?.verdict ?? "Unknown"}</strong>
+                <p>
+                  {arm?.receiptId ? (
+                    <>
+                      Receipt: <code>{arm.receiptId}</code>
+                    </>
+                  ) : (
+                    "No matching protected receipt available."
+                  )}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        <button
+          id="memo-observations"
+          className="memo-inspect"
+          onClick={() => inspect("checks", "memo-observations")}
+        >
+          Inspect checks & receipt bindings <span aria-hidden="true">↗</span>
+        </button>
+      </section>
       <section className="memo-reasons" aria-label="Evidence reasons">
         {memo.reasons.map((reason, index) => {
           const target = memo.targets[index] ?? "checks";
@@ -83,40 +136,122 @@ export function DecisionMemo({
           );
         })}
       </section>
-      {report?.analysis.observations && (
-        <section className="memo-effort">
-          <h2>Effort, with preparation included.</h2>
-          <dl>
-            {report.analysis.observations.arms.map((arm) => (
-              <div key={arm.variant}>
-                <dt>{arm.variant} / Preparation → Downstream → Total</dt>
-                <dd>
-                  {[
-                    arm.preparation.elapsedMs,
-                    arm.downstream.elapsedMs,
-                    arm.total.elapsedMs,
-                  ]
-                    .map((value) =>
-                      value === null
-                        ? "Unknown"
-                        : `${value.toLocaleString("en-US")} ms`,
-                    )
-                    .join(" → ")}
-                </dd>
-              </div>
-            ))}
-          </dl>
-          <p>
-            Required-check correctness and effort are separate observations. A
-            correctness tie does not establish an efficiency preference.
-          </p>
-        </section>
-      )}
+      <section className="memo-effort">
+        <h2>Effort, with preparation included.</h2>
+        <div
+          className="memo-effort-scroll"
+          role="region"
+          aria-label="Preparation and downstream elapsed time"
+          tabIndex={0}
+        >
+          <table>
+            <caption>
+              Recorded elapsed time (ms). Missing measurements remain Unknown.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Approach</th>
+                <th scope="col">Preparation</th>
+                <th scope="col">Downstream</th>
+                <th scope="col">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(["A", "B"] as const).map((variant) => {
+                const arm = report?.analysis.observations?.arms.find(
+                  (item) => item.variant === variant,
+                );
+                return (
+                  <tr key={variant}>
+                    <th scope="row">
+                      {variant} / {variant === "A" ? "Current" : "Prepared"}
+                    </th>
+                    {(["preparation", "downstream", "total"] as const).map(
+                      (phase) => (
+                        <td key={phase}>
+                          {arm?.[phase].elapsedMs == null
+                            ? "Unknown"
+                            : arm[phase].elapsedMs.toLocaleString("en-US")}
+                        </td>
+                      ),
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Required-check correctness and effort are separate observations. A
+          correctness tie does not establish an efficiency preference.
+        </p>
+        <button
+          id="memo-effort"
+          className="memo-inspect"
+          onClick={() => inspect("source", "memo-effort")}
+        >
+          Inspect source & full effort accounting{" "}
+          <span aria-hidden="true">↗</span>
+        </button>
+      </section>
       <section className="memo-next">
         <span className="memo-kicker">WHAT TO DO NEXT</span>
         <h2>Make the next decision testable.</h2>
         <p>{memo.next}</p>
       </section>
+      {report?.analysis.identity && (
+        <section
+          className="memo-identities"
+          aria-label="Exact evaluation subject"
+        >
+          <h2>Exact evaluation subject</h2>
+          <dl>
+            {[
+              ["Study", report.analysis.identity.studyId],
+              ["Task", report.analysis.identity.taskId],
+              [
+                "Task definition",
+                report.analysis.identity.taskDefinitionSha256,
+              ],
+              ["Conditions", report.analysis.identity.definitionSha256],
+              ["Protocol", report.analysis.identity.protocolOriginalSha256],
+              [
+                "Publication",
+                report.analysis.evidenceReferences?.projectionSha256,
+              ],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <dt>{label}</dt>
+                <dd>
+                  <code>{value}</code>
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {report.analysis.observations?.arms.map((arm) => (
+            <dl key={arm.variant} aria-label={`${arm.variant} source lineage`}>
+              <div>
+                <dt>{arm.variant} / Initial tree</dt>
+                <dd>
+                  <code>{arm.initialTreeSha256 ?? "Unavailable"}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>{arm.variant} / Final tree</dt>
+                <dd>
+                  <code>{arm.finalTreeSha256 ?? "Unavailable"}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>{arm.variant} / Run</dt>
+                <dd>
+                  <code>{arm.runId ?? "Unavailable"}</code>
+                </dd>
+              </div>
+            </dl>
+          ))}
+        </section>
+      )}
       <section className="memo-limits">
         <h2>Scope & limitations</h2>
         <ul>

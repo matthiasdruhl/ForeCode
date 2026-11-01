@@ -1,4 +1,8 @@
 import type { TournamentReplay, TournamentReplayCatalog } from "@/lib/replay";
+import {
+  ReplayEventDetail,
+  ReplayEventProvenance,
+} from "./replay-event-detail";
 
 const labels = {
   hypothesis: "Hypothesis",
@@ -45,35 +49,8 @@ export function ReplayHistory({
                       </strong>
                       {" · "}
                       {event.availability.replaceAll("_", " ")}
-                      <p>{event.description}</p>
-                      {event.timing.state !== "unknown" && (
-                        <p>
-                          Interval: {event.timing.state.replaceAll("_", " ")}
-                          {" · "}
-                          {event.timing.startedAt ?? "start unknown"}
-                          {" → "}
-                          {event.timing.endedAt ?? "end unknown"}
-                        </p>
-                      )}
-                      {event.evidence.length > 0 && (
-                        <details>
-                          <summary>Published evidence identities</summary>
-                          <ul>
-                            {event.evidence.map((reference, index) => (
-                              <li key={index}>
-                                {reference.selector.kind.replaceAll("_", " ")}
-                                {reference.runId && ` · run ${reference.runId}`}
-                                {reference.receiptId &&
-                                  ` · receipt ${reference.receiptId}`}
-                                {reference.sourceTreeSha256 &&
-                                  ` · tree ${reference.sourceTreeSha256}`}
-                                {reference.checkId &&
-                                  ` · check ${reference.checkId}`}
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
-                      )}
+                      <ReplayEventProvenance event={event} />
+                      <ReplayEventDetail event={event} />
                     </li>
                   ))}
               </ul>
@@ -105,6 +82,11 @@ export function ReplayHistory({
           <ul aria-label="Replay limitations">
             {replay.limitations.map((limitation) => (
               <li key={limitation}>{limitation}</li>
+            ))}
+          </ul>
+          <ul aria-label="Replay blockers and deviations">
+            {[...replay.blockers, ...replay.deviations].map((item, index) => (
+              <li key={index}>{item}</li>
             ))}
           </ul>
         </>

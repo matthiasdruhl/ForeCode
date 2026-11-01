@@ -28,6 +28,15 @@ export function SourceHistory({
       <h2>
         {focus.arm} / {focus.phase}
       </h2>
+      <p className="source-phase-meaning">
+        {focus.phase === "before"
+          ? "Shared original source, before either approach responds to the future task."
+          : focus.phase === "prepared"
+            ? focus.arm === "A"
+              ? "A retains its original starting source; this does not represent an additional preparation run."
+              : "B’s initial tree identifies its prepared starting source when published."
+            : "The selected arm’s final source identity after downstream work, when published."}
+      </p>
       <p>
         {tree
           ? "The publication provides this source identity; a complete source snapshot and dependency topology are not published."
@@ -39,7 +48,9 @@ export function SourceHistory({
           <dd>
             <code>{tree}</code>
           </dd>
-          <dt>Downstream run for this source arm</dt>
+          <dt>
+            Downstream run for this source arm (not the baseline evaluator run)
+          </dt>
           <dd>{sourceArm?.runId ?? "Unavailable"}</dd>
           <dt>Receipt</dt>
           <dd>
@@ -55,7 +66,11 @@ export function SourceHistory({
         focus.arm === "B" &&
         study?.sourceComparison && (
           <>
-            <h3>Approved preparation file comparison</h3>
+            <h3>Published file comparison · not a phase snapshot</h3>
+            <p>
+              The published file comparison is arm-unassigned. It does not
+              establish phase snapshots or a dependency topology.
+            </p>
             <ul className="source-file-list">
               {study.sourceComparison.map((file) => (
                 <li key={file.path}>

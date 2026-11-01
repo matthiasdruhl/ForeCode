@@ -58,14 +58,14 @@ Print CSS removes navigation, workbench chrome and inspection/print buttons, pre
 
 ## Validation
 
-Final source commit under test: `2334d9abf7628dd508f99379d46501b0f62d3fa8`. Subsequent documentation/screenshot commits do not change application or test source.
+Final source commit under test: `6f111676f32a7141a16b8555187934de80948f69`. Subsequent documentation/screenshot commits do not change application or test source.
 
 | Command / check                                                           | Result                                                                                                               |
 | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Node runtime                                                              | `v24.16.0`                                                                                                           |
 | `npm ci --ignore-scripts`                                                 | Exit 0; locked dependencies installed                                                                                |
 | `npm run check`                                                           | Exit 0; lint, strict typechecks, 1,372 tests across 64 files, both production builds                                 |
-| `FORECODE_E2E_PORT=3310 FORECODE_E2E_DISABLED_PORT=3312 npm run test:e2e` | Exit 0; 72 browser cases passed                                                                                      |
+| `FORECODE_E2E_PORT=3310 FORECODE_E2E_DISABLED_PORT=3312 npm run test:e2e` | Exit 0; 74 browser cases passed                                                                                      |
 | `FORECODE_FIXTURE_E2E_PORT=3311 npm run test:fixture-e2e`                 | Exit 0; 2 booking browser cases passed                                                                               |
 | `PLAN_REFERENCE_ROOT=../AgentHarness-Planning npm run test:plan`          | Exit 0; 128 frozen-reference parity cases passed                                                                     |
 | Focused frontend/component tests                                          | Exit 0; 6 frontend tests passed (including six report outcome cases and source binding assertions)                   |
@@ -73,7 +73,7 @@ Final source commit under test: `2334d9abf7628dd508f99379d46501b0f62d3fa8`. Subs
 | `git diff --check`                                                        | Exit 0                                                                                                               |
 | Provider-disabled production screenshot/console inspection                | Exit 0; 18 chapter/viewport combinations; zero console errors, page errors, unexpected requests or document overflow |
 
-Browser coverage includes 1440×900, 768px tablet and 390×844 mobile; keyboard/Space/Enter; reduced motion; all direct chapter links; Back/Forward; exact evidence-return focus; intent revision invalidation; bounded-source focus across phases; missing study/source states; six synthetic report outcomes; no page-level horizontal overflow; and print-media layout. Original consent, stale response, provider gating, intent lifecycle, read-only verification/certificate and booking tests remain enabled.
+Browser coverage includes 1440×900, 768px tablet and 390×844 mobile; keyboard/Space/Enter; reduced motion; all direct chapter links; Back/Forward; exact evidence-return focus; intent revision invalidation; bounded-source focus across phases; missing study/source states; six synthetic report outcomes; no page-level horizontal overflow; and print-media layout. Skip links, the landing comparison anchor, the Lab intent anchor and the legacy evidence hash retain the correct chapter and focus. Original consent, stale response, provider gating, intent lifecycle, read-only verification/certificate and booking tests remain enabled.
 
 Initial environment-only attempts are retained honestly: restricted `npm ci` could not resolve the registry; offline legacy-peer installation omitted Vite; normal locked installation with network access succeeded. Restricted runtime tests could not bind local sockets; the unchanged suite passed with local execution permissions. Default browser ports were already used by other worktrees. Optional test-port variables now isolate this worktree while preserving default ports and all assertions. No existing server was killed or reused.
 

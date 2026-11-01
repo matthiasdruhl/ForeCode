@@ -22,6 +22,8 @@ import type { PublicForesightConfiguration } from "@/server/meta/configuration";
 import type { TournamentCatalog } from "@/server/artifacts/tournament-recordings";
 import type { DecisionReportCatalog } from "@/server/artifacts/decision-reports";
 import type { PublicTournament } from "@/lib/experiment/tournament-publication";
+import type { TournamentReplayCatalog } from "@/lib/replay";
+import { ReplayHistory } from "./replay-history";
 
 const chapters = [
   ["case", "Case"],
@@ -80,16 +82,21 @@ export function ResearchExperience({
   configuration,
   tournaments,
   reports,
+  replays,
 }: {
   configuration: PublicForesightConfiguration;
   tournaments: TournamentCatalog;
   reports: DecisionReportCatalog;
+  replays: TournamentReplayCatalog;
 }) {
   const [chapter, setChapter] = useState<Chapter>("case");
   const [revision, setRevision] = useState(0);
   const [confirmedTitle, setConfirmedTitle] = useState<string | null>(null);
   const [studyId, setStudyId] = useState(tournaments.studies[0]?.studyId);
   const study = tournaments.studies.find((item) => item.studyId === studyId);
+  const replay = replays.replays.find(
+    (item) => item.studyId === study?.studyId,
+  );
   const contextIdentity = traceIdentity(study, revision);
   const [selection, setSelection] = useState(() =>
     initialTraceFocus(contextIdentity),
@@ -606,6 +613,7 @@ export function ResearchExperience({
               ))}
             </div>
             <SourceHistory study={study} focus={focus} />
+            <ReplayHistory catalog={replays} replay={replay} />
             <button
               id="time-source"
               className="v6-text-link"
@@ -674,6 +682,7 @@ export function ResearchExperience({
               catalog={reports}
               studyId={studyId}
               definitionSha256={study?.definitionSha256}
+              projectionSha256={replay?.projectionSha256}
               inspect={inspect}
             />
           </section>

@@ -135,6 +135,7 @@ describe("v6 presentation boundaries", () => {
           <DecisionMemo
             catalog={catalog}
             studyId={p.studyId}
+            projectionSha256={analysis.evidenceReferences?.projectionSha256}
             inspect={() => {}}
           />,
         );

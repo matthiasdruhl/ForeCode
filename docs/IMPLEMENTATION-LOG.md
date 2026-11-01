@@ -2334,3 +2334,24 @@ Next ticket: review these local fixes and run socket/browser checks in the norma
 ### Authorized GitHub delivery
 
 The owner subsequently authorized staging, committing and pushing these nine reviewed files to the existing `codex/meta-backend-readiness` branch for PR49. `git diff --check` passes and the branch still starts at reviewed head `96621912e45e2c49958cdf2a16747db746639e84`; the validation results and restricted-environment limitations above remain applicable. No merge, paid inference or runtime activation is authorized by this delivery instruction.
+
+
+## PR52–55 integration (November 1, 2026)
+
+The owner requested reconciliation and delivery of all four workstreams in a fresh integration PR. Fresh main was `03f5deb2521facb58c26fd3fcf4bc6199bd8b210`; the isolated `ForeCode-Integration` worktree uses `codex/integrate-scientist-metrics-v64`. The four exact heads are recorded in [conflict report](INTEGRATION-52-55-REPORT.md). No other checkout was modified or reset.
+
+The shared canonical matched-conditions projection is now distinct from the authenticated full-definition subject. Registration validates the composed metric protocol and supplies authenticated initial commitment/binding metadata. A private fresh `resolveRegistered` seam ties both complete metric assessment passes to the same live enrolled Scientist context and existing authority, preserving pre-generation candidate-neutral commitment and later issued binding. Metric originals must remain unexpired at assessment as well as valid at the original event. No public DTO or deterministic verdict semantics changed.
+
+Observed on Node v24.16.0 and locked dependencies:
+
+- `npm ci --ignore-scripts --no-audit --no-fund --cache /private/tmp/forecode-integration-npm-cache`: exit 0, 377 packages. Initial offline attempt exited 1 (`ENOTCACHED`); fixed by standard locked installation without hooks or lock changes.
+- `META_CALLS_ENABLED=false META_SPENDING_APPROVED=false NEXT_TELEMETRY_DISABLED=1 npm run check`: exit 0, lint, both strict typechecks, 1,539 tests / 68 files and both production builds. Earlier combined check passed 1,537 tests before two additional expiry controls.
+- `npm run test:e2e`: exit 0, 74 application browser cases. `npm run test:fixture-e2e`: exit 0, 2 fixture browser cases. Provider transport blocked by the existing preload. Desktop/mobile, keyboard/history/focus, reduced motion, responsive/print and six decision variants preserved.
+- `PLAN_REFERENCE_ROOT=../AgentHarness-Planning npm run test:plan`: exit 0, 128 immutable-pin parity cases. The actual external checkout contains normative commit `695e68a40b5f5009c9b06b83a1181e18cd6d0223`.
+- Exact focused command in [validation report](INTEGRATION-52-55-VALIDATION.md): exit 0, 465 tests / 14 files; the new genuine merged-interface synthetic test contributes 14 cases. Existing security and resource ceilings retained.
+- Read-only tournament `cli.ts --status`, `team-cli.ts --status`, `cli.ts --publication-status`: exit 2 each, expected BLOCK. Execution remains DISABLED; publication empty with zero available/unavailable and no failures. Scientist production resolvers remain null/unprovisioned.
+- Changed-file Prettier and `git diff --check`: exit 0. Frozen contracts/task/grader assertions, policy semantics, lockfiles and historical recording bytes unchanged.
+
+Initial sandbox fetch failed DNS; authorized fetch succeeded. Connected GitHub inspection confirmed each input PR’s green Foundation workflow; these do not substitute for exact final integration-head CI, which is linked with the final delivery SHA. Full local checks used authorized local-process permissions for existing socket/browser tests; no test or assertion was weakened.
+
+Operational limits and next ticket: human review of this integration PR, then a separately authorized private pre-selection approval package and exact-source measurement/runtime admissions. No genuine registration, coding-agent run, protected A/B, paid inference, private historical outcome access, installation, deployment or disclosure was performed. No automatic merge. Full frontend remains honest NOT RUN / INSUFFICIENT EVIDENCE until authentic approved data exist. Historical logs above retain their original source identities and claims.

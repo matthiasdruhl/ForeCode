@@ -3,6 +3,11 @@ import { z } from "zod";
 import { Sha256Schema } from "@/lib/contracts/common";
 import { MetaHypothesisV1Schema } from "@/lib/contracts/scientist";
 import { invariant } from "@/lib/contracts/validation";
+import { matchedConditionsDigest } from "@/lib/experiment/study-identities";
+import {
+  MetricProtocolSchema,
+  type MetricProtocol,
+} from "@/lib/experiment/prospective-metrics";
 import {
   validateFutureTask,
   futureTaskDigest,
@@ -28,7 +33,12 @@ export const ScientistBindingSchema = z.strictObject({
   lineage: RegistrationLineageSchema,
 });
 export type AuthenticatedRegistration = Readonly<
-  z.infer<typeof ScientistBindingSchema>
+  z.infer<typeof ScientistBindingSchema> & {
+    metricProtocol: MetricProtocol;
+    commitmentId: string;
+    bindingOriginalSha256: string;
+    commitmentSubjectSha256: string;
+  }
 >;
 const authenticated = new WeakSet<object>();
 export const isAuthenticatedRegistration = (
@@ -272,10 +282,8 @@ export function createScientistRegistrationReader(
             "Unmatched arm conditions.",
           );
         }
-        const matched = {
-          conditions: p.conditions,
-          executionConditions: p.executionConditions,
-          trialPolicy: p.trialPolicy,
+        const matchedDefinition = {
+          protocol: p,
           runtime: definition.runtime,
           restrictions: definition.restrictions,
           toolAllowlist: definition.toolAllowlist,
@@ -283,7 +291,8 @@ export function createScientistRegistrationReader(
           adapterInstructions: definition.adapterInstructions,
         };
         invariant(
-          digest(matched) === c.matchedConditionsSha256,
+          matchedConditionsDigest(matchedDefinition) ===
+            c.matchedConditionsSha256,
           "Matched conditions changed.",
         );
         for (const arms of [p.conditions, p.executionConditions, p.arms])
@@ -332,9 +341,13 @@ export function createScientistRegistrationReader(
             !(key in c.measurementPlan),
             "Retroactive measurement identity.",
           );
+        const metricProtocol = MetricProtocolSchema.parse({
+          ...c.measurementPlan,
+          ...identities,
+        });
         const expected = RegistrationLineageSchema.parse({
           ...identities,
-          protocolSha256: digest({ ...c.measurementPlan, ...identities }),
+          protocolSha256: digest(metricProtocol),
           studyProtocolSha256: c.studyProtocolSha256,
           sourceTreeSha256,
           sourceManifestSha256: sourceTreeSha256,
@@ -393,7 +406,13 @@ export function createScientistRegistrationReader(
           );
         }
         invariant(now() < r.expiresAt, "Registration expired during read.");
-        const result = freeze(b);
+        const result = freeze({
+          ...b,
+          metricProtocol,
+          commitmentId: e.commitmentId,
+          bindingOriginalSha256: binding.sha256,
+          commitmentSubjectSha256: digest(c),
+        });
         authenticated.add(result);
         return result;
       } catch {

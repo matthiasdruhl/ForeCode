@@ -1,5 +1,6 @@
 // Synthetic originals, signed only with the existing disposable fixture key.
 import { randomUUID } from "node:crypto";
+import { matchedConditionsDigest } from "@/lib/experiment/study-identities";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { canonicalJson } from "@/lib/report/canonical";
@@ -27,6 +28,7 @@ export async function scientistFixture(
   link: EvidenceLink,
   issued: IssuedHypothesis,
   now: () => number,
+  measurementPlan?: Record<string, unknown>,
 ) {
   const root = path.join(f.parent, `scientist-${randomUUID()}`);
   await mkdir(root, { mode: 0o700 });
@@ -86,16 +88,7 @@ export async function scientistFixture(
     definition,
   );
   const { intents, graph, goal } = registration.context;
-  const matchedConditionsSha256 = digest({
-    conditions: p.conditions,
-    executionConditions: p.executionConditions,
-    trialPolicy: p.trialPolicy,
-    runtime: definition.runtime,
-    restrictions: definition.restrictions,
-    toolAllowlist: definition.toolAllowlist,
-    downstreamPrompt: definition.downstreamPrompt,
-    adapterInstructions: definition.adapterInstructions,
-  });
+  const matchedConditionsSha256 = matchedConditionsDigest(definition);
   const commitment = {
     schemaVersion: "scientist-initial-commitment.local.v1",
     study: registration.study,
@@ -107,7 +100,7 @@ export async function scientistFixture(
     },
     studyProtocolSha256: digest(p),
     matchedConditionsSha256,
-    measurementPlan: {
+    measurementPlan: measurementPlan ?? {
       schemaVersion: "prospective-tournament-metrics.v1",
       externalPackages: ["server-only"],
       stylesheetPaths: [],

@@ -1,3 +1,5 @@
+> Integration update: the reader now validates the composed `MetricProtocolSchema` and returns its immutable authenticated protocol plus initial-commitment and binding metadata. After `service.register` enrolls once, private `service.resolveRegistered` reauthenticates current same-process issuance and custody for both complete measurement passes. The shared matched-conditions projection remains separate from full-definition identity. See [final contract and blocker matrix](INTEGRATION-52-55-REPORT.md). Earlier validation/source observations below are historical and grant no admission of changed bytes.
+
 # Authenticated prospective Scientist registration
 
 Implemented for Agent A on November 1, 2026. PR #51 was already merged (GitHub merge time `2026-11-01T06:22:50Z`). The isolated branch `codex/authenticated-prospective-registration` starts at `2fdbc3bb53660aa414c7c7fb0ce9719e6589aaea`, fetched from `origin/main`. The starting tree includes `prospective-lineage.ts` and PR #49's hypothesis lifecycle corrections.

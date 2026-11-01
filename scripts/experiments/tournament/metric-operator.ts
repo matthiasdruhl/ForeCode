@@ -19,6 +19,7 @@ export async function loadPrivateTournamentMetrics(
     | "workspaceRoots"
     | "sources"
     | "commitmentId"
+    | "resolveRegistration"
     | "observationId"
   >,
   assessmentAt = new Date().toISOString(),

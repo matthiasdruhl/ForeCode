@@ -2,6 +2,7 @@
 // here is a private study original, an oracle assertion, or an actual agent run.
 import { chmod, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { matchedConditionsDigest } from "../../src/lib/experiment/study-identities";
 import { jsonDigest, sha256 } from "../../src/lib/report/digests";
 import { canonicalJson } from "../../src/lib/report/canonical";
 import {
@@ -40,6 +41,12 @@ async function seal(directory: string) {
 }
 export async function protectedMetricFixture(
   options: {
+    measured?: Awaited<ReturnType<typeof measuredFixture>>;
+    registered?: {
+      protocol: import("../../src/lib/experiment/prospective-metrics").MetricProtocol;
+      commitmentId: string;
+      resolveRegistration: () => Promise<unknown>;
+    };
     codeA?: string;
     codeB?: string;
     failB?: boolean;
@@ -47,50 +54,59 @@ export async function protectedMetricFixture(
     statusA?: "failed" | "cancelled" | "timed_out" | "blocked";
   } = {},
 ) {
-  const f = await measuredFixture({
-    failB: options.failB,
-    failedAgent: options.failedAgent,
-  });
-  const p = MetricProtocolSchema.parse({
-    schemaVersion: "prospective-tournament-metrics.v1",
-    studyId: f.study.draft.plan.manifest.id,
-    hypothesisId: "12345678-1234-4234-8234-123456789012",
-    contextSha256: "a".repeat(64),
-    taskSha256: f.study.draft.taskDefinitionSha256,
-    matchedConditionsSha256: f.study.protocol.record.subjectSha256,
-    evaluatorSha256: f.study.draft.plan.futureOracle.evaluatorSha256,
-    suiteSha256: f.study.draft.plan.futureOracle.testSuiteSha256,
-    policySha256: f.study.draft.plan.futureOracle.requiredPolicySha256,
-    externalPackages: [],
-    stylesheetPaths: [],
-    // A synthetic self-edge makes counts adjustable without changing the
-    // shared study fixture's independently held prepared-source inventories.
-    boundaryRules: [
-      {
-        id: "synthetic-self-edge",
-        from: "src/service.ts",
-        to: "src/service.ts",
-      },
-    ],
-    authorizationCaseIds: f.study.definition.protocol.task.acceptance.map(
-      (c) => c.id,
-    ),
-    observationWindow: "prepared_baseline_and_sealed_final_tree",
-    duplicatePolicy: "one_resolved_edge_or_case_per_arm_snapshot",
-    prediction: "B_fewer_final_forbidden_edges_than_A",
-  });
+  const f =
+    options.measured ??
+    (await measuredFixture({
+      failB: options.failB,
+      failedAgent: options.failedAgent,
+    }));
+  const p = MetricProtocolSchema.parse(
+    options.registered?.protocol ?? {
+      schemaVersion: "prospective-tournament-metrics.v1",
+      studyId: f.study.draft.plan.manifest.id,
+      hypothesisId: "12345678-1234-4234-8234-123456789012",
+      contextSha256: "a".repeat(64),
+      taskSha256: f.study.draft.taskDefinitionSha256,
+      matchedConditionsSha256: matchedConditionsDigest(f.study.definition),
+      evaluatorSha256: f.study.draft.plan.futureOracle.evaluatorSha256,
+      suiteSha256: f.study.draft.plan.futureOracle.testSuiteSha256,
+      policySha256: f.study.draft.plan.futureOracle.requiredPolicySha256,
+      externalPackages: [],
+      stylesheetPaths: [],
+      // A synthetic self-edge makes counts adjustable without changing the
+      // shared study fixture's independently held prepared-source inventories.
+      boundaryRules: [
+        {
+          id: "synthetic-self-edge",
+          from: "src/service.ts",
+          to: "src/service.ts",
+        },
+      ],
+      authorizationCaseIds: f.study.definition.protocol.task.acceptance.map(
+        (c) => c.id,
+      ),
+      observationWindow: "prepared_baseline_and_sealed_final_tree",
+      duplicatePolicy: "one_resolved_edge_or_case_per_arm_snapshot",
+      prediction: "B_fewer_final_forbidden_edges_than_A",
+    },
+  );
   const root = path.join(f.parent, "metric-originals"),
     evaluationRoot = path.join(f.parent, "metric-evaluations");
   await mkdir(root, { mode: 0o700 });
   await mkdir(evaluationRoot, { mode: 0o700 });
-  const commitment = (await f.hold({
-    id: "metric-commitment",
-    studyId: p.studyId,
-    kind: "protocol",
-    heldAt: "2026-10-28T12:00:00.000Z",
-    subjectSha256: jsonDigest(p),
-    predecessorSha256: f.study.protocol.sha256,
-  }))!;
+  const commitment = options.registered
+    ? (await createStudyCustodyStore(f.config)).load(
+        options.registered.commitmentId,
+      )
+    : f.hold({
+        id: "metric-commitment",
+        studyId: p.studyId,
+        kind: "protocol",
+        heldAt: "2026-10-28T12:00:00.000Z",
+        subjectSha256: jsonDigest(p),
+        predecessorSha256: f.study.protocol.sha256,
+      });
+  const heldCommitment = (await commitment)!;
   const sources: MetricObservationReaderConfig["sources"] extends ReadonlyMap<
     infer K,
     infer V
@@ -128,7 +144,7 @@ export async function protectedMetricFixture(
         ...f.evaluations.get(original.run.id)!.entry.identity,
         evaluatedTreeSha256: original.run.evaluatedTreeSha256,
       },
-      startedAt: original.run.startedAt,
+      startedAt: f.evaluations.get(original.run.id)!.loaded!.receipt.startedAt,
       finishedAt: original.run.endedAt,
       fail:
         variant === "B" && options.failB
@@ -279,7 +295,7 @@ export async function protectedMetricFixture(
     schemaVersion: "protected-tournament-metrics.local.v1",
     evidenceOrigin: "synthetic",
     protocol: p,
-    metricCommitmentSha256: commitment.sha256,
+    metricCommitmentSha256: heldCommitment.sha256,
     preparedOriginalSha256: f.study.prepared.sha256,
     historyOriginalSha256: history!.sha256,
     observations,
@@ -308,7 +324,8 @@ export async function protectedMetricFixture(
     root,
     workspaceRoots: [f.workspace],
     sources,
-    commitmentId: commitment.record.id,
+    commitmentId: heldCommitment.record.id,
+    resolveRegistration: options.registered?.resolveRegistration,
     observationId: await publish(),
     loadContext: async () => ({
       study: f.study,

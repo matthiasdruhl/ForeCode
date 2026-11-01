@@ -1,3 +1,5 @@
+> Integration update: canonical digest reconciliation and the fresh registration-to-measurement seam are implemented and synthetically tested; see [final conflict report and blocker matrix](INTEGRATION-52-55-REPORT.md) and [validation](INTEGRATION-52-55-VALIDATION.md). The original audit/checklist below records the pre-integration source basis and does not prove installation or authorization of changed bytes. Operational status remains BLOCKED.
+
 # Next prospective tournament readiness
 
 Assessment date: November 1, 2026, Eastern. Agent D owns this document, the [runbook](TOURNAMENT-NEXT-STUDY-OPERATOR-RUNBOOK.md), and the [integration gates](TOURNAMENT-NEXT-STUDY-INTEGRATION-GATES.md) only.

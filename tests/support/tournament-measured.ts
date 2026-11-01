@@ -29,6 +29,8 @@ import { syntheticEvaluation } from "./tournament-evidence";
 export async function measuredFixture(
   options: {
     installedRuntime?: boolean;
+    codeA?: string;
+    codeB?: string;
     failA?: boolean;
     failB?: boolean;
     missingB?: string;
@@ -108,7 +110,13 @@ export async function measuredFixture(
         : data.study.evidence.preparedManifest;
     const finalManifest = initialManifest.map((f) =>
       f.path === "src/service.ts"
-        ? { ...f, sha256: sha256(`// inert final ${variant}`) }
+        ? {
+            ...f,
+            sha256: sha256(
+              (variant === "A" ? options.codeA : options.codeB) ??
+                `// inert final ${variant}`,
+            ),
+          }
         : { ...f },
     );
     const run = ExperimentRunV1Schema.parse({

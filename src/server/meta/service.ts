@@ -430,5 +430,25 @@ export function createForesightService(
       registering.delete(hypothesisId);
     }
   }
-  return { run, interpret, register };
+  // Private read-only measurement seam. Reauthenticate custody AND the current
+  // process-local issuance; enrollment is single-use, serving is repeatable.
+  async function resolveRegistered(
+    registrationId: string,
+    hypothesisId: string,
+  ) {
+    if (!completed.has(registrationId) || !completed.has(hypothesisId))
+      throw new RequestFailure("INVALID_REFERENCE");
+    const record = resolveHypothesis(hypothesisId);
+    const original = await registrationResolver(registrationId, record);
+    resolveHypothesis(hypothesisId);
+    if (
+      !isAuthenticatedRegistration(original) ||
+      original.registration.id !== registrationId ||
+      digest(original.hypothesis) !== digest(record.hypothesis)
+    )
+      throw new RequestFailure("UNTRUSTED_EVIDENCE");
+    validateProspectiveRegistration(original.registration, record, now());
+    return original;
+  }
+  return { run, interpret, register, resolveRegistered };
 }

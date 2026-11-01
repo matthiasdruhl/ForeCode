@@ -11,6 +11,8 @@ import {
 } from "../../../src/lib/contracts/common";
 import { invariant } from "../../../src/lib/contracts/validation";
 import { jsonDigest, sha256 } from "../../../src/lib/report/digests";
+import { matchedConditionsDigest } from "../../../src/lib/experiment/study-identities";
+import { isAuthenticatedRegistration } from "../../../src/server/meta/registration-reader";
 import {
   MetricProtocolSchema,
   MetricBoundaryObservationSchema,
@@ -128,6 +130,9 @@ export type MetricObservationReaderConfig = {
   root: string;
   workspaceRoots: readonly string[];
   commitmentId: string;
+  // Optional only for independent metric-only studies. Registered Scientist
+  // studies use the service's fresh resolveRegistered closure, never a cache.
+  resolveRegistration?: () => Promise<unknown>;
   observationId: string;
   sources: ReadonlyMap<
     "A" | "B",
@@ -198,7 +203,10 @@ export function createProtectedMetricObservationReader(
     for (const previous of references) {
       const fresh = await config.loadRecord(previous.record.id);
       invariant(
-        isHeldRecord(fresh) && fresh.sha256 === previous.sha256,
+        isHeldRecord(fresh) &&
+          fresh.sha256 === previous.sha256 &&
+          Date.parse(fresh.record.heldAt) <= Date.parse(assessmentAt) &&
+          Date.parse(assessmentAt) < Date.parse(fresh.record.expiresAt),
         "Referenced original unavailable or revoked.",
       );
     }
@@ -206,27 +214,69 @@ export function createProtectedMetricObservationReader(
       p.studyId === plan.manifest.id &&
         p.taskSha256 === teamTaskSha256 &&
         p.taskSha256 === study.draft.taskDefinitionSha256 &&
-        // Reuse the existing independently held definition identity, which pins
-        // the validated equal A/B conditions, rather than minting another plan.
-        p.matchedConditionsSha256 === study.protocol.record.subjectSha256 &&
+        p.matchedConditionsSha256 ===
+          matchedConditionsDigest(study.definition) &&
         p.evaluatorSha256 === plan.futureOracle.evaluatorSha256 &&
         p.suiteSha256 === plan.futureOracle.testSuiteSha256 &&
         p.policySha256 === plan.futureOracle.requiredPolicySha256,
       "Study metric identity mismatch.",
     );
+    const registration = config.resolveRegistration
+      ? await config.resolveRegistration()
+      : null;
+    if (config.resolveRegistration) {
+      invariant(
+        isAuthenticatedRegistration(registration),
+        "Authenticated current registration required.",
+      );
+      const s = registration.registration.study;
+      invariant(
+        jsonDigest(registration.metricProtocol) === jsonDigest(p) &&
+          registration.lineage.protocolSha256 === jsonDigest(p) &&
+          s.definitionSha256 === study.protocol.record.subjectSha256 &&
+          s.definitionSha256 === jsonDigest(study.definition) &&
+          s.protocolOriginalSha256 === study.protocol.sha256 &&
+          registration.lineage.studyProtocolSha256 ===
+            jsonDigest(study.definition.protocol) &&
+          registration.lineage.sourceTreeSha256 ===
+            plan.manifest.fixtureSha256 &&
+          registration.lineage.sourceManifestSha256 ===
+            jsonDigest(study.evidence.originalManifest) &&
+          registration.lineage.variants.every((v) =>
+            plan.manifest.arms.some(
+              (a) => a.variant === v.variant && a.runId === v.runId,
+            ),
+          ) &&
+          registration.commitmentId === config.commitmentId &&
+          registration.registration.registeredAt <
+            Date.parse(study.evidence.selectionAt) &&
+          Date.parse(assessmentAt) < registration.registration.expiresAt,
+        "Registered study/measurement lineage mismatch.",
+      );
+    }
+    const registered = isAuthenticatedRegistration(registration)
+      ? registration
+      : null;
     const commitment = requireHeldRecord(
       await config.loadRecord(config.commitmentId),
       {
         studyId: p.studyId,
-        kind: "protocol",
-        subjectSha256: jsonDigest(p),
+        kind: registered ? "scientist-commitment" : "protocol",
+        subjectSha256: registered
+          ? registered.commitmentSubjectSha256
+          : jsonDigest(p),
         predecessorSha256: study.protocol.sha256,
         at: study.evidence.selectionAt,
       },
     );
     invariant(
-      Date.parse(commitment.record.heldAt) <
-        Date.parse(study.evidence.selectionAt),
+      !registered || commitment.sha256 === registered.commitmentOriginalSha256,
+      "Initial measurement commitment changed.",
+    );
+    invariant(
+      Date.parse(assessmentAt) < Date.parse(commitment.record.expiresAt) &&
+        Date.parse(commitment.record.heldAt) <
+          Date.parse(study.evidence.selectionAt),
       "Metric commitment must precede selection/preparation.",
     );
     const report = buildMeasuredTournamentReport({ ...context, assessmentAt });
@@ -383,7 +433,8 @@ export function createProtectedMetricObservationReader(
         const start = Date.parse(s.startedAt),
           finish = Date.parse(s.finishedAt);
         invariant(
-          start <= finish &&
+          Date.parse(assessmentAt) < Date.parse(custody.record.expiresAt) &&
+            start <= finish &&
             finish <= Date.parse(custody.record.heldAt) &&
             Date.parse(custody.record.heldAt) <=
               Date.parse(held.record.heldAt) &&
@@ -470,6 +521,7 @@ export function createProtectedMetricObservationReader(
       contextSha256: p.contextSha256,
       protocolSha256: jsonDigest(p),
       originalSha256: held.sha256,
+      registrationOriginalSha256: registered?.bindingOriginalSha256 ?? null,
       status: original.status,
       observations,
       calculation,

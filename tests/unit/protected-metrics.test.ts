@@ -328,6 +328,32 @@ describe("SYNTHETIC protected metric integration — test-owned custody only", (
       id === "metric-final-B" && ++calls > 1 ? null : load(id);
     expect(await f.load()).toBeNull();
   });
+  it.each(["commitment", "baseline"] as const)(
+    "rejects an authentic %s original that expired after its event but before assessment",
+    async (kind) => {
+      const f = await fixture();
+      const baseline = f.original.arms[0]!.baseline!;
+      const id = "expired-metric-original";
+      const previous = (await f.metricConfig.loadRecord(
+        kind === "commitment"
+          ? f.metricConfig.commitmentId
+          : baseline.custodyId,
+      )) as import("../../scripts/experiments/tournament/custody").HeldRecord;
+      const { schemaVersion, ...record } = previous.record;
+      void schemaVersion;
+      const expired = (await f.hold({
+        ...record,
+        id,
+        expiresAt: "2026-10-28T12:07:00.000Z",
+      }))!;
+      if (kind === "commitment") {
+        f.metricConfig.commitmentId = id;
+        f.original.metricCommitmentSha256 = expired.sha256;
+      } else baseline.custodyId = id;
+      f.metricConfig.observationId = await f.publish();
+      expect(await f.load()).toBeNull();
+    },
+  );
   it.each([
     "extra-file",
     "symlink",

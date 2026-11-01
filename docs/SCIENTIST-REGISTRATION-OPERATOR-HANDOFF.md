@@ -1,3 +1,5 @@
+> Integration update: the reader now validates the composed `MetricProtocolSchema` and returns its immutable authenticated protocol plus initial-commitment and binding metadata. After `service.register` enrolls once, private `service.resolveRegistered` reauthenticates current same-process issuance and custody for both complete measurement passes. The shared matched-conditions projection remains separate from full-definition identity. See [final contract and blocker matrix](INTEGRATION-52-55-REPORT.md). Earlier validation/source observations below are historical and grant no admission of changed bytes.
+
 # Scientist prospective registration operator handoff
 
 Status: code and disposable-original authentication implemented; genuine production registration and evidence linkage **NOT_PROVISIONED**. No execution or inference authority is granted by this handoff. Keep `approved-scientist-lineage.ts` and the existing approved publication singleton configured with `null` until genuine independent authorization exists.

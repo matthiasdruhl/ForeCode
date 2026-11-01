@@ -22,6 +22,7 @@ import { scientistFixture } from "./scientist-registration";
 import type { publicationFixture } from "./tournament-publication";
 export async function scientistHarness(
   f: Awaited<ReturnType<typeof publicationFixture>>,
+  measurementPlan?: Record<string, unknown>,
 ) {
   let at = Date.parse("2026-10-28T12:00:11.000Z"),
     sequence = 0;
@@ -135,7 +136,14 @@ export async function scientistHarness(
     registeredAt: registration.registeredAt,
     expiresAt: registration.expiresAt,
   };
-  const originals = await scientistFixture(f, registration, link, issued, now);
+  const originals = await scientistFixture(
+    f,
+    registration,
+    link,
+    issued,
+    now,
+    measurementPlan,
+  );
   at = f.now;
   return {
     ...originals,

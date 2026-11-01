@@ -62,9 +62,12 @@ export type TeamRuntimeLocation = Readonly<{
 export const prospectiveTeamStudyId = "forecode-team-20261101-prospective-01";
 export const nextProspectiveTeamStudyId =
   "forecode-team-20261101-prospective-02";
+export const recoveryProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-03";
 export const prospectiveTeamStudyIds = [
   prospectiveTeamStudyId,
   nextProspectiveTeamStudyId,
+  recoveryProspectiveTeamStudyId,
 ] as const;
 export const isProspectiveTeamStudy = (id: string) =>
   prospectiveTeamStudyIds.some((reserved) => reserved === id);
@@ -128,6 +131,27 @@ export const configuredTeamRuntimes: ReadonlyMap<string, TeamRuntimeLocation> =
           "forecode-tournament",
           "registration",
           "prospective-20261101-02",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      recoveryProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-03",
         ),
         publicKeyPem: [
           "-----BEGIN PUBLIC KEY-----",

@@ -1,0 +1,118 @@
+{
+  "implementationCommit": "2334d9abf7628dd508f99379d46501b0f62d3fa8",
+  "providerCallsEnabled": false,
+  "source": "Local production build; no approved matched study",
+  "views": [
+    {
+      "width": 1440,
+      "chapter": "case",
+      "viewport": 1440,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 1440,
+      "chapter": "lab",
+      "viewport": 1440,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 1440,
+      "chapter": "tournament",
+      "viewport": 1440,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 1440,
+      "chapter": "time",
+      "viewport": 1440,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 1440,
+      "chapter": "evidence",
+      "viewport": 1440,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 1440,
+      "chapter": "report",
+      "viewport": 1440,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 768,
+      "chapter": "case",
+      "viewport": 768,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 768,
+      "chapter": "lab",
+      "viewport": 768,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 768,
+      "chapter": "tournament",
+      "viewport": 768,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 768,
+      "chapter": "time",
+      "viewport": 768,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 768,
+      "chapter": "evidence",
+      "viewport": 768,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 768,
+      "chapter": "report",
+      "viewport": 768,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 390,
+      "chapter": "case",
+      "viewport": 390,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 390,
+      "chapter": "lab",
+      "viewport": 390,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 390,
+      "chapter": "tournament",
+      "viewport": 390,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 390,
+      "chapter": "time",
+      "viewport": 390,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 390,
+      "chapter": "evidence",
+      "viewport": 390,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    },
+    {
+      "width": 390,
+      "chapter": "report",
+      "viewport": 390,
+      "font": "\"IBM Plex Sans\", \"IBM Plex Sans Fallback\", \"Segoe UI\", sans-serif"
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "unexpectedRequests": []
+}

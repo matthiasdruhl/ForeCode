@@ -43,6 +43,7 @@ import {
   isTrustedSupervisedTeamFinalization,
   assertSupervisedControllerInputs,
   recordSupervisedTeamOutcome,
+  supervisedTeamMeasurementBlockers,
 } from "./supervised-team";
 
 import {
@@ -636,6 +637,7 @@ export async function runPairedTournament(input: {
         cleanupConfirmed: safe,
         leaseReleased: released,
       });
+      blockers.push(...supervisedTeamMeasurementBlockers(transport));
     } catch {
       blockers.push("ACTUAL_RUNTIME_ORIGINALS_INCOMPLETE");
     }

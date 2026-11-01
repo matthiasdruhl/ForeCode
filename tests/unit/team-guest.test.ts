@@ -15,6 +15,8 @@ const state = vi.hoisted(() => ({
   failCleanup: false,
   interrupt: "",
   timeoutCheck: "",
+  telemetryUnavailable: false,
+  oracleStatus: 0,
   tempRoot: "",
   cleanup: vi.fn(async () => {}),
   register: vi.fn(async () => {}),
@@ -44,6 +46,9 @@ vi.mock("node:fs", async (original) => {
     },
   };
 });
+vi.mock("../../scripts/evaluator/booking-v1/team-diagnostics", () => ({
+  retainTeamDiagnostic: vi.fn(), // No private guest filesystem in a host control.
+}));
 vi.mock("../../scripts/evaluator/booking-v1/team-installation", () => ({
   requireInstalledTeamProfile: vi.fn(async () => {
     if (!state.packageAvailable)
@@ -104,12 +109,19 @@ vi.mock("../../scripts/evaluator/booking-v1/runtime.mjs", () => ({
         };
       return {
         reason: "completed",
-        status: state.failCleanup && args[0] === "rm" ? 1 : 0,
+        status: kind
+          ? state.oracleStatus
+          : state.failCleanup && args[0] === "rm"
+            ? 1
+            : 0,
         signal: null,
         stdout:
           args[0] === "exec"
             ? '{"result":true}'
-            : "Synthetic protected transport observation",
+            : "Synthetic protected transport observation" +
+              (kind && state.telemetryUnavailable
+                ? " Authorization telemetry unavailable."
+                : ""),
         stderr: "",
         elapsedMs: 1,
       };
@@ -129,6 +141,8 @@ beforeEach(() => {
   state.failCleanup = false;
   state.interrupt = "";
   state.timeoutCheck = "";
+  state.telemetryUnavailable = false;
+  state.oracleStatus = 0;
   state.tempRoot = "";
   state.input = JSON.stringify(teamGradeData().input);
   vi.spyOn(process.stdout, "write").mockImplementation((value) => {
@@ -177,6 +191,28 @@ describe("trusted guest fixed profiles and lifecycle with synthetic transports",
     expect(state.cleanup).toHaveBeenCalledTimes(2);
     expect(state.unregister).toHaveBeenCalledOnce();
   });
+  it.each([0, 1])(
+    "preserves check exit %s and safe unavailable marker without raw diagnostics",
+    async (exit) => {
+      state.telemetryUnavailable = true;
+      state.oracleStatus = exit;
+      await run();
+      const checks = JSON.parse(state.output).checks.filter(
+        (c: { id: string }) => c.id.startsWith("team-permissions-"),
+      );
+      expect(checks).toHaveLength(3);
+      for (const check of checks) {
+        expect(check).toMatchObject({
+          exitCode: exit,
+          status: exit === 0 ? "pass" : "fail",
+        });
+        expect(check.detail).toBe(
+          "Protected team oracle process observed; private diagnostics withheld. Authorization telemetry unavailable.",
+        );
+        expect(check.detail).not.toContain("Synthetic protected transport");
+      }
+    },
+  );
   it("keeps baseline grading at five checks without requiring a private package", async () => {
     const input = JSON.parse(state.input);
     delete input.evaluationProfile;

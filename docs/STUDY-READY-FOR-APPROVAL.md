@@ -1,0 +1,66 @@
+# Prospective study approval handoff
+
+The owner requested technical preparation before issuing study approvals. This handoff covers the new `forecode-team-20261101-prospective-01` slot. It grants no permission, supplies no signature and makes no experimental claim. The previous case-14 registration remains disabled and its historical evidence is unchanged.
+
+## Review scope
+
+The proposed study retains the frozen booking/team-permissions task, identical Contributor coding model and matched conditions, A-then-B order, one downstream attempt per arm, and the existing proposed ceilings: 600 seconds and $32 per arm, 20 model requests/iterations, 32 million conservative tokens per arm, and 32,768 output tokens per request. Reservations are ceilings, not observed charges. Current tariff, available funding and exact spending approval remain unresolved. Preparation and the three Scientist reasoning calls require their own exact bounded authorization and accounting.
+
+The original source has 22 files and tree digest `e49687620469faad10637bac404b2f9a1c4973a12a55b2740eb7d904da5988d1`. Its complete manifest matches the fixture at the existing graph-reviewed commit `a564da2fe36a5de3ea95f777c1f5a60fd80ad6f0`; this new study selects that commit. No old study provenance is rewritten. B is deliberately unselected and unprepared until the initial commitment and genuine Scientist issuance exist.
+
+The proposed supplementary measurement plan is a new, unregistered local v2 protocol. Before coding it measures static imports on the sealed source and authenticates the existing five-check personal-booking regression receipt. Future authorization at baseline is explicitly not applicable, with null counts. The original application has no future team adapter; fabricating baseline future-check passes or implementing that adapter early would invalidate the comparison. Final evaluation retains all eight future checks and the separately approved per-case authorization observations.
+
+The candidate-neutral prediction is strict: B has fewer final direct `src/server/http.ts` to `src/server/booking-store.ts` imports than A. Equal counts, including zero/zero, contradict that prediction. Incomplete coverage abstains. This supplementary assessment cannot change the deterministic KEEP/REFACTOR/INCONCLUSIVE report.
+
+## Required decisions in order
+
+1. **Evaluator semantics:** privately inspect the staged oracle instrumentation and classify/select its nine unclassified rejection sites. Four are in the domain group and five in adversarial; none is in HTTP. A negative validation or conflict check must not be labeled authorization merely because it rejects. Approve the exact case inventory, semantics and oracle bytes, including the instrumentation's additional bookkeeping awaits. The canonical protected oracle is unchanged. Selecting different sites changes the suite and descriptor hashes and requires revising the same retained draft before commitment.
+2. **Initial study and requirement:** review the exact private packet, proposed intent/graph/goal, original manifest, task decisions, measurement semantics, matched conditions, current installed-source identities, budget terms and conservative timetable. Confirm the actual intent. The existing independent custodian must hold the exact protocol and then the commitment referencing the genuine signed protocol-envelope hash. An unsigned draft or approval in chat cannot supply those originals.
+3. **Scientist generation:** approve each exact current request/payload and its spending scope through the staged operator. Obtain new proposal, hypothesis, challenge and live same-process registration. The binding resolver must append genuine independently held originals under the existing trust anchor. Historical recordings cannot be restored or re-registered.
+4. **Preparation and admission:** approve the actual selected B preparation and all allowed attempts. Retain full history and preparation cost. Hold prepared commitments, fresh baseline receipts and metric snapshots, exact current inventories/isolation observations and paired/installed runtime admissions. Approvals whose subjects depend on future B or issued Scientist bytes must wait for those actual bytes.
+5. **One-shot dispatch:** approve the exact admitted A/B execution. Preserve terminal failures, cleanup, missing usage and protected receipts without retries or limit increases. Authenticate the resulting metrics and deterministic report. Disclosure/publication needs a later exact sanitized-projection approval.
+
+The same-process hypothesis expires after 30 minutes. Both full 600-second arm allowances consume 20 minutes, leaving less than 10 minutes for reasoning, independent holding, B preparation, baselines/admission, final evaluation and safety. The staged operator requires a complete positive-overhead schedule and enforces its conservative deadline. Synthetic timing controls do not establish that the genuine workflow fits. The authorized operator/custodian must establish a realistic complete schedule before starting generation; this handoff does not extend the lifecycle.
+
+## Technical preparation
+
+- [Unsigned packet and identity-preserving refresh](STUDY-APPROVAL-PACKET.md)
+- [Scientist staging and live custody continuation](STUDY-SCIENTIST-APPROVAL-READINESS.md)
+- [Protected collector, private instrumentation proposal and installation observations](STUDY-METRIC-INSTALLATION-READINESS.md)
+
+The prospective runtime locator uses the existing public custodian anchor, with a separate fixed private registration location. No private key, enable flag, original or new authority is created. Production lineage and publication remain unprovisioned. Public-controller maintenance and harmless collector controls do not admit a study or execute the private oracle.
+
+## Frozen review artifacts
+
+One retained packet was allocated after source freeze. Continue its identities through the identity-preserving refresh helpers; do not rerun the initial allocator for this slot. The private artifacts are kept outside the repository, with mode-0400 files and mode-0500 packet directories. Hashes identify unsigned bytes and convey no authority.
+
+| Subject                                           | Exact SHA-256                                                      |
+| ------------------------------------------------- | ------------------------------------------------------------------ |
+| Trusted implementation, 174 files                 | `fc10619c8d8c9f165beb953def8fd066a730fb48bf44305426c8913034955da6` |
+| Retained definition                               | `9627707d437c60b7177fcb19791ecb447b9993c1b820c9fe2616db24cd03c660` |
+| Packet file manifest                              | `17d54c615323ef04fa857d91faf744f1eab12c92e1f4a799b392cfa5756b9353` |
+| Operator/measurement supplement manifest          | `ea21ac0bf56ef9465d6367aaa50525d6e1c7e95c9786f7dfa722982625618e77` |
+| Source-bound private evaluator candidate manifest | `d57149f7b16b6a82623758e8819ff8e4489309f7389055207ec304734c0cd82a` |
+| Candidate oracle, still uninstalled               | `d539c788542d94b31a389f622fd892baf2e52be878e7f0870736e6cf889e5e0f` |
+
+The private packet basename is `forecode-study-approval-mpzyHk`; the supplement is `forecode-study-operator-review-YnmidZ`. The supplement contains the retained packet object for later identity-preserving revision, the exact proposed measurement fields/case inventory/prediction, fixed new baseline UUIDs, complete enforcement profile, unsigned staging inputs and unresolved approvals. The sibling candidate-profile/manifest files bind the same definition and current source. They contain no protected assertion bodies. The protected private patch and actual oracle remain in their separate guest review location; metadata provides the precise paths without exporting assertions.
+
+The proposed schedule is 29 minutes: 90 seconds reasoning/binding, 180 preparation, 90 baselines/admission, 1,200 downstream allowance, 120 finalization/measurement and 60 safety. It is explicitly an **unverified estimate**, not an established viable schedule or authorization to overrun. Its genuine feasibility and all funding/custodian continuations must be reviewed before generation. The independent-holding interface, confirmed intent, protocol-envelope hash and approvals remain null. Exact later subjects dependent on issued Scientist content or prepared B cannot be created in advance.
+
+## Installation, retention and limits
+
+Actual public-controller installation operation `a96cff74-94c4-4580-8174-c7e2f1006d94` installed or normalized 22 files to read-only mode with previous-byte/mode backups. Synthetic assertions exercised the actual guest collector, storage errors, partial/duplicate journals and denied worker UIDs 1000/65534 access to the private journal and pending package. All those harmless controls passed with zero provider requests. This operation subsequently failed the historical installed-policy identity check; its failure remains retained. The initial earlier operation `c8907828-9794-4230-9d7b-78498e0d18eb` stopped before installation on preexisting writable public-controller permissions. Neither failure is an experimental outcome.
+
+A separate read-only follow-up `b9fe8703-7c71-44e3-ba1f-d77a00b8a460` completed: current agent/grader inventories are stable, installed public source matches the frozen closure, and the legacy private package correctly returns `NOT_INSTALLED` for authorization telemetry (exit 2). It executed no private oracle. Its summary hash is `34cf27689763699dafcb830946cf290696ed6037cc119b4e4ed3f56535308d3a`. The installation/control record, including its later policy failure, has hash `89ba4fc18549d59c8b504b110b6f2c5e30ef2909b72dac69fb8bb55e3c70ac00`.
+
+The actual legacy installed policy hash is `eea3afed7ec947701e0a65c61c7f25405b910529fc3fe3a65d887fd2df654b99`, which differs from the historical registered pin. The policy was not altered and grants no prospective authority. A new exact policy requires the eventual actual prepared B, current conservative tariff, source/run/task bindings and separate legitimate approval/admission. Automatic approval review rejected a proposed downgrade of the historical policy identity guard; that change was not executed. The successful alternative retained the mismatch as `NOT_ADMITTED` and performed read-only diagnostics. No identity check or execution admission was bypassed.
+
+The historical private package aggregate remained `c817dd5d42d39f15888e8ec1674e8fdb6b526918c4feed57f8d341e9373cd1ce`; all 72 historical diagnostic entries retained aggregate `700ddf442e956d79ecd46cf45917b515214b5b8f1f5b416d3e3072bc8a06cf8a`. The legitimate custody reader freshly authenticated all seven allowlisted case-14 originals; its four runtime originals remain expired. The historical registration byte hash is unchanged at `078e48a6c4a0907d45a8c0408440b21e7fef8e2d66cdd21132713df10c03ffb8`, execution disabled. Both dedicated guests are stopped with zero sessions and the owned lease released. These are scoped retention checks, not access to every private record.
+
+The source-only runtime bundle `forecode-study-source-fc10619c-20261101` was generated successfully and remains labeled `NOT_INSTALLED / NOT_ADMITTED / NOT_RUN`. The actual public-controller installation observation is separate. The pending private instrumented package, prospective policy, Scientist production composition, custody callbacks, runtime admissions and publication remain unprovisioned or unapproved.
+
+## Final validation
+
+With inference and spending disabled: `npm run check` exited 0 with **1,755 unit tests / 78 files**, lint, both strict typechecks and both production builds. Planning parity exited 0 with **128 checks**. Final-build browser repeats exited 0 with **78 application cases** and **2 fixture cases**. Changed-file formatting and whitespace checks passed. Focused review and the corrected synthetic diagnostic-sink failure are recorded in the implementation log and component reports.
+
+These checks validate software and scoped harmless installation controls. No genuine prospective Scientist call, selected preparation, downstream coding attempt, protected experimental grade, measured outcome, disclosure or deployment occurred. All provider inference and paid execution remain disabled during preparation. Repository delivery references are supplied with the final handoff.

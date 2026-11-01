@@ -36,6 +36,10 @@ const extras = [
     source: "scripts/experiments/isolation/team-runtime-files.py",
     target: "team/team-runtime-files.py",
   },
+  {
+    source: "scripts/evaluator/booking-v1/authorization-proposal.mjs",
+    target: "team/authorization-proposal.mjs",
+  },
 ] as const;
 export async function prepareTeamRuntimeBundle(destination: string) {
   // The reviewed base packager validates a new disjoint canonical private root.

@@ -11,9 +11,11 @@ import {
   teamCompositionBlockers,
 } from "./supervised-team";
 import { runPairedTournament } from "./paired";
+import type { RegisteredMeasurementSession } from "./registered-measurement";
 export async function runRegisteredTeamTournament(
   id: string,
   signal: AbortSignal,
+  measurement?: RegisteredMeasurementSession,
 ) {
   IdSchema.parse(id);
   const loaded = await loadRegisteredTeamRuntime(id);
@@ -34,7 +36,7 @@ export async function runRegisteredTeamTournament(
     study.definition.protocol.studyId === id,
     "Registered study mismatch.",
   );
-  const transport = await createSupervisedTeamTransport(study);
+  const transport = await createSupervisedTeamTransport(study, measurement);
   invariant(
     isAdmittedSupervisedTeamTransport(transport),
     "Concrete registered composition required.",
@@ -51,6 +53,6 @@ export async function runRegisteredTeamTournament(
       ),
     reloadStudy: () => loadOperatorStudy(config.studyRoot, config.study),
     implementationIdentity: async () => (await freezeBooking()).evaluatorSha256,
-    signal,
+    signal: measurement ? measurement.bindSignal(signal) : signal,
   });
 }

@@ -4,7 +4,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 import { evaluateRemoteDomain, evaluateRemoteHttp } from "./remote-oracles";
-import { teamOnlyCheckIds, validateTeamProfile } from "./grade-profile";
+import {
+  teamOnlyCheckIds,
+  validateTeamProfile,
+  TeamGradeProfileSchema,
+  GradeIdentitySchema,
+  validateProfileIdentity,
+} from "./grade-profile";
+import { z } from "zod";
 import { runInstalledTeamCheck } from "./team-installation";
 import { decodeBehaviorReply, parseBehaviorRpc } from "./team-rpc.mjs";
 import { AssertionError } from "node:assert";
@@ -83,12 +90,28 @@ if (kind === "boundary") {
   )
     throw new Error("Invalid oracle operation.");
   let profile;
+  let authorizationIdentity;
   if (future) {
     const bytes = readFileSync(0);
     if (bytes.length > 8192) throw new Error("Profile input bound.");
-    profile = validateTeamProfile(
-      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
-    );
+    const value = z
+      .union([
+        TeamGradeProfileSchema,
+        z.strictObject({
+          profile: TeamGradeProfileSchema,
+          authorizationIdentity: GradeIdentitySchema,
+        }),
+      ])
+      .parse(
+        JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)),
+      );
+    profile = validateTeamProfile("profile" in value ? value.profile : value);
+    if ("authorizationIdentity" in value) {
+      authorizationIdentity = value.authorizationIdentity;
+      validateProfileIdentity(authorizationIdentity, profile);
+      if (!name!.startsWith(`forecode-booking-${authorizationIdentity.runId}-`))
+        throw new Error("Cross-run authorization identity.");
+    }
   }
   const context = {
     kind: kind!,
@@ -123,8 +146,17 @@ if (kind === "boundary") {
     return body.result;
   };
   if (future && profile) {
+    let authorizationAvailable = true;
     try {
-      await runInstalledTeamCheck(kind!, profile, rpc);
+      await runInstalledTeamCheck(
+        kind!,
+        profile,
+        rpc,
+        authorizationIdentity,
+        (available) => {
+          authorizationAvailable = available;
+        },
+      );
       process.stdout.write("Protected team check completed.");
       process.exitCode = 0;
     } catch (error) {
@@ -133,6 +165,9 @@ if (kind === "boundary") {
       process.stderr.write(privateTeamFailure(error, context));
       process.stdout.write("Protected team check did not pass.");
       process.exitCode = error instanceof AssertionError ? 1 : 2;
+    } finally {
+      if (!authorizationAvailable)
+        process.stdout.write(" Authorization telemetry unavailable.");
     }
   } else {
     const rows = await (

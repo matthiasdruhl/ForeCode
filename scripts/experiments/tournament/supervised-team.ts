@@ -29,6 +29,7 @@ import type { PairedTransport } from "./paired";
 import { teamEnforcementPlan, type TeamEnforcementPlan } from "./team-policy";
 
 import { PublicReadinessSchema } from "./team-readiness";
+import type { RegisteredMeasurementSession } from "./registered-measurement";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const processSchema = z.strictObject({
@@ -113,6 +114,9 @@ export async function recordSupervisedTeamOutcome(
 }
 export function isAdmittedSupervisedTeamTransport(value: object) {
   return live.has(value);
+}
+export function supervisedTeamMeasurementBlockers(transport: object) {
+  return productionControls.get(transport)?.measurementFailures() ?? [];
 }
 
 export function supervisedTeamRuntimeSubject(input: {
@@ -222,11 +226,12 @@ export type NoInferenceTeamControls = {
 // signed study/runtime JSON is insufficient without an installed composition.
 export async function createSupervisedTeamTransport(
   study: PreparedStudy,
+  measurement?: RegisteredMeasurementSession,
 ): Promise<PairedTransport> {
   invariant(isPreparedStudy(study), "Authenticated prepared study required.");
   teamEnforcementPlan(study.definition);
   if (configuredTeamRuntimes.has(study.definition.protocol.studyId)) {
-    const installed = await createInstalledTeamControls(study);
+    const installed = await createInstalledTeamControls(study, measurement);
     const lifecycle = createTeamLifecycle(
       installed.lifecycleInput,
       installed.compositionSha256,

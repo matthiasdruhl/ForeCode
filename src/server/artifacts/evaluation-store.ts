@@ -63,6 +63,14 @@ export type TrustedEvaluation = Readonly<{
   [authenticatedEvaluation]: true;
 }>;
 const authenticatedObjects = new WeakSet<object>();
+const authorizationTelemetryFailures = new WeakSet<object>();
+// Only a negative supplementary-channel fact escapes authenticated check bytes.
+// This never changes the receipt, required checks or deterministic verdict.
+export function hasAuthorizationTelemetryFailure(value: unknown): boolean {
+  return (
+    isTrustedEvaluation(value) && authorizationTelemetryFailures.has(value)
+  );
+}
 export function isTrustedEvaluation(
   value: unknown,
 ): value is TrustedEvaluation {
@@ -203,6 +211,7 @@ export async function createProtectedEvaluationStore(config: {
             receipt.integrity.manifestSha256 === receiptManifestDigest(receipt),
           "Canonical artifact digest mismatch.",
         );
+        let authorizationTelemetryFailed = false;
         for (const check of checks) {
           invariant(
             check.runId === receipt.runId,
@@ -218,6 +227,20 @@ export async function createProtectedEvaluationStore(config: {
                 sha256(artifact) === check.artifactSha256,
               "Check evidence bytes changed.",
             );
+            if (check.id.startsWith("team-permissions-")) {
+              try {
+                const raw = JSON.parse(artifact.toString("utf8"));
+                if (
+                  typeof raw?.observation?.detail === "string" &&
+                  raw.observation.detail.endsWith(
+                    " Authorization telemetry unavailable.",
+                  )
+                )
+                  authorizationTelemetryFailed = true;
+              } catch {
+                // Historical opaque evidence remains valid for its old verdict.
+              }
+            }
           }
         }
         const verification = VerificationV1Schema.parse({
@@ -244,6 +267,8 @@ export async function createProtectedEvaluationStore(config: {
           verification,
         }) as TrustedEvaluation;
         authenticatedObjects.add(result);
+        if (authorizationTelemetryFailed)
+          authorizationTelemetryFailures.add(result);
         return result;
       } catch {
         return null;

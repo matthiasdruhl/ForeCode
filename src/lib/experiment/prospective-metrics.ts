@@ -22,48 +22,66 @@ const edge = z.strictObject({
 });
 const unique = (values: readonly string[]) =>
   new Set(values).size === values.length;
-export const MetricProtocolSchema = z
-  .strictObject({
-    schemaVersion: z.literal("prospective-tournament-metrics.v1"),
-    studyId: IdSchema,
-    hypothesisId: z.uuid(),
-    contextSha256: Sha256Schema,
-    taskSha256: Sha256Schema,
-    matchedConditionsSha256: Sha256Schema,
-    evaluatorSha256: Sha256Schema,
-    suiteSha256: Sha256Schema,
-    policySha256: Sha256Schema,
-    // Existing operator custody must authenticate this commitment before any
-    // selection/preparation. A local timestamp or this parser cannot prove that.
-    externalPackages: z
-      .array(
-        z
-          .string()
-          .regex(/^(?:[a-z][a-z0-9-]*|@[a-z0-9-]+\/[a-z0-9-]+|node:[a-z_]+)$/),
-      )
-      .max(100),
-    // Exact frozen non-source assets; only side-effect imports may omit an edge.
-    // Their bytes must still be present in the sealed inventory/tree manifest.
-    stylesheetPaths: z.array(MetricStylesheetPathSchema).max(100),
-    boundaryRules: z
-      .array(z.strictObject({ id: IdSchema, ...edge.shape }))
-      .min(1)
-      .max(100),
-    authorizationCaseIds: z.array(IdSchema).min(1).max(100),
-    observationWindow: z.literal("prepared_baseline_and_sealed_final_tree"),
-    duplicatePolicy: z.literal("one_resolved_edge_or_case_per_arm_snapshot"),
-    prediction: z.literal("B_fewer_final_forbidden_edges_than_A"),
-  })
-  .superRefine((p, c) => {
-    if (
-      !unique(p.externalPackages) ||
-      !unique(p.stylesheetPaths) ||
-      !unique(p.boundaryRules.map((r) => r.id)) ||
-      !unique(p.boundaryRules.map((r) => `${r.from}\0${r.to}`)) ||
-      !unique(p.authorizationCaseIds)
+const MetricProtocolBaseSchema = z.strictObject({
+  schemaVersion: z.literal("prospective-tournament-metrics.v1"),
+  studyId: IdSchema,
+  hypothesisId: z.uuid(),
+  contextSha256: Sha256Schema,
+  taskSha256: Sha256Schema,
+  matchedConditionsSha256: Sha256Schema,
+  evaluatorSha256: Sha256Schema,
+  suiteSha256: Sha256Schema,
+  policySha256: Sha256Schema,
+  // Existing operator custody must authenticate this commitment before any
+  // selection/preparation. A local timestamp or this parser cannot prove that.
+  externalPackages: z
+    .array(
+      z
+        .string()
+        .regex(/^(?:[a-z][a-z0-9-]*|@[a-z0-9-]+\/[a-z0-9-]+|node:[a-z_]+)$/),
     )
-      c.addIssue({ code: "custom", message: "Duplicate rules/cases" });
-  });
+    .max(100),
+  // Exact frozen non-source assets; only side-effect imports may omit an edge.
+  // Their bytes must still be present in the sealed inventory/tree manifest.
+  stylesheetPaths: z.array(MetricStylesheetPathSchema).max(100),
+  boundaryRules: z
+    .array(z.strictObject({ id: IdSchema, ...edge.shape }))
+    .min(1)
+    .max(100),
+  authorizationCaseIds: z.array(IdSchema).min(1).max(100),
+  observationWindow: z.literal("prepared_baseline_and_sealed_final_tree"),
+  duplicatePolicy: z.literal("one_resolved_edge_or_case_per_arm_snapshot"),
+  prediction: z.literal("B_fewer_final_forbidden_edges_than_A"),
+});
+const validateMetricInventory = (
+  p:
+    | z.infer<typeof MetricProtocolBaseSchema>
+    | z.infer<typeof MetricProtocolV2BaseSchema>,
+  c: z.RefinementCtx,
+) => {
+  if (
+    !unique(p.externalPackages) ||
+    !unique(p.stylesheetPaths) ||
+    !unique(p.boundaryRules.map((r) => r.id)) ||
+    !unique(p.boundaryRules.map((r) => `${r.from}\0${r.to}`)) ||
+    !unique(p.authorizationCaseIds)
+  )
+    c.addIssue({ code: "custom", message: "Duplicate rules/cases" });
+};
+const MetricProtocolV2BaseSchema = MetricProtocolBaseSchema.extend({
+  schemaVersion: z.literal("prospective-tournament-metrics.v2"),
+  baselineAuthorization: z.literal("not_applicable_before_future_requirement"),
+});
+export const MetricProtocolV1Schema = MetricProtocolBaseSchema.superRefine(
+  validateMetricInventory,
+);
+export const MetricProtocolV2Schema = MetricProtocolV2BaseSchema.superRefine(
+  validateMetricInventory,
+);
+export const MetricProtocolSchema = z.union([
+  MetricProtocolV1Schema,
+  MetricProtocolV2Schema,
+]);
 export type MetricProtocol = z.infer<typeof MetricProtocolSchema>;
 export const MetricBoundaryObservationSchema = z.strictObject({
   // Completeness is the evaluator's claim, to be independently authenticated by
@@ -82,7 +100,7 @@ export const MetricSnapshotObservationSchema = z.strictObject({
   boundary: MetricBoundaryObservationSchema,
   authorization: z.array(MetricAuthorizationCaseSchema).max(100),
 });
-export const MetricObservationsSchema = z.strictObject({
+const MetricObservationsV1Schema = z.strictObject({
   schemaVersion: z.literal("prospective-tournament-observations.v1"),
   studyId: IdSchema,
   protocolSha256: Sha256Schema,
@@ -109,6 +127,27 @@ export const MetricObservationsSchema = z.strictObject({
     )
     .length(2),
 });
+export const MetricBaselineAuthorizationNotApplicableSchema = z.strictObject({
+  kind: z.literal("not_applicable_before_future_requirement"),
+});
+const MetricBaselineV2ObservationSchema =
+  MetricSnapshotObservationSchema.extend({
+    authorization: MetricBaselineAuthorizationNotApplicableSchema,
+  });
+const MetricObservationsV2Schema = MetricObservationsV1Schema.extend({
+  schemaVersion: z.literal("prospective-tournament-observations.v2"),
+  arms: z
+    .array(
+      MetricObservationsV1Schema.shape.arms.element.extend({
+        baseline: MetricBaselineV2ObservationSchema.nullable(),
+      }),
+    )
+    .length(2),
+});
+export const MetricObservationsSchema = z.union([
+  MetricObservationsV1Schema,
+  MetricObservationsV2Schema,
+]);
 export type MetricObservations = z.infer<typeof MetricObservationsSchema>;
 const same = (a: string[], b: string[]) =>
   unique(a) &&
@@ -117,7 +156,10 @@ const same = (a: string[], b: string[]) =>
   a.every((x) => b.includes(x));
 
 function measure(
-  s: z.infer<typeof MetricSnapshotObservationSchema> | null,
+  s:
+    | z.infer<typeof MetricSnapshotObservationSchema>
+    | z.infer<typeof MetricBaselineV2ObservationSchema>
+    | null,
   p: MetricProtocol,
 ) {
   if (!s) return { boundaryViolations: null, authorizationFailures: null };
@@ -138,6 +180,7 @@ function measure(
         ).size
       : null;
   const authorizationFailures =
+    Array.isArray(s.authorization) &&
     same(
       s.authorization.map((o) => o.caseId),
       p.authorizationCaseIds,
@@ -154,6 +197,13 @@ export function calculateProspectiveMetrics(
   const p = MetricProtocolSchema.parse(protocolInput),
     o = MetricObservationsSchema.parse(observationsInput);
   const protocolSha256 = jsonDigest(p);
+  invariant(
+    (p.schemaVersion === "prospective-tournament-metrics.v2") ===
+      (o.schemaVersion === "prospective-tournament-observations.v2"),
+    "Metric protocol/observation version mismatch",
+  );
+  const baselineNotApplicable =
+    p.schemaVersion === "prospective-tournament-metrics.v2";
   // Content identity is necessary but never registration/evidence authentication.
   invariant(
     o.studyId === p.studyId && o.protocolSha256 === protocolSha256,
@@ -189,11 +239,13 @@ export function calculateProspectiveMetrics(
       (a) =>
         a.baseline.boundaryViolations !== null &&
         a.final.boundaryViolations !== null &&
-        a.baseline.authorizationFailures !== null &&
+        (baselineNotApplicable || a.baseline.authorizationFailures !== null) &&
         a.final.authorizationFailures !== null,
     );
   const eligible =
-    complete && arms.every((a) => a.baseline.authorizationFailures === 0);
+    complete &&
+    (baselineNotApplicable ||
+      arms.every((a) => a.baseline.authorizationFailures === 0));
   return {
     authority: "UNAUTHENTICATED_METRIC_CALCULATION" as const,
     arms,
@@ -214,7 +266,7 @@ export function calculateProspectiveMetrics(
     authorizationPreserved: complete
       ? arms.every(
           (a) =>
-            a.baseline.authorizationFailures === 0 &&
+            (baselineNotApplicable || a.baseline.authorizationFailures === 0) &&
             a.final.authorizationFailures === 0,
         )
       : null,

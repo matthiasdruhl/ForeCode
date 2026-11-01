@@ -9,7 +9,7 @@ import {
   Sha256Schema,
   UtcTimestampSchema,
 } from "../../../src/lib/contracts/common";
-import { invariant } from "../../../src/lib/contracts/validation";
+import { invariant, sameIds } from "../../../src/lib/contracts/validation";
 import { jsonDigest, sha256 } from "../../../src/lib/report/digests";
 import { matchedConditionsDigest } from "../../../src/lib/experiment/study-identities";
 import { isAuthenticatedRegistration } from "../../../src/server/meta/registration-reader";
@@ -21,7 +21,10 @@ import {
   type MetricProtocol,
   type MetricObservations,
 } from "../../../src/lib/experiment/prospective-metrics";
-import { isTrustedEvaluation } from "../../../src/server/artifacts/evaluation-store";
+import {
+  isTrustedEvaluation,
+  EvaluationIdentitySchema,
+} from "../../../src/server/artifacts/evaluation-store";
 import {
   collectSealedMetricSnapshot,
   validateMetricManifest,
@@ -30,7 +33,11 @@ import {
   ProtectedAuthorizationObservationSchema,
   readProtectedAuthorizationCases,
 } from "../../evaluator/booking-v1/metric-authorization";
-import { teamTaskSha256 } from "../../evaluator/booking-v1/grade-profile";
+import {
+  teamTaskSha256,
+  baselineCheckIds,
+} from "../../evaluator/booking-v1/grade-profile";
+import { bookingPolicy } from "../../evaluator/booking-v1/freeze";
 import { disjoint, privateDirectory, protectedRead } from "../artifacts/files";
 import { SourceManifestSchema } from "./source-manifest";
 import { immutable, requireHeldRecord, isHeldRecord } from "./custody";
@@ -38,7 +45,7 @@ import { isPreparedStudy } from "./study";
 import { isAuthenticatedArm, buildMeasuredTournamentReport } from "./measured";
 import { sharedFutureTask } from "./paired";
 
-export const MetricSnapshotOriginalSchema = z.strictObject({
+export const MetricSnapshotOriginalV1Schema = z.strictObject({
   schemaVersion: z.literal("protected-metric-snapshot.local.v1"),
   studyId: IdSchema,
   protocolSha256: Sha256Schema,
@@ -52,13 +59,104 @@ export const MetricSnapshotOriginalSchema = z.strictObject({
   boundary: MetricBoundaryObservationSchema,
   authorization: ProtectedAuthorizationObservationSchema,
 });
+export const MetricBaselineAuthorizationProofSchema = z.strictObject({
+  kind: z.literal("not_applicable_before_future_requirement"),
+  identity: EvaluationIdentitySchema,
+  receiptSha256: Sha256Schema,
+});
+export const MetricSnapshotOriginalV2Schema =
+  MetricSnapshotOriginalV1Schema.extend({
+    schemaVersion: z.literal("protected-metric-snapshot.local.v2"),
+    role: z.literal("baseline"),
+    authorization: MetricBaselineAuthorizationProofSchema,
+  });
+export const MetricSnapshotOriginalSchema = z.union([
+  MetricSnapshotOriginalV1Schema,
+  MetricSnapshotOriginalV2Schema,
+]);
 export type MetricSnapshotOriginal = z.infer<
   typeof MetricSnapshotOriginalSchema
 >;
+
+/** A real passing personal-regression receipt, never future authorization zero. */
+export function createMetricBaselineAuthorizationNotApplicable(
+  protocol: unknown,
+  evaluation: unknown,
+) {
+  invariant(
+    MetricProtocolSchema.parse(protocol).schemaVersion ===
+      "prospective-tournament-metrics.v2",
+    "Not-applicable baseline requires v2 protocol.",
+  );
+  invariant(
+    isTrustedEvaluation(evaluation),
+    "Authenticated five-check baseline required.",
+  );
+  const r = evaluation.receipt;
+  invariant(
+    evaluation.verification.verdict === "VERIFIED" &&
+      r.requiredPolicySha256 === jsonDigest(bookingPolicy) &&
+      sameIds(r.requiredCheckIds, [...baselineCheckIds]) &&
+      sameIds(
+        evaluation.checks.map((c) => c.id),
+        [...baselineCheckIds],
+      ) &&
+      evaluation.checks.every((c) => c.status === "pass"),
+    "Verified unchanged five-check personal baseline required.",
+  );
+  return MetricBaselineAuthorizationProofSchema.parse({
+    kind: "not_applicable_before_future_requirement",
+    identity: {
+      runId: r.runId,
+      evaluatedTreeSha256: r.evaluatedTreeSha256,
+      fixtureSha256: r.fixtureSha256,
+      evaluatorSha256: r.evaluatorSha256,
+      testSuiteSha256: r.testSuiteSha256,
+      requiredPolicySha256: r.requiredPolicySha256,
+      requiredCheckIds: r.requiredCheckIds,
+    },
+    receiptSha256: jsonDigest(r),
+  });
+}
+export function readMetricBaselineAuthorizationNotApplicable(
+  input: unknown,
+  protocol: unknown,
+  evaluation: unknown,
+) {
+  const observed = MetricBaselineAuthorizationProofSchema.parse(input);
+  const expected = createMetricBaselineAuthorizationNotApplicable(
+    protocol,
+    evaluation,
+  );
+  invariant(
+    jsonDigest(observed) === jsonDigest(expected),
+    "Personal baseline receipt proof mismatch.",
+  );
+  return { kind: "not_applicable_before_future_requirement" as const };
+}
 // One baseline evaluation identity per registered terminal arm; operators cannot
 // select a more favorable baseline evaluation ID after observing its outcomes.
 export function metricBaselineEvaluationRunId(runId: string) {
-  return IdSchema.parse(`metric-baseline-${IdSchema.parse(runId)}`);
+  const downstream = z
+    .string()
+    .regex(
+      /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
+    )
+    .parse(runId);
+  // Private mapping v2: the former text prefix was not a valid guest run UUID.
+  // This deterministic UUID-shaped identity is not randomly issued authority.
+  const bytes = sha256(`forecode.metric-baseline-evaluation.v2\0${downstream}`)
+    .slice(0, 32)
+    .split("");
+  bytes[12] = "4";
+  bytes[16] = ((Number.parseInt(bytes[16]!, 16) & 3) | 8).toString(16);
+  const hex = bytes.join("");
+  const baseline = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  invariant(
+    baseline !== downstream,
+    "Metric baseline/downstream identity collision.",
+  );
+  return baseline;
 }
 const snapshotReference = z.strictObject({
   custodyId: IdSchema,
@@ -104,13 +202,32 @@ export async function collectMetricSnapshotOriginal(input: {
   const clock = input.clock ?? (() => new Date().toISOString());
   const startedAt = clock();
   const source = await collectSealedMetricSnapshot(input);
-  readProtectedAuthorizationCases(
-    input.authorization,
-    input.protocol,
-    input.evaluation,
-  );
+  const baselineV2 =
+    input.protocol.schemaVersion === "prospective-tournament-metrics.v2" &&
+    input.role === "baseline";
+  if (baselineV2) {
+    readMetricBaselineAuthorizationNotApplicable(
+      input.authorization,
+      input.protocol,
+      input.evaluation,
+    );
+    const proof = MetricBaselineAuthorizationProofSchema.parse(
+      input.authorization,
+    );
+    invariant(
+      proof.identity.evaluatedTreeSha256 === input.treeSha256,
+      "Personal baseline source mismatch.",
+    );
+  } else
+    readProtectedAuthorizationCases(
+      input.authorization,
+      input.protocol,
+      input.evaluation,
+    );
   return MetricSnapshotOriginalSchema.parse({
-    schemaVersion: "protected-metric-snapshot.local.v1",
+    schemaVersion: baselineV2
+      ? "protected-metric-snapshot.local.v2"
+      : "protected-metric-snapshot.local.v1",
     studyId: input.protocol.studyId,
     protocolSha256: jsonDigest(input.protocol),
     variant: input.variant,
@@ -139,8 +256,8 @@ export type MetricObservationReaderConfig = {
     {
       baseline: string | null;
       final: string | null;
-      // Prospectively fixed IDs: baseline uses the same future suite as final,
-      // in addition to the existing unchanged five-check prepared baseline.
+      // v1 fixes a derived same-future-suite baseline UUID. v2 binds the
+      // existing actual five-check baseline ID from the runtime original.
       baselineEvaluationRunId: string;
     }
   >;
@@ -163,7 +280,10 @@ export function metricMeasurementStatus(
     result.arms.every((a) =>
       [a.baseline, a.final].every(
         (s) =>
-          s.boundaryViolations !== null && s.authorizationFailures !== null,
+          s.boundaryViolations !== null &&
+          ((s === a.baseline &&
+            p.schemaVersion === "prospective-tournament-metrics.v2") ||
+            s.authorizationFailures !== null),
       ),
     )
     ? ("complete" as const)
@@ -332,8 +452,11 @@ export function createProtectedMetricObservationReader(
           context.arms.length,
       "Invalid metric arms.",
     );
-    const observations: MetricObservations = {
-      schemaVersion: "prospective-tournament-observations.v1",
+    const observationFields = {
+      schemaVersion:
+        p.schemaVersion === "prospective-tournament-metrics.v2"
+          ? "prospective-tournament-observations.v2"
+          : "prospective-tournament-observations.v1",
       studyId: p.studyId,
       protocolSha256: jsonDigest(p),
       taskSha256: p.taskSha256,
@@ -341,8 +464,8 @@ export function createProtectedMetricObservationReader(
       evaluatorSha256: p.evaluatorSha256,
       suiteSha256: p.suiteSha256,
       policySha256: p.policySha256,
-      arms: [],
     };
+    const observedArms: MetricObservations["arms"][number][] = [];
     const seen = new Set<string>();
     for (const variant of ["A", "B"] as const) {
       const declared = plan.manifest.arms.find((a) => a.variant === variant)!;
@@ -457,6 +580,15 @@ export function createProtectedMetricObservationReader(
           jsonDigest(measured.boundary) === jsonDigest(s.boundary),
           "Static measurement altered.",
         );
+        const baselineV2 =
+          p.schemaVersion === "prospective-tournament-metrics.v2" &&
+          role === "baseline";
+        invariant(
+          baselineV2
+            ? s.schemaVersion === "protected-metric-snapshot.local.v2"
+            : s.schemaVersion === "protected-metric-snapshot.local.v1",
+          "Metric snapshot applicability/version mismatch.",
+        );
         const evaluationRunId =
           role === "baseline"
             ? source!.baselineEvaluationRunId
@@ -464,7 +596,9 @@ export function createProtectedMetricObservationReader(
         invariant(
           (role !== "baseline" ||
             evaluationRunId ===
-              metricBaselineEvaluationRunId(declared.runId!)) &&
+              (baselineV2
+                ? arm.original.baselineRunId
+                : metricBaselineEvaluationRunId(declared.runId!))) &&
             s.authorization.identity.runId === evaluationRunId &&
             s.authorization.identity.evaluatedTreeSha256 === treeSha256 &&
             s.authorization.identity.fixtureSha256 ===
@@ -483,18 +617,44 @@ export function createProtectedMetricObservationReader(
               Date.parse(custody.record.heldAt),
           "Protected observation chronology mismatch.",
         );
-        observed[role] = {
-          treeSha256,
-          boundary: measured.boundary,
-          authorization: readProtectedAuthorizationCases(
-            s.authorization,
-            p,
-            evaluation,
-          ),
-        };
+        if (baselineV2) {
+          const baselineOracle = plan.baselineOracle;
+          invariant(
+            evaluation.receipt.evaluatorSha256 ===
+              baselineOracle.evaluatorSha256 &&
+              evaluation.receipt.testSuiteSha256 ===
+                baselineOracle.testSuiteSha256 &&
+              evaluation.receipt.requiredPolicySha256 ===
+                baselineOracle.requiredPolicySha256,
+            "Personal baseline evaluator identity mismatch.",
+          );
+          observed.baseline = {
+            treeSha256,
+            boundary: measured.boundary,
+            authorization: readMetricBaselineAuthorizationNotApplicable(
+              s.authorization,
+              p,
+              evaluation,
+            ),
+          };
+        } else {
+          observed[role] = {
+            treeSha256,
+            boundary: measured.boundary,
+            authorization: readProtectedAuthorizationCases(
+              s.authorization,
+              p,
+              evaluation,
+            ),
+          };
+        }
       }
-      observations.arms.push(observed);
+      observedArms.push(observed);
     }
+    const observations = MetricObservationsSchema.parse({
+      ...observationFields,
+      arms: observedArms,
+    });
     // Canonical arm order is required, preventing duplicate or switched projections.
     invariant(
       jsonDigest(observations) === jsonDigest(original.observations) &&

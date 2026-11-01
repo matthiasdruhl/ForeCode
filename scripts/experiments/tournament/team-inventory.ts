@@ -324,7 +324,11 @@ export async function collectTeamInventory(input: {
     "Existing grader worker requires owner recovery.",
   );
   const installation = z
-    .strictObject({ manifestSha256: hash, oracleSha256: hash })
+    .strictObject({
+      manifestSha256: hash,
+      oracleSha256: hash,
+      authorizationInstrumentationSha256: hash.optional(),
+    })
     .parse(
       JSON.parse(
         await exec(

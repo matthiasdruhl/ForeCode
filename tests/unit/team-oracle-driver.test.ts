@@ -9,8 +9,10 @@ const state = vi.hoisted(() => ({
   output: "",
   diagnostics: "",
   outcome: "pass",
+  authorizationAvailable: true,
   calls: [] as string[],
   privateKinds: [] as string[],
+  authorizationIdentities: [] as unknown[],
   argv: [] as string[],
   exit: undefined as typeof process.exitCode,
 }));
@@ -42,8 +44,12 @@ vi.mock("../../scripts/evaluator/booking-v1/team-installation", () => ({
       kind: string,
       _profile: unknown,
       rpc: (input: unknown) => unknown,
+      authorizationIdentity?: unknown,
+      reportAvailability?: (available: boolean) => void,
     ) => {
+      reportAvailability?.(state.authorizationAvailable);
       state.privateKinds.push(kind);
+      state.authorizationIdentities.push(authorizationIdentity);
       if (state.outcome === "assert") {
         const { AssertionError } = await import("node:assert");
         throw new AssertionError({
@@ -64,7 +70,9 @@ beforeEach(() => {
   state.diagnostics = "";
   state.calls = [];
   state.privateKinds = [];
+  state.authorizationIdentities = [];
   state.outcome = "pass";
+  state.authorizationAvailable = true;
   state.argv = process.argv;
   state.exit = process.exitCode;
   const data = teamGradeData();
@@ -176,6 +184,21 @@ describe("fixed protected oracle driver; synthetic module/worker transport", () 
       expect(state.output).not.toContain("synthetic private expectation");
     },
   );
+  it.each([
+    ["pass", 0],
+    ["assert", 1],
+    ["error", 2],
+  ] as const)(
+    "preserves %s verdict while signaling supplementary storage unavailable",
+    async (outcome, exit) => {
+      state.authorizationAvailable = false;
+      state.outcome = outcome;
+      await run();
+      expect(process.exitCode).toBe(exit);
+      expect(state.output).toMatch(/ Authorization telemetry unavailable\.$/);
+      expect(state.output).not.toContain("synthetic");
+    },
+  );
   it("refuses unknown operations and malformed profile input before a transport or private check", async () => {
     process.argv[2] = "arbitrary-command";
     await expect(run()).rejects.toThrow("Invalid oracle operation");
@@ -188,4 +211,34 @@ describe("fixed protected oracle driver; synthetic module/worker transport", () 
     expect(state.privateKinds).toEqual([]);
     expect(state.calls).toEqual([]);
   });
+  it("carries only the exact trusted grading identity through the private sidecar channel", async () => {
+    const data = teamGradeData();
+    process.argv[3] = `forecode-booking-${data.identity.runId}-${data.identity.runId}`;
+    state.input = JSON.stringify({
+      profile: data.profile,
+      authorizationIdentity: data.identity,
+    });
+    await run();
+    expect(state.authorizationIdentities).toEqual([data.identity]);
+    expect(state.calls).toEqual(['{"op":"team-new"}']);
+    expect(state.output).toBe("Protected team check completed.");
+    expect(state.output).not.toContain("authorization");
+  });
+  it.each(["run", "suite"])(
+    "rejects a substituted authorization %s before worker/private access",
+    async (defect) => {
+      const data = teamGradeData();
+      process.argv[3] = `forecode-booking-${data.identity.runId}-${data.identity.runId}`;
+      if (defect === "run")
+        data.identity.runId = "22222222-2222-4222-8222-222222222222";
+      else data.identity.testSuiteSha256 = "0".repeat(64);
+      state.input = JSON.stringify({
+        profile: data.profile,
+        authorizationIdentity: data.identity,
+      });
+      await expect(run()).rejects.toThrow();
+      expect(state.calls).toEqual([]);
+      expect(state.privateKinds).toEqual([]);
+    },
+  );
 });

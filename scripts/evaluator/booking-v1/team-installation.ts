@@ -5,17 +5,29 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { z } from "zod";
+import { AssertionError } from "node:assert";
+import {
+  TeamAuthorizationInstrumentationSchema,
+  authorizationInstrumentationDigest,
+  createTeamAuthorizationCollector,
+  retainTeamAuthorizationCheckpoint,
+  teamAuthorizationRoot,
+  type ObserveTeamAuthorizationCase,
+} from "./team-authorization";
 import {
   TeamGradeProfileSchema,
   validateTeamProfile,
   teamOnlyCheckIds,
   type TeamGradeProfile,
+  validateProfileIdentity,
+  GradeIdentitySchema,
 } from "./grade-profile";
 
 export const teamInstallationRoot = "/opt/forecode-booking/future";
 const ManifestSchema = z.strictObject({
   schemaVersion: z.literal("booking-team-oracle-installation.v1"),
   profile: TeamGradeProfileSchema,
+  authorization: TeamAuthorizationInstrumentationSchema.optional(),
 });
 const digest = (bytes: Uint8Array) =>
   createHash("sha256").update(bytes).digest("hex");
@@ -90,7 +102,16 @@ export async function inspectTeamInstallation(
   );
   if (digest(oracle) !== profile.testSuiteSha256)
     throw new Error("Private oracle source changed.");
-  return { manifestSha256: digest(bytes), oracleSha256: digest(oracle) };
+  return {
+    manifestSha256: digest(bytes),
+    oracleSha256: digest(oracle),
+    ...(manifest.authorization
+      ? {
+          authorizationInstrumentationSha256:
+            authorizationInstrumentationDigest(manifest.authorization),
+        }
+      : {}),
+  };
 }
 
 export async function requireInstalledTeamProfile(profile: TeamGradeProfile) {
@@ -113,25 +134,59 @@ export async function runInstalledTeamCheck(
   kind: string,
   profile: TeamGradeProfile,
   rpc: (request: unknown) => unknown,
+  authorizationIdentity?: unknown,
+  reportAuthorizationAvailability?: (available: boolean) => void,
 ) {
   if (!(teamOnlyCheckIds as readonly string[]).includes(kind))
     throw new Error("Unsupported private check.");
   const before = await requireInstalledTeamProfile(profile);
-  const oracle = (await import(
-    pathToFileURL(path.join(teamInstallationRoot, "oracle.mjs")).href
-  )) as {
-    runTeamOracle?: (
-      check: string,
-      rpc: (request: unknown) => unknown,
-    ) => Promise<void>;
-  };
-  if (typeof oracle.runTeamOracle !== "function")
-    throw new Error("Private oracle export missing.");
+  const manifestBytes = await readProtected(
+    path.join(teamInstallationRoot, "manifest.json"),
+    0,
+  );
+  if (digest(manifestBytes) !== before.manifestSha256)
+    throw new Error("Private manifest freshness changed.");
+  const manifest = ManifestSchema.parse(
+    JSON.parse(manifestBytes.toString("utf8")),
+  );
+  if (manifest.authorization)
+    validateProfileIdentity(
+      GradeIdentitySchema.parse(authorizationIdentity),
+      profile,
+    );
+  const collector = manifest.authorization
+    ? createTeamAuthorizationCollector({
+        instrumentation: manifest.authorization,
+        identity: authorizationIdentity,
+        checkId: kind,
+        retain: (checkpoint) =>
+          retainTeamAuthorizationCheckpoint(teamAuthorizationRoot, checkpoint),
+      })
+    : null;
+  let groupOutcome: "pass" | "fail" | "error" = "error";
   // The oracle's assertion failure is a genuine required failure. Its output and
   // diagnostics stay private; no assertion counts or expectations reach workers.
   try {
-    await oracle.runTeamOracle(kind, rpc);
+    const oracle = (await import(
+      pathToFileURL(path.join(teamInstallationRoot, "oracle.mjs")).href
+    )) as {
+      runTeamOracle?: (
+        check: string,
+        rpc: (request: unknown) => unknown,
+        observeCase?: ObserveTeamAuthorizationCase,
+      ) => Promise<void>;
+    };
+    if (typeof oracle.runTeamOracle !== "function")
+      throw new Error("Private oracle export missing.");
+    await oracle.runTeamOracle(kind, rpc, collector?.observeCase);
+    groupOutcome = "pass";
+  } catch (error) {
+    groupOutcome = error instanceof AssertionError ? "fail" : "error";
+    throw error;
   } finally {
+    collector?.finish(groupOutcome);
+    if (collector)
+      reportAuthorizationAvailability?.(collector.retentionAvailable());
     const after = await requireInstalledTeamProfile(profile);
     if (JSON.stringify(before) !== JSON.stringify(after))
       throw new Error("Private package freshness changed.");

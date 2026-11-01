@@ -57,6 +57,9 @@ export type TeamRuntimeLocation = Readonly<{
   publicKeyPem: string;
   publicKeySha256: string;
 }>;
+// Reserved prospective study slot only; no registration, enablement or authority
+// is created by this source-owned locator. Its private document is still absent.
+export const prospectiveTeamStudyId = "forecode-team-20261101-prospective-01";
 // Only fixed location and independently trusted key belong in source. Runtime
 // hashes/record pins are read as private data AFTER source freeze, avoiding a
 // circular implementation digest. No request/env can select a location or key.
@@ -75,6 +78,27 @@ export const configuredTeamRuntimes: ReadonlyMap<string, TeamRuntimeLocation> =
           "forecode-tournament",
           "registration",
           "boundary-completion-case14",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      prospectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-01",
         ),
         publicKeyPem: [
           "-----BEGIN PUBLIC KEY-----",

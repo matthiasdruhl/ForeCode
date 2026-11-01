@@ -1,5 +1,37 @@
 # Implementation log
 
+## CI reservation-control partition — October 31, 2026
+
+The first PR workflow on `b735b733485f33cdf3ec6961b3fe790a083a0174` passed
+all Foundation steps. Its separate push workflow
+[41256424703](https://github.com/matthiasdruhl/ForeCode/actions/runs/41256424703)
+failed with1041/1042 tests passing: the single synchronous Python reservation
+control exceeded Vitest's existing5000ms test deadline. The complete original log
+is retained privately. This was not a model/runtime/resource-limit failure.
+
+Partitioned the test-only driver into seven finite independent groups: admission,
+4M replay,32M replay, near-byte-envelope replay, compact60, growing60 and HTTP.
+The same shared helpers are AST-identical and all40 original assertions remain
+semantically covered. No argument still executes the entire standalone suite.
+Vitest invokes one group per case; no assertion, iteration, reservation, runtime
+or test timeout changed. This turns one case into seven, adding six framework
+cases without manufacturing additional behavior coverage.
+
+All seven groups passed in a fresh mountless deny-all Linux2CPU/4GiB guest with
+unchanged512-task/64GiB ceilings; per-group observations were85–400ms. The
+no-argument suite also passed there. Exact source/control hashes and outputs
+remain outside Git, and this second unit-only namespace was removed after export.
+The actual native/supervisor/worker source is unchanged from the validated hash
+below. Earlier native/resource/restart observations remain bound to those same
+bytes; the new broker-test entry point has its separate Linux result.
+
+A separate shared-host AI reviewer compared the refactor against `b735b73`,
+confirmed unchanged helpers/assertion coverage, safe callback captures and matching
+Python/TypeScript selections, and found no actionable issue. Post-correction exit0: full `npm run check`1048 tests/56 files plus lint, strict
+types and both builds; app/fixture browser60/2; pinned planning128; focused76;
+Python complete and partitioned broker controls; formatting/whitespace. The final
+exact-commit review and GitHub results are reported in the PR/delivery.
+
 ## Consolidated tournament contract reliability — October 31, 2026
 
 Consolidates PR [#42](https://github.com/matthiasdruhl/ForeCode/pull/42)

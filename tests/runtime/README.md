@@ -90,7 +90,7 @@ publication/collisions, write/chmod/fsync/link failures, order/hash substitution
 bounded privacy, terminal duplication/omission, sparse nonterminal envelopes, malformed/deep JSON, JSON/SSE
 final-call refusal, retained usage and no retry. HTTP reservation controls also
 prove request21/iteration21 refusal and diagnostic-failure refusal at the actual
-local broker boundary. Provider Content-Type parameters are discarded before the local HTTP response, preventing raw header values from crossing that boundary. No provider, container or candidate executes in these tests.
+local broker boundary. Ordinary Vitest partitions the broker suite into seven independent subprocess cases under its unchanged default timeout. Standalone `team-reservation-controls.py` without arguments still runs every assertion; its finite optional selections are `admission`, `replay4m`, `replay32m`, `envelope32m`, `compact60`, `growing60` and `http`. These are test-only selections, never production dispatch inputs. Provider Content-Type parameters are discarded before the local HTTP response, preventing raw header values from crossing that boundary. No provider, container or candidate executes in these tests.
 
 Full-history modes additionally include a dynamic-import public-boundary failure,
 atomic repair and growing harmless output history from PR #42. All five modes

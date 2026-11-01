@@ -759,13 +759,21 @@ describe("dedicated supervised team contract, no inference", () => {
     for (const stop of summary.brokerStops)
       expect(BrokerStopSchema.safeParse(stop).success).toBe(true);
   });
-  it("exercises full replay growth and durable broker refusals with zero upstream calls", () => {
+  it.each([
+    "admission",
+    "replay4m",
+    "replay32m",
+    "envelope32m",
+    "compact60",
+    "growing60",
+    "http",
+  ])("runs isolated %s reservation controls without inference", (mode) => {
     const script = fileURLToPath(
       new URL("../runtime/team-reservation-controls.py", import.meta.url),
     );
     expect(
-      execFileSync("python3", ["-I", "-B", script], { encoding: "utf8" }),
-    ).toContain("zero-send negative controls passed");
+      execFileSync("python3", ["-I", "-B", script, mode], { encoding: "utf8" }),
+    ).toContain("team reservation controls passed: " + mode);
   });
   it("delivers committed scenario assumptions as part of the exact common prompt", async () => {
     const f = await fixture(),

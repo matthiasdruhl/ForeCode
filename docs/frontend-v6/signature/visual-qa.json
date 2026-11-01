@@ -1,0 +1,96 @@
+{
+  "sourceCommit": "b1c9348ec912ca45c0ebd4c9b577cecd41c97b33",
+  "baseCommit": "efc6fc6b7bf254be3ac4550e558ec107c7d4984f",
+  "check": {
+    "exitCode": 0,
+    "unitTests": 1624,
+    "unitFiles": 73,
+    "productionBuilds": 2
+  },
+  "browserTests": {
+    "exitCode": 0,
+    "passed": 86,
+    "engine": "Chromium",
+    "widths": [1440, 768, 390]
+  },
+  "print": {
+    "size": "A4",
+    "pages": 2,
+    "visuallyInspected": true
+  },
+  "productionPreview": {
+    "providerCalls": "disabled and network-blocked",
+    "observedConsoleErrors": 0,
+    "screenReaderLabels": "accessibility tree inspected; no manual VoiceOver run"
+  },
+  "artifacts": [
+    {
+      "path": "docs/frontend-v6/signature/time-1440.png",
+      "state": "production-no-approved-study",
+      "viewportWidth": 1440,
+      "imageWidth": 1440,
+      "imageHeight": 2060
+    },
+    {
+      "path": "docs/frontend-v6/signature/time-768.png",
+      "state": "production-no-approved-study",
+      "viewportWidth": 768,
+      "imageWidth": 768,
+      "imageHeight": 2149
+    },
+    {
+      "path": "docs/frontend-v6/signature/time-390.png",
+      "state": "production-no-approved-study",
+      "viewportWidth": 390,
+      "imageWidth": 390,
+      "imageHeight": 2959
+    },
+    {
+      "path": "docs/frontend-v6/signature/report-1440.png",
+      "state": "production-no-approved-study",
+      "viewportWidth": 1440,
+      "imageWidth": 1440,
+      "imageHeight": 2845
+    },
+    {
+      "path": "docs/frontend-v6/signature/report-768.png",
+      "state": "production-no-approved-study",
+      "viewportWidth": 768,
+      "imageWidth": 768,
+      "imageHeight": 2790
+    },
+    {
+      "path": "docs/frontend-v6/signature/report-390.png",
+      "state": "production-no-approved-study",
+      "viewportWidth": 390,
+      "imageWidth": 390,
+      "imageHeight": 3530
+    },
+    {
+      "path": "docs/frontend-v6/signature/synthetic-preparation-1440.png",
+      "state": "synthetic-test-only-no-experiment",
+      "imageWidth": 1440,
+      "imageHeight": 1524
+    },
+    {
+      "path": "docs/frontend-v6/signature/synthetic-verification-390.png",
+      "state": "synthetic-test-only-no-experiment",
+      "imageWidth": 390,
+      "imageHeight": 4992
+    },
+    {
+      "path": "docs/frontend-v6/signature/report-print-page-1.png",
+      "state": "production-no-approved-study-A4-print-render",
+      "page": 1,
+      "imageWidth": 778,
+      "imageHeight": 1100
+    },
+    {
+      "path": "docs/frontend-v6/signature/report-print-page-2.png",
+      "state": "production-no-approved-study-A4-print-render",
+      "page": 2,
+      "imageWidth": 778,
+      "imageHeight": 1100
+    }
+  ]
+}

@@ -22,8 +22,11 @@ import type { PublicForesightConfiguration } from "@/server/meta/configuration";
 import type { TournamentCatalog } from "@/server/artifacts/tournament-recordings";
 import type { DecisionReportCatalog } from "@/server/artifacts/decision-reports";
 import type { PublicTournament } from "@/lib/experiment/tournament-publication";
-import type { TournamentReplayCatalog } from "@/lib/replay";
+import { replayStages } from "@/lib/replay/contracts";
+import type { ReplayStage, TournamentReplayCatalog } from "@/lib/replay";
 import { ReplayHistory } from "./replay-history";
+import { ReplayStageExplorer } from "./replay-stage-explorer";
+import { ReplayEventDetail } from "./replay-event-detail";
 
 const chapters = [
   ["case", "Case"],
@@ -53,20 +56,7 @@ const questions: Record<EvidenceQuestion, [string, string]> = {
   ],
 };
 function traceIdentity(study: PublicTournament | undefined, revision: number) {
-  return JSON.stringify([
-    bookingGraph.repoCommit,
-    revision,
-    study?.studyId,
-    study?.definitionSha256,
-    study?.protocolOriginalSha256,
-    study?.preparedOriginalSha256,
-    study?.arms.map((arm) => [
-      arm.initialTreeSha256,
-      arm.finalTreeSha256,
-      arm.runId,
-      arm.receiptId,
-    ]),
-  ]);
+  return JSON.stringify([bookingGraph.repoCommit, revision, study]);
 }
 function chapterAt(url: URL): Chapter {
   const hash = url.hash.slice(1);
@@ -77,6 +67,12 @@ function chapterAt(url: URL): Chapter {
 function questionAt(url: URL): EvidenceQuestion {
   const q = url.searchParams.get("question");
   return q && Object.hasOwn(questions, q) ? (q as EvidenceQuestion) : "checks";
+}
+function stageAt(url: URL): ReplayStage {
+  return (
+    replayStages.find((stage) => stage === url.searchParams.get("stage")) ??
+    "preparation"
+  );
 }
 export function ResearchExperience({
   configuration,
@@ -103,42 +99,47 @@ export function ResearchExperience({
   );
   const focus = reconcileTraceFocus(selection, contextIdentity);
   const [question, setQuestion] = useState<EvidenceQuestion>("checks");
+  const [replayStage, setReplayStage] = useState<ReplayStage>("preparation");
+  const [evidenceEventId, setEvidenceEventId] = useState<string | null>(null);
+  const evidenceEvent = replay?.events.find(
+    (event) => event.id === evidenceEventId,
+  );
   const [returnTo, setReturnTo] = useState<{
     chapter: Chapter;
     trigger: string;
   } | null>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const evidence = useRef<HTMLDivElement>(null);
-  const contextRef = useRef(contextIdentity);
-  useEffect(() => {
-    contextRef.current = contextIdentity;
-  }, [contextIdentity]);
-
   useEffect(() => {
     function restore(event?: PopStateEvent | HashChangeEvent) {
       const url = new URL(window.location.href);
       setChapter(chapterAt(url));
       setQuestion(questionAt(url));
-      const historyContext = window.history.state?.forecodeContext;
-      setSelection(
-        historyContext && historyContext !== contextRef.current
-          ? initialTraceFocus(contextRef.current)
-          : readTraceSelection(url, contextRef.current),
-      );
       const requestedStudy = url.searchParams.get("study");
-      if (
-        requestedStudy &&
-        tournaments.studies.some((item) => item.studyId === requestedStudy)
-      )
-        setStudyId(requestedStudy);
+      const restoredStudy =
+        tournaments.studies.find((item) => item.studyId === requestedStudy) ??
+        tournaments.studies[0];
+      const restoredIdentity = traceIdentity(restoredStudy, revision);
+      setStudyId(restoredStudy?.studyId);
+      const historyContext = window.history.state?.forecodeContext;
+      const stale = Boolean(
+        historyContext && historyContext !== restoredIdentity,
+      );
+      setReplayStage(stale ? "preparation" : stageAt(url));
+      setEvidenceEventId(stale ? null : url.searchParams.get("event"));
+      setSelection(
+        historyContext && historyContext !== restoredIdentity
+          ? initialTraceFocus(restoredIdentity)
+          : readTraceSelection(url, restoredIdentity),
+      );
       if (!historyContext)
         window.history.replaceState(
-          { ...window.history.state, forecodeContext: contextRef.current },
+          { ...window.history.state, forecodeContext: restoredIdentity },
           "",
           window.location.href,
         );
       const origin = window.history.state?.forecodeReturn;
-      setReturnTo(origin ?? null);
+      setReturnTo(stale ? null : (origin ?? null));
       if (event)
         requestAnimationFrame(() => {
           const target = window.history.state?.forecodeFocus;
@@ -149,18 +150,13 @@ export function ResearchExperience({
         });
     }
     restore();
-    window.history.replaceState(
-      { ...window.history.state, forecodeContext: contextRef.current },
-      "",
-      window.location.href,
-    );
     window.addEventListener("popstate", restore);
     window.addEventListener("hashchange", restore);
     return () => {
       window.removeEventListener("popstate", restore);
       window.removeEventListener("hashchange", restore);
     };
-  }, [tournaments.studies]);
+  }, [tournaments.studies, revision]);
 
   function writeUrl(
     nextChapter: Chapter,
@@ -169,6 +165,8 @@ export function ResearchExperience({
       question?: EvidenceQuestion;
       origin?: { chapter: Chapter; trigger: string } | null;
       study?: string;
+      stage?: ReplayStage;
+      eventId?: string | null;
     },
   ) {
     const url = new URL(window.location.href);
@@ -176,13 +174,16 @@ export function ResearchExperience({
     url.searchParams.set("arm", next.arm);
     url.searchParams.set("responsibility", next.responsibility);
     url.searchParams.set("phase", next.phase);
+    url.searchParams.set("stage", options?.stage ?? replayStage);
     if (next.sourceId) url.searchParams.set("source", next.sourceId);
     else url.searchParams.delete("source");
     if (options?.study ?? studyId)
       url.searchParams.set("study", (options?.study ?? studyId)!);
-    if (nextChapter === "evidence")
-      url.searchParams.set("question", options?.question ?? question);
-    else url.searchParams.delete("question");
+    url.searchParams.set("question", options?.question ?? question);
+    const selectedEventId =
+      options && "eventId" in options ? options.eventId : evidenceEvent?.id;
+    if (selectedEventId) url.searchParams.set("event", selectedEventId);
+    else url.searchParams.delete("event");
     window.history.pushState(
       {
         ...window.history.state,
@@ -208,7 +209,11 @@ export function ResearchExperience({
     setSelection(next);
     writeUrl(chapter, next);
   }
-  function inspect(nextQuestion: EvidenceQuestion, trigger: string) {
+  function inspect(
+    nextQuestion: EvidenceQuestion,
+    trigger: string,
+    eventId?: string,
+  ) {
     const origin = { chapter, trigger };
     window.history.replaceState(
       { ...window.history.state, forecodeFocus: trigger },
@@ -217,8 +222,13 @@ export function ResearchExperience({
     );
     setReturnTo(origin);
     setQuestion(nextQuestion);
+    setEvidenceEventId(eventId ?? null);
     setChapter("evidence");
-    writeUrl("evidence", focus, { question: nextQuestion, origin });
+    writeUrl("evidence", focus, {
+      question: nextQuestion,
+      origin,
+      eventId: eventId ?? null,
+    });
     requestAnimationFrame(() => {
       evidence.current?.focus();
       window.scrollTo({ top: 0, behavior: "instant" });
@@ -240,14 +250,22 @@ export function ResearchExperience({
     const identity = traceIdentity(study, nextRevision);
     const next = initialTraceFocus(identity);
     setSelection(next);
-    writeUrl(chapter, next);
+    setReplayStage("preparation");
+    setEvidenceEventId(null);
+    setQuestion("checks");
+    setReturnTo(null);
+    writeUrl(chapter, next, {
+      stage: "preparation",
+      eventId: null,
+      question: "checks",
+    });
   }
   const trace = (
     <ChangeTrace
       focus={focus}
       onSelect={select}
       requirement={
-        study ? "Published future task" : (confirmedTitle ?? "Team permissions")
+        study ? study.taskId : (confirmedTitle ?? "Team permissions")
       }
       requirementConfirmed={!study && confirmedTitle !== null}
     />
@@ -314,6 +332,9 @@ export function ResearchExperience({
                 ? `${confirmedTitle} · confirmed by you`
                 : "Team permissions · proposed future requirement")}
           </span>
+          {study && (
+            <span className="case-requirement">{study.futureProblem}</span>
+          )}
           <span>
             {focus.arm} / {focus.sourceId ?? focus.responsibility} ·{" "}
             {focus.phase}
@@ -559,7 +580,16 @@ export function ResearchExperience({
                       traceIdentity(nextStudy, revision),
                     );
                     setSelection(next);
-                    writeUrl(chapter, next, { study: nextStudy.studyId });
+                    setReplayStage("preparation");
+                    setEvidenceEventId(null);
+                    setReturnTo(null);
+                    setQuestion("checks");
+                    writeUrl(chapter, next, {
+                      study: nextStudy.studyId,
+                      stage: "preparation",
+                      eventId: null,
+                      question: "checks",
+                    });
                   }}
                 >
                   {tournaments.studies.map((item) => (
@@ -592,7 +622,28 @@ export function ResearchExperience({
               Inspect approved identities and file comparisons. A conceptual
               preparation is never a historical source snapshot.
             </p>
-            {trace}
+            <ReplayStageExplorer
+              catalog={replays}
+              replay={replay}
+              stage={replayStage}
+              focus={focus}
+              requirement={
+                study?.futureProblem ??
+                confirmedTitle ??
+                "Team permissions: delegate who can create, reschedule and cancel bookings."
+              }
+              requirementConfirmed={!study && confirmedTitle !== null}
+              onStage={(stage) => {
+                setReplayStage(stage);
+                writeUrl("time", focus, { stage });
+              }}
+              onArm={(arm) => select({ arm })}
+              inspect={inspect}
+            />
+            <details className="publication-details conceptual-history">
+              <summary>Inspect conceptual architecture relationships</summary>
+              {trace}
+            </details>
             <div
               className="phase-controls"
               role="group"
@@ -632,6 +683,25 @@ export function ResearchExperience({
               </span>
               <h2>{questions[question][0]}</h2>
               <p>{questions[question][1]}</p>
+              {evidenceEvent && (
+                <section
+                  className="focused-replay-evidence"
+                  aria-label="Selected replay evidence"
+                >
+                  <h3>{evidenceEvent.label}</h3>
+                  <p>
+                    Exact event in {study?.studyId}:{" "}
+                    <code>{evidenceEvent.id}</code>
+                  </p>
+                  <ReplayEventDetail event={evidenceEvent} />
+                </section>
+              )}
+              {evidenceEventId && !evidenceEvent && (
+                <p className="focused-replay-evidence">
+                  The selected event is unavailable in this approved study. No
+                  evidence from another study has been substituted.
+                </p>
+              )}
               {returnTo && (
                 <button className="v6-text-link" onClick={returnFromEvidence}>
                   Return to{" "}
@@ -650,9 +720,11 @@ export function ResearchExperience({
                   aria-pressed={question === key}
                   onClick={() => {
                     setQuestion(key);
+                    setEvidenceEventId(null);
                     writeUrl("evidence", focus, {
                       question: key,
                       origin: returnTo,
+                      eventId: null,
                     });
                   }}
                 >
@@ -683,6 +755,7 @@ export function ResearchExperience({
               studyId={studyId}
               definitionSha256={study?.definitionSha256}
               projectionSha256={replay?.projectionSha256}
+              requirement={study?.futureProblem ?? confirmedTitle ?? undefined}
               inspect={inspect}
             />
           </section>

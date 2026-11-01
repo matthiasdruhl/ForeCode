@@ -2335,7 +2335,6 @@ Next ticket: review these local fixes and run socket/browser checks in the norma
 
 The owner subsequently authorized staging, committing and pushing these nine reviewed files to the existing `codex/meta-backend-readiness` branch for PR49. `git diff --check` passes and the branch still starts at reviewed head `96621912e45e2c49958cdf2a16747db746639e84`; the validation results and restricted-environment limitations above remain applicable. No merge, paid inference or runtime activation is authorized by this delivery instruction.
 
-
 ## PR52–55 integration (November 1, 2026)
 
 The owner requested reconciliation and delivery of all four workstreams in a fresh integration PR. Fresh main was `03f5deb2521facb58c26fd3fcf4bc6199bd8b210`; the isolated `ForeCode-Integration` worktree uses `codex/integrate-scientist-metrics-v64`. The four exact heads are recorded in [conflict report](INTEGRATION-52-55-REPORT.md). No other checkout was modified or reset.
@@ -2355,7 +2354,6 @@ Observed on Node v24.16.0 and locked dependencies:
 Initial sandbox fetch failed DNS; authorized fetch succeeded. Connected GitHub inspection confirmed each input PR’s green Foundation workflow; these do not substitute for exact final integration-head CI, which is linked with the final delivery SHA. Full local checks used authorized local-process permissions for existing socket/browser tests; no test or assertion was weakened.
 
 Operational limits and next ticket: human review of this integration PR, then a separately authorized private pre-selection approval package and exact-source measurement/runtime admissions. No genuine registration, coding-agent run, protected A/B, paid inference, private historical outcome access, installation, deployment or disclosure was performed. No automatic merge. Full frontend remains honest NOT RUN / INSUFFICIENT EVIDENCE until authentic approved data exist. Historical logs above retain their original source identities and claims.
-
 
 ### PR57 validation-table correction
 
@@ -2383,3 +2381,33 @@ Observed final validation with provider calls/spending disabled and existing syn
 - Current source-only `team-cli.ts --bundle`: exit 0, **NOT_INSTALLED / NOT_ADMITTED / NOT_RUN**. Frozen trusted closure `e372ce13feb484d58bb13efc01eb49055285e394c0f4b1d791872c540e3ee31b`; source-only packaging grants no approval. Local artifact references are in the execution checkpoint.
 
 Details and exact remaining authority package: [execution checkpoint](E2E-EXECUTION-20261101.md), [custody/registration](E2E-CUSTODY-REGISTRATION-20261101.md), [runtime admission](E2E-RUNTIME-ADMISSION-20261101.md), [validation](E2E-VALIDATION-20261101.md). Delivery PR, final commit, actual CI and merged-main checks are recorded in the final handoff. Next required action: owner identifies the legitimate existing independent custodian/operator interface; custodian holds a fresh pre-generation commitment and exact subsequent lineage/admissions, evaluator owner admits safe per-case instrumentation, and disclosure owner approves the exact eventual sanitized projection. Public measured evidence remains absent and INCONCLUSIVE.
+
+## Signature experience presentation refinement — November 1, 2026
+
+Isolated branch `codex/signature-time-machine-decision-report`, based on freshly fetched main `efc6fc6b7bf254be3ac4550e558ec107c7d4984f` including PR #58. Application/UI-test commit under final validation: `b1c9348ec912ca45c0ebd4c9b577cecd41c97b33`. Latest main was fetched again before delivery and retained the same base. Existing operator/runtime work in the primary checkout was untouched.
+
+Refined the existing five-stage read-only replay into selectable stages and aligned A/B conceptual paths, with recorded events and independent outcomes kept separate. Preserved unassigned attempts/comparisons, failures, raw intervals, missing evidence and exact event identities. Added stage/event continuity, study-first history restoration and exact focus return. Refined the existing server-derived memo with its future question, independent arm correctness, phase-separated effort and exact evaluated subject. No authoritative calculation, trusted loader, source/evidence hashing, frozen schema, evaluator/runtime, transport, result, lockfile or fixture implementation changed. No planning implementation was copied.
+
+Observed validation on Node 24.16.0 with the existing locked dependencies:
+
+- `META_CALLS_ENABLED=false META_SPENDING_APPROVED=false npm run check`: exit 0; lint, both strict typechecks, **1,624 unit tests / 73 files**, both production builds.
+- `FORECODE_E2E_PORT=3384 FORECODE_E2E_DISABLED_PORT=3386 npm run test:e2e`: exit 0; **86 browser cases**, including all six synthetic report outcomes, two-study client history/inspection, 1440/768/390px, keyboard, reduced motion, long identities, empty/unavailable/mismatched evidence and print. Existing provider-network blocker retained; the new populated harness rejects all unexpected network requests.
+- `npx vitest run tests/unit/signature-experience.test.tsx tests/unit/replay-presentation.test.tsx tests/unit/frontend-v6.test.tsx`: exit 0; 24 focused tests / 3 files.
+- Changed-file Prettier and `git diff --check`: exit 0. Fixture typechecks, visible tests and build are included in the full check; fixture browser tests were not rerun because no fixture code changed.
+- A separate disabled production preview on port 3388 showed zero observed console errors in Time Machine/report. Accessibility labels and the final layouts were inspected. The actual A4 test PDF renders cleanly across two pages; both pages were rendered with Poppler and visually reviewed. Ten screenshot/print artifacts and their exact source/paths are recorded in [the delivery report](frontend-v6/signature-experience.md) and its manifest. The preview was stopped after inspection.
+
+Initial new-test fixture/schema, isolated browser-bundle environment and focus-synchronization failures were corrected; no existing check was weakened. Visual QA corrected the mobile requirement width and small effort-table type. Full checks/browser tests were repeated after the final implementation edits. Genuine public evidence remains absent; populated artifacts are explicitly synthetic UI tests, never experimental results. No provider call, paid inference, experiment, protected evaluation, private evidence read, approval/disclosure change, deployment or merge occurred.
+
+Next step: human visual/source review of the focused PR. Presentation edits can change the trusted implementation closure. Keep the branch isolated and do not merge during an active source-bound experiment without explicit experiment-owner approval. Full source snapshots/topology, a common event clock, manual VoiceOver, WebKit, physical devices and physical printing remain outside this validation.
+
+### PR61 CI follow-up — deterministic synthetic output-limit child
+
+GitHub Foundation run `41312424508`, job `124865404660`, failed in the existing `tests/unit/installed-launcher.test.ts` output-limit case: the reason was correctly `output_limit`, but Linux could let the finite synthetic writer exit 0 before SIGKILL, while the test required -9. All other 1,623 unit tests passed; the later CI steps were skipped. This was not a frontend or launcher implementation failure.
+
+Changed only the harmless Python sample embedded in that test to wait after emitting and flushing its fixed 100,000-byte output. The child remains alive until the real launcher's output-limit process-group kill. All original reason/exit-code/output-bound/command assertions are retained. No runtime, evaluator, isolation configuration, application, provider or evidence code changes. The user explicitly requested repair of the PR's failing checks.
+
+- `npx vitest run tests/unit/installed-launcher.test.ts`: exit 0, 4 cases.
+- `META_CALLS_ENABLED=false META_SPENDING_APPROVED=false npm run check`: exit 0, lint, both strict typechecks, 1,624 unit tests / 73 files and both production builds.
+- Changed-file Prettier and `git diff --check`: exit 0.
+
+Next step: push this test-only repair to PR61 and verify the complete Ubuntu Foundation workflow, including browser/fixture/export checks. No merge or source-bound experiment activation.

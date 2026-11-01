@@ -23,6 +23,7 @@ import {
   prospectiveTeamStudyId,
   nextProspectiveTeamStudyId,
   recoveryProspectiveTeamStudyId,
+  diagnosticProspectiveTeamStudyId,
   isProspectiveTeamStudy,
 } from "../../scripts/experiments/tournament/team-config";
 
@@ -56,7 +57,11 @@ function build() {
 }
 
 describe("unsigned study approval preparation (synthetic inputs only)", () => {
-  it.each([nextProspectiveTeamStudyId, recoveryProspectiveTeamStudyId] as const)(
+  it.each([
+    nextProspectiveTeamStudyId,
+    recoveryProspectiveTeamStudyId,
+    diagnosticProspectiveTeamStudyId,
+  ] as const)(
     "allocates %s with fresh trial identities after a retained failure",
     (targetStudyId) => {
       const prior = build();

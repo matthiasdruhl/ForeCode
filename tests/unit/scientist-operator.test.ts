@@ -212,6 +212,82 @@ async function fixture(realTime = false) {
   };
 }
 describe("staged private Scientist operator", () => {
+  it("retains sanitized layer diagnostics when a failed observer throws and cannot retry", async () => {
+    const x = await fixture();
+    const secret = "PRIVATE_ERROR_BODY_NEVER_RETAIN";
+    x.network.mockRejectedValue(new Error(secret));
+    const observed: unknown[] = [];
+    x.options.observeFailure = (value) => {
+      observed.push(value);
+      throw new Error(secret);
+    };
+    const op = await stageScientistOperator(x.options);
+    await expect(op.propose(new AbortController().signal)).rejects.toThrow(
+      "Staged Scientist operation unavailable.",
+    );
+    expect(op.status().phase).toBe("failed");
+    expect(x.network).toHaveBeenCalledTimes(1);
+    expect(observed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          layer: "transport",
+          stage: "fetch",
+          step: "propose",
+          payloadSha256: x.approved[0],
+          code: "PROVIDER_UNAVAILABLE",
+        }),
+        expect.objectContaining({
+          layer: "operator",
+          stage: "continuation",
+          step: "propose",
+          payloadSha256: x.approved[0],
+          code: "PROVIDER_UNAVAILABLE",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(observed)).not.toContain(secret);
+    await expect(op.propose(new AbortController().signal)).rejects.toThrow(
+      "Scientist phase already consumed or unavailable.",
+    );
+    expect(x.network).toHaveBeenCalledTimes(1);
+    expect(op.transportObservations()).toEqual([]);
+  });
+  it("exposes copied known usage after valid transport but failed flow without exposing model content", async () => {
+    const x = await fixture();
+    x.network.mockResolvedValue(
+      Response.json(
+        envelope(
+          { PRIVATE_UNKNOWN_KEY: "never-retain" },
+          {
+            model: x.h.commitment.study.model,
+            usage: {
+              prompt_tokens: 11,
+              completion_tokens: 7,
+              total_tokens: 18,
+            },
+          },
+        ),
+      ),
+    );
+    const op = await stageScientistOperator(x.options);
+    await expect(op.propose(new AbortController().signal)).rejects.toThrow(
+      "Staged Scientist operation unavailable.",
+    );
+    const metadata = op.transportObservations();
+    expect(metadata[0]!.usage).toEqual({
+      inputTokens: 11,
+      outputTokens: 7,
+      totalTokens: 18,
+      reasoningTokens: null,
+    });
+    expect(metadata[0]!.cost).toBeNull();
+    metadata[0]!.usage!.inputTokens = 999;
+    metadata.length = 0;
+    expect(op.transportObservations()[0]!.usage!.inputTokens).toBe(11);
+    expect(JSON.stringify(op.transportObservations())).not.toContain(
+      "PRIVATE_UNKNOWN_KEY",
+    );
+  });
   it.each(["", "prospective-registration-20261101-01", "not-a-uuid"])(
     "rejects invalid planned registration %j before custody or provider use",
     async (registrationId) => {

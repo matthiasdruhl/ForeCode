@@ -30,6 +30,11 @@ import {
 import type { IssuedHypothesis } from "../../../src/server/meta/evidence";
 import { createForesightService } from "../../../src/server/meta/service";
 import {
+  observeScientistFailure,
+  scientistFailureCode,
+  type ScientistFailureObserver,
+} from "../../../src/server/meta/failure-observation";
+import {
   createMetaTransport,
   digest,
 } from "../../../src/server/meta/transport";
@@ -177,6 +182,7 @@ export async function stageScientistOperator(options: {
   initial: ScientistInitialOriginals;
   schedule: ScientistSchedule;
   provider: { env(): Record<string, string | undefined>; fetch: typeof fetch };
+  observeFailure?: ScientistFailureObserver;
   approveRequest(
     approval: ScientistRequestApproval,
     signal: AbortSignal,
@@ -193,6 +199,7 @@ export async function stageScientistOperator(options: {
   const concreteProvider = options.provider.fetch === globalThis.fetch;
   const { approveRequest, resolveBinding } = options;
   const provider = { ...options.provider };
+  const observeFailure = options.observeFailure;
   const initial = {
     ...options.initial,
     custody: snapshotCustody(options.initial.custody),
@@ -340,6 +347,7 @@ export async function stageScientistOperator(options: {
   }
   const transport = createMetaTransport({
     now,
+    observeFailure,
     fetch: provider.fetch,
     env: () => {
       const env = provider.env();
@@ -421,6 +429,7 @@ export async function stageScientistOperator(options: {
       }
       return bindingReader.resolveRegistration(id, issued);
     },
+    observeFailure,
   );
   async function operation<T>(
     expected: typeof phase,
@@ -437,12 +446,30 @@ export async function stageScientistOperator(options: {
       signal,
       AbortSignal.timeout(Math.max(0, Math.min(remaining, 2_147_483_647))),
     ]);
+    let stage: "initial_custody" | "continuation" = "initial_custody";
     try {
       await currentInitial();
       invariant(!scoped.aborted, "Scientist operator stopped.");
+      stage = "continuation";
       return await bounded(work(scoped), scoped);
-    } catch {
+    } catch (error) {
       phase = "failed";
+      observeScientistFailure(observeFailure, {
+        schemaVersion: "scientist-failure-observation.local.v1",
+        layer: "operator",
+        stage,
+        step:
+          expected === "staged"
+            ? "propose"
+            : expected === "proposed"
+              ? "hypothesize"
+              : expected === "hypothesized"
+                ? "challenge"
+                : "register",
+        at: new Date(now()).toISOString(),
+        payloadSha256: approvedPayload,
+        code: scientistFailureCode(error),
+      });
       throw new Error("Staged Scientist operation unavailable.");
     } finally {
       approvedPayload = null;
@@ -492,6 +519,8 @@ export async function stageScientistOperator(options: {
         payloadSha256: digest(payload),
       });
     },
+    // Metadata-only defensive copy, including valid usage observed before a later flow failure.
+    transportObservations: () => transport.observations(),
     status: () =>
       Object.freeze({
         phase,

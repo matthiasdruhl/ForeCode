@@ -207,7 +207,7 @@ describe("authenticated prospective custody", () => {
     "future",
     "revoked",
     "changed-revocations",
-    "expired-protocol",
+    "invalid-interval",
     "wrong-kind",
     "wrong-predecessor",
     "reassigned-study",
@@ -225,7 +225,7 @@ describe("authenticated prospective custody", () => {
         if (kind === "expired") r.expiresAt = new Date(h.now()).toISOString();
         if (kind === "future")
           r.heldAt = new Date(h.now() + 1000).toISOString();
-        if (kind === "expired-protocol") r.expiresAt = r.heldAt;
+        if (kind === "invalid-interval") r.expiresAt = r.heldAt;
         if (kind === "wrong-kind") r.kind = "disclosure";
         if (kind === "wrong-predecessor") r.predecessorSha256 = "f".repeat(64);
         if (kind === "reassigned-study") r.studyId = "another-study";

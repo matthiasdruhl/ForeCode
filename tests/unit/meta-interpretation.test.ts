@@ -701,6 +701,23 @@ describe("authenticated interpretation through #45 loader and synthetic Meta tra
     expect((await h.post("interpret-evidence", h.request)).status).toBe(422);
     expect(h.network).toHaveBeenCalledTimes(1);
   });
+  it("rejects actual publication disclosure revocation during inference", async () => {
+    const f = await publicationFixture();
+    fixtures.push(f);
+    const h = await harness(f, {
+      afterCall: async (step) => {
+        if (step !== "interpret-evidence") return;
+        await chmod(f.revocationFile, 0o600);
+        await writeFile(
+          f.revocationFile,
+          JSON.stringify({ revokedIds: ["public-disclosure"] }),
+        );
+        await chmod(f.revocationFile, 0o400);
+      },
+    });
+    expect((await h.post("interpret-evidence", h.request)).status).toBe(422);
+    expect(h.network).toHaveBeenCalledTimes(1);
+  });
   it("does not weaken the shared process budget and gives interpretation only the existing per-endpoint allowance", async () => {
     const h = await harness();
     for (let n = 0; n < 4; n++)

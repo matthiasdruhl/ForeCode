@@ -1667,3 +1667,235 @@ dd.ready > span {
     scroll-behavior: auto;
   }
 }
+
+/* v6 Change Trace: compact overview, no simulated execution or measured result. */
+.change-trace {
+  --trace-bg: #10151c;
+  --trace-line: #313744;
+  --trace-muted: #a1a4ad;
+  --trace-ink: #f1f1ef;
+  --trace-selection: #8ecbde;
+  --trace-proposal: #bcacfa;
+  margin: 23px 0;
+  padding: 23px 24px 18px;
+  border: 1px solid var(--trace-line);
+  background: var(--trace-bg);
+  color: var(--trace-ink);
+  min-width: 0;
+}
+.change-trace-heading,
+.change-trace-lane-label,
+.change-trace-inspection,
+.atlas-source-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+.change-trace-heading {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--trace-line);
+}
+.change-trace-heading h4 {
+  margin: 7px 0 0;
+  font-size: 19px;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  font-weight: 550;
+}
+.change-trace-eyebrow,
+.change-trace-status,
+.change-trace-index {
+  font: 10px/1.55 var(--mono);
+  letter-spacing: 0.02em;
+  color: var(--trace-muted);
+}
+.change-trace-status {
+  text-align: right;
+}
+.change-trace-layout {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 26px;
+  align-items: stretch;
+  padding: 20px 0;
+}
+.change-trace-intent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 7px;
+  padding-right: 20px;
+  border-right: 1px solid #786e51;
+}
+.change-trace-diamond {
+  width: 13px;
+  height: 13px;
+  margin: 2px 0 9px 4px;
+  transform: rotate(45deg);
+  border: 1px solid #f5c786;
+  background: #f5c786;
+}
+.change-trace-intent strong {
+  font-size: 15px;
+  letter-spacing: -0.015em;
+  font-weight: 550;
+}
+.change-trace-intent small,
+.change-trace-lane-label span,
+.change-trace-step small,
+.change-trace-inspection small,
+.change-trace-inspection p {
+  color: var(--trace-muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.change-trace-lanes {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+.change-trace-lane {
+  min-width: 0;
+}
+.change-trace-lane-label {
+  margin-bottom: 10px;
+}
+.change-trace-lane-label strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.change-trace-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(116px, 1fr));
+  gap: 12px;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 2px 1px 7px;
+}
+.change-trace-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-height: 76px;
+  padding: 11px 12px;
+  border: 1px solid #49525d;
+  border-radius: 3px;
+  background: #181c25;
+  color: var(--trace-ink);
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+.change-trace-step:not(:first-child)::before {
+  content: "";
+  position: absolute;
+  left: -13px;
+  top: 37px;
+  width: 12px;
+  height: 1px;
+  background: #56616e;
+}
+.change-trace-step strong {
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.35;
+}
+.change-trace-step small {
+  color: var(--trace-proposal);
+}
+.change-trace-step.is-proposed {
+  border-style: dashed;
+  border-color: #a69ac4;
+}
+.change-trace-step.is-selected,
+.change-trace-step.is-selected.is-proposed {
+  border: 2px solid var(--trace-selection);
+  padding: 10px 11px;
+}
+.change-trace-step:hover:not(:disabled),
+.change-trace-step:focus-visible {
+  border-color: #d6ed86;
+}
+.change-trace-step:focus-visible {
+  outline: 2px solid #d6ed86;
+  outline-offset: 2px;
+}
+.change-trace-step:disabled {
+  opacity: .48;
+  cursor: not-allowed;
+}
+.change-trace-step:disabled:hover {
+  background: #181c25;
+}
+.change-trace-inspection {
+  padding-top: 15px;
+  border-top: 1px solid var(--trace-line);
+  align-items: start;
+}
+.change-trace-inspection > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.change-trace-inspection > div strong {
+  font: 11px/1.5 var(--mono);
+  overflow-wrap: anywhere;
+}
+.change-trace-inspection p {
+  flex: 1;
+  max-width: 320px;
+  margin: 0;
+}
+.atlas-source-heading {
+  margin: 19px 0 10px;
+}
+.atlas-source-heading strong {
+  font-size: 12px;
+}
+.atlas-source-heading span {
+  color: var(--muted);
+  font-size: 11px;
+}
+@media (max-width: 850px) {
+  .change-trace-layout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .change-trace-intent {
+    border-right: 0;
+    border-bottom: 1px solid #786e51;
+    padding: 0 0 15px;
+  }
+  .change-trace-diamond {
+    margin-bottom: 4px;
+  }
+}
+@media (max-width: 600px) {
+  .change-trace {
+    padding: 17px 14px;
+  }
+  .change-trace-heading,
+  .change-trace-inspection,
+  .change-trace-lane-label,
+  .atlas-source-heading {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+  .change-trace-steps {
+    grid-template-columns: repeat(4, 136px);
+  }
+  .change-trace-inspection p {
+    max-width: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .change-trace-step {
+    transition: none;
+  }
+}

@@ -89,10 +89,10 @@ with tempfile.TemporaryDirectory() as temp:
     with patch.object(team.os, 'open', side_effect=OSError('synthetic disk failure')):
         try:
             broker.reserve(raw())
-        except OSError:
-            pass
+        except team.base.budget.ReservationCapacityError as error:
+            assert str(error) == 'hard reservation exhausted'
         else:
-            raise AssertionError('disk failure expected')
+            raise AssertionError('original capacity refusal must survive diagnostic disk failure')
     assert broker.local_refused and not broker.value['requests']
     try:
         broker.reserve(raw())
@@ -202,3 +202,85 @@ for changes, body, path, expected, calls in [
             assert (pathlib.Path(temp) / 'broker-refusal.json').is_file()
             assert response.getheader('X-Forecode-Stop') == ('token-capacity' if changes else None)
 print('durable numeric refusal diagnostics, latch, fixed envelope and zero-send negative controls passed')
+
+# Exercise the actual HTTP admission boundary after twenty successful local
+# sends, independently of whether the native CLI chooses to stop at its final.
+for limit in ['maxRequests', 'maxIterations']:
+    with tempfile.TemporaryDirectory() as temp:
+        broker = team.TeamReservations(pathlib.Path(temp), request(
+            maxRequests=20 if limit == 'maxRequests' else 21,
+            maxIterations=20 if limit == 'maxIterations' else 21,
+            completionReserveRequests=3))
+        seen = []
+        def upstream(sent):
+            seen.append(sent)
+            return team.base.budget.canonical({'object': 'response', 'model': broker.request['model'],
+                'service_tier': 'auto', 'status': 'completed', 'output': [],
+                'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}), 'application/json'
+        socket_path = pathlib.Path(temp) / 'gateway.sock'
+        server = team.serve_team(socket_path, broker, upstream)
+        for index in range(21):
+            thread = threading.Thread(target=server.handle_request); thread.start()
+            client = UnixHTTP(socket_path)
+            client.request('POST', '/v1/responses', raw(), {'Content-Type': 'application/json'})
+            response = client.getresponse(); response.read(); client.close(); thread.join()
+            assert response.status == (200 if index < 20 else 403)
+        server.server_close()
+        assert len(seen) == len(broker.value['requests']) == 20
+        assert json.loads((pathlib.Path(temp) / 'broker-refusal.json').read_bytes())['reasonCode'] == (
+            'request-count' if limit == 'maxRequests' else 'iteration-count')
+        assert broker.value['reservedTokens'] == sum(x['inputTokenUpperBound'] + x['maximumOutputTokens'] for x in broker.value['requests'])
+print('HTTP request21 and independent iteration21 refused before local upstream; reservations retained')
+
+for failure_stage in ['admission', 'observation']:
+    with tempfile.TemporaryDirectory() as temp:
+        broker = team.TeamReservations(pathlib.Path(temp), request(
+            maxRequests=2, maxIterations=2, completionReserveRequests=2))
+        seen = []
+        def upstream(sent):
+            seen.append(sent)
+            return team.base.budget.canonical({'object': 'response', 'model': broker.request['model'],
+                'service_tier': 'auto', 'status': 'completed', 'output': [],
+                'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}), 'application/json'
+        save = broker.contract_event
+        def fail_storage(stage, sent, details=None):
+            if stage == ('admitted' if failure_stage == 'admission' else 'response-received'):
+                with patch.object(team.os, 'link', side_effect=OSError('synthetic diagnostic storage failure')):
+                    return save(stage, sent, details)
+            return save(stage, sent, details)
+        socket_path = pathlib.Path(temp) / 'gateway.sock'
+        server = team.serve_team(socket_path, broker, upstream)
+        with patch.object(broker, 'contract_event', side_effect=fail_storage):
+            thread = threading.Thread(target=server.handle_request); thread.start()
+            client = UnixHTTP(socket_path)
+            client.request('POST', '/v1/responses', raw(), {'Content-Type': 'application/json'})
+            response = client.getresponse(); response.read(); client.close(); thread.join()
+            assert response.status == 403
+        server.server_close()
+        assert len(seen) == int(failure_stage == 'observation')
+        assert len(broker.value['requests']) == 1
+        assert 'observedUsage' not in broker.value['requests'][0]
+        assert broker.value['reservedTokens'] > 0 and broker.value['reservedMicroUsd'] > 0
+        if failure_stage == 'observation':
+            assert (pathlib.Path(temp) / 'unverified-response.bin').is_file()
+        try: broker.reserve(raw())
+        except ValueError: pass
+        else: raise AssertionError('storage recovery must not reopen admission')
+print('HTTP diagnostic-storage failures refuse before delivery, retain unknown usage and latch admission')
+
+# Provider Content-Type parameters are never copied into the local HTTP envelope.
+with tempfile.TemporaryDirectory() as temp:
+    broker = team.TeamReservations(pathlib.Path(temp), request())
+    def upstream(sent):
+        return team.base.budget.canonical({'object': 'response', 'model': broker.request['model'],
+            'service_tier': 'auto', 'status': 'completed', 'output': [],
+            'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}), 'application/json; charset=utf-8\r\nX-Provider-Canary: private'
+    socket_path = pathlib.Path(temp) / 'gateway.sock'
+    server = team.serve_team(socket_path, broker, upstream)
+    thread = threading.Thread(target=server.handle_request); thread.start()
+    client = UnixHTTP(socket_path)
+    client.request('POST', '/v1/responses', raw(), {'Content-Type': 'application/json'})
+    response = client.getresponse(); response.read(); client.close(); thread.join(); server.server_close()
+    assert response.status == 200 and response.getheader('Content-Type') == 'application/json'
+    assert response.getheader('X-Provider-Canary') is None
+print('provider header parameters excluded from local HTTP response')

@@ -1,0 +1,625 @@
+{
+  "source": "efc6fc6b7bf254be3ac4550e558ec107c7d4984f",
+  "date": "2026-11-01",
+  "scanner": "axe-core 4.11.0, temporary installation; no project dependency change",
+  "environment": "Local production build, no provider credentials, calls/spending disabled; external-provider fetch blocker enabled",
+  "results": [
+    {
+      "route": "/#case",
+      "width": 1440,
+      "layout": {
+        "width": 1440,
+        "scroll": 1440
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"],
+            ["a[href$=\"#evidence\"] > span"],
+            ["a[href$=\"#report\"] > span"]
+          ]
+        },
+        {
+          "id": "landmark-complementary-is-top-level",
+          "impact": "moderate",
+          "targets": [[".atlas-inspector"]]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".case-context"], ["#chapter-heading"]]
+        }
+      ],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 6
+        }
+      ]
+    },
+    {
+      "route": "/#lab",
+      "width": 1440,
+      "layout": {
+        "width": 1440,
+        "scroll": 1440
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"],
+            ["a[href$=\"#evidence\"] > span"],
+            ["a[href$=\"#report\"] > span"]
+          ]
+        },
+        {
+          "id": "landmark-complementary-is-top-level",
+          "impact": "moderate",
+          "targets": [[".atlas-inspector"]]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".case-context"], ["#chapter-heading"]]
+        }
+      ],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 5
+        },
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "route": "/#tournament",
+      "width": 1440,
+      "layout": {
+        "width": 1440,
+        "scroll": 1440
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#time\"] > span"],
+            ["a[href$=\"#evidence\"] > span"],
+            ["a[href$=\"#report\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".case-context"]]
+        }
+      ],
+      "incomplete": []
+    },
+    {
+      "route": "/#time",
+      "width": 1440,
+      "layout": {
+        "width": 1440,
+        "scroll": 1440
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#evidence\"] > span"],
+            ["a[href$=\"#report\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".case-context"]]
+        }
+      ],
+      "incomplete": []
+    },
+    {
+      "route": "/#evidence",
+      "width": 1440,
+      "layout": {
+        "width": 1440,
+        "scroll": 1440
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"],
+            ["a[href$=\"#report\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".case-context"]]
+        }
+      ],
+      "incomplete": []
+    },
+    {
+      "route": "/#report",
+      "width": 1440,
+      "layout": {
+        "width": 1440,
+        "scroll": 1440
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"],
+            ["a[href$=\"#evidence\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".case-context"]]
+        }
+      ],
+      "incomplete": []
+    },
+    {
+      "route": "/#case",
+      "width": 768,
+      "layout": {
+        "width": 768,
+        "scroll": 768
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"],
+            ["a[href$=\"#evidence\"] > span"],
+            ["a[href$=\"#report\"] > span"]
+          ]
+        },
+        {
+          "id": "landmark-complementary-is-top-level",
+          "impact": "moderate",
+          "targets": [[".atlas-inspector"]]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [
+            [".chapter-scroll-hint"],
+            [".case-context"],
+            ["#chapter-heading"]
+          ]
+        }
+      ],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 5
+        }
+      ]
+    },
+    {
+      "route": "/#lab",
+      "width": 768,
+      "layout": {
+        "width": 768,
+        "scroll": 768
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"],
+            ["a[href$=\"#evidence\"] > span"],
+            ["a[href$=\"#report\"] > span"]
+          ]
+        },
+        {
+          "id": "landmark-complementary-is-top-level",
+          "impact": "moderate",
+          "targets": [[".atlas-inspector"]]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [
+            [".chapter-scroll-hint"],
+            [".case-context"],
+            ["#chapter-heading"]
+          ]
+        }
+      ],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 4
+        },
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "route": "/#tournament",
+      "width": 768,
+      "layout": {
+        "width": 768,
+        "scroll": 768
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#time\"] > span"],
+            ["a[href$=\"#evidence\"] > span"],
+            ["a[href$=\"#report\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".chapter-scroll-hint"], [".case-context"]]
+        }
+      ],
+      "incomplete": []
+    },
+    {
+      "route": "/#time",
+      "width": 768,
+      "layout": {
+        "width": 768,
+        "scroll": 768
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#evidence\"] > span"],
+            ["a[href$=\"#report\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".chapter-scroll-hint"], [".case-context"]]
+        }
+      ],
+      "incomplete": []
+    },
+    {
+      "route": "/#evidence",
+      "width": 768,
+      "layout": {
+        "width": 768,
+        "scroll": 768
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"],
+            ["a[href$=\"#report\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".chapter-scroll-hint"], [".case-context"]]
+        }
+      ],
+      "incomplete": []
+    },
+    {
+      "route": "/#report",
+      "width": 768,
+      "layout": {
+        "width": 768,
+        "scroll": 768
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"],
+            ["a[href$=\"#evidence\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".chapter-scroll-hint"], [".case-context"]]
+        }
+      ],
+      "incomplete": []
+    },
+    {
+      "route": "/#case",
+      "width": 390,
+      "layout": {
+        "width": 390,
+        "scroll": 390
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"]
+          ]
+        },
+        {
+          "id": "landmark-complementary-is-top-level",
+          "impact": "moderate",
+          "targets": [[".atlas-inspector"]]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [
+            [".chapter-scroll-hint"],
+            [".case-context"],
+            ["#chapter-heading"]
+          ]
+        }
+      ],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 10
+        }
+      ]
+    },
+    {
+      "route": "/#lab",
+      "width": 390,
+      "layout": {
+        "width": 390,
+        "scroll": 390
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"]
+          ]
+        },
+        {
+          "id": "landmark-complementary-is-top-level",
+          "impact": "moderate",
+          "targets": [[".atlas-inspector"]]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [
+            [".chapter-scroll-hint"],
+            [".case-context"],
+            ["#chapter-heading"]
+          ]
+        }
+      ],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 9
+        },
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "route": "/#tournament",
+      "width": 390,
+      "layout": {
+        "width": 390,
+        "scroll": 390
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#time\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".chapter-scroll-hint"], [".case-context"]]
+        }
+      ],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 13
+        }
+      ]
+    },
+    {
+      "route": "/#time",
+      "width": 390,
+      "layout": {
+        "width": 390,
+        "scroll": 390
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".chapter-scroll-hint"], [".case-context"]]
+        }
+      ],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 5
+        }
+      ]
+    },
+    {
+      "route": "/#evidence",
+      "width": 390,
+      "layout": {
+        "width": 390,
+        "scroll": 390
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".chapter-scroll-hint"], [".case-context"]]
+        }
+      ],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 5
+        }
+      ]
+    },
+    {
+      "route": "/#report",
+      "width": 390,
+      "layout": {
+        "width": 390,
+        "scroll": 390
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "targets": [
+            ["a[href$=\"#case\"] > span"],
+            ["a[href$=\"#lab\"] > span"],
+            ["a[href$=\"#tournament\"] > span"],
+            ["a[href$=\"#time\"] > span"]
+          ]
+        },
+        {
+          "id": "region",
+          "impact": "moderate",
+          "targets": [[".chapter-scroll-hint"], [".case-context"]]
+        }
+      ],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 5
+        }
+      ]
+    },
+    {
+      "route": "/experiments",
+      "width": 390,
+      "violations": [
+        {
+          "id": "scrollable-region-focusable",
+          "impact": "serious",
+          "targets": [[".comparison-table-scroll"]]
+        }
+      ],
+      "incomplete": []
+    },
+    {
+      "route": "/certificates",
+      "width": 390,
+      "violations": [],
+      "incomplete": []
+    }
+  ],
+  "consoleAndPageErrors": [],
+  "externalRequests": [],
+  "unexpectedHttpErrors": [],
+  "adjudications": {
+    "color-contrast": "Confirmed inactive 10px chapter numbers at 4.2:1 (QA-04).",
+    "scrollable-region-focusable": "Scanner warning. Actual Chromium Tab/ArrowRight works despite DOM tabindex=-1. Explicit named focus target recommended for portability (QA-03); no cross-browser failure claimed.",
+    "landmark-complementary-is-top-level": "Best-practice warning: Atlas aside nested in main (QA-05).",
+    "region": "Best-practice warning: chapter context/scroll hint/Case-Lab heading outside main (QA-05)."
+  },
+  "limitations": [
+    "Automated scans are not screen-reader certification.",
+    "Clipped/off-screen and incomplete contrast results require manual review.",
+    "Default no-publication data only; long-identifier synthetic tests are separate.",
+    "No deployed URL, WebKit, Firefox, physical touch or tagged-PDF validation."
+  ]
+}

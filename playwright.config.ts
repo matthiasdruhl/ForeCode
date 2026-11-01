@@ -1,3 +1,4 @@
+import { webOrigin, disabledOrigin } from "./tests/support/browser-origins";
 import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
@@ -7,7 +8,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
-  use: { baseURL: "http://127.0.0.1:3100", trace: "retain-on-failure" },
+  use: { baseURL: webOrigin, trace: "retain-on-failure" },
   projects: [
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
     {
@@ -17,8 +18,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command:
-        "node --import ./tests/support/no-provider-network.mjs node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3100",
+      command: `node --import ./tests/support/no-provider-network.mjs node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port ${new URL(webOrigin).port}`,
       env: {
         META_CALLS_ENABLED: "true",
         META_MODEL_API_KEY: "synthetic-browser-key-never-real",
@@ -29,15 +29,14 @@ export default defineConfig({
         META_MODEL: "muse-spark-1.3-contributor",
         FORECODE_RESEARCH_MODE: "local-single-operator",
         FORECODE_RESEARCH_PROCESSES: "1",
-        FORECODE_ORIGIN: "http://127.0.0.1:3100",
+        FORECODE_ORIGIN: webOrigin,
       },
-      url: "http://127.0.0.1:3100",
+      url: webOrigin,
       reuseExistingServer: false,
       timeout: 60_000,
     },
     {
-      command:
-        "node --import ./tests/support/no-provider-network.mjs node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3102",
+      command: `node --import ./tests/support/no-provider-network.mjs node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port ${new URL(disabledOrigin).port}`,
       env: {
         META_CALLS_ENABLED: "false",
         META_SPENDING_APPROVED: "false",
@@ -46,9 +45,9 @@ export default defineConfig({
         META_MODEL: "muse-spark-1.3-contributor",
         FORECODE_RESEARCH_MODE: "local-single-operator",
         FORECODE_RESEARCH_PROCESSES: "1",
-        FORECODE_ORIGIN: "http://127.0.0.1:3102",
+        FORECODE_ORIGIN: disabledOrigin,
       },
-      url: "http://127.0.0.1:3102",
+      url: disabledOrigin,
       reuseExistingServer: false,
       timeout: 60_000,
     },

@@ -55,6 +55,12 @@ test("v6 chapters retain selection, keyboard inspection, history and exact evide
     await expect(page.locator(".evidence-detail")).toContainText(
       "No approved study",
     );
+    if (index === 1) {
+      await page.goBack();
+      await expect(page.locator(`#memo-reason-${index}`)).toBeFocused();
+      await page.goForward();
+      await expect(page.locator(".evidence-question")).toBeFocused();
+    }
     await page
       .getByRole("button", { name: "Return to Decision Report" })
       .click();

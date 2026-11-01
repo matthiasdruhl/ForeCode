@@ -10,7 +10,11 @@ export function decisionMemo(
   const identity = analysis?.identity;
   const invalid =
     state === "unavailable" ||
-    (identity && identity.comparability !== "COMPARABLE");
+    (identity && identity.comparability !== "COMPARABLE") ||
+    Boolean(
+      analysis?.observations?.blockers.length ||
+      analysis?.observations?.deviations.length,
+    );
   const headline =
     !analysis || analysis.decision === "INCONCLUSIVE"
       ? "Insufficient evidence to choose."

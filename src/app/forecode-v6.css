@@ -832,8 +832,8 @@ select {
   break-inside: avoid;
 }
 .memo-number {
-  font-family: var(--serif);
-  font-size: 33px;
+  font-family: var(--mono);
+  font-size: 22px;
   line-height: 1.3;
 }
 .memo-reason p {
@@ -1151,7 +1151,7 @@ select {
     gap: 12px;
   }
   .memo-number {
-    font-size: 27px;
+    font-size: 18px;
   }
   .memo-reason p {
     font-size: 16px;
@@ -1315,4 +1315,26 @@ select {
 }
 .landing-artifact .trace-lane::before {
   left: 54px;
+}
+
+.protocol h2,
+.foresight-workspace h2 {
+  font-family: var(--sans);
+  font-weight: 500;
+}
+.atlas-node span,
+.atlas-node small {
+  font-size: 12px;
+  line-height: 1.4;
+}
+.atlas-node strong {
+  font-size: 13px;
+}
+.research-provenance {
+  font-family: var(--sans);
+  font-size: 12px !important;
+  line-height: 1.65 !important;
+}
+code {
+  font-family: var(--mono);
 }

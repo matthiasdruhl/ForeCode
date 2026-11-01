@@ -260,6 +260,14 @@ export function ResearchExperience({
                 href={`#${key}`}
                 aria-current={chapter === key ? "step" : undefined}
                 onClick={(event) => {
+                  if (
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey ||
+                    event.button !== 0
+                  )
+                    return;
                   event.preventDefault();
                   navigate(key);
                 }}

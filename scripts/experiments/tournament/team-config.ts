@@ -72,6 +72,8 @@ export const staticAssetsProspectiveTeamStudyId =
   "forecode-team-20261101-prospective-06";
 export const metaEgressProspectiveTeamStudyId =
   "forecode-team-20261101-prospective-07";
+export const contentGateProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-08";
 export const prospectiveTeamStudyIds = [
   prospectiveTeamStudyId,
   nextProspectiveTeamStudyId,
@@ -80,6 +82,7 @@ export const prospectiveTeamStudyIds = [
   selectionWindowProspectiveTeamStudyId,
   staticAssetsProspectiveTeamStudyId,
   metaEgressProspectiveTeamStudyId,
+  contentGateProspectiveTeamStudyId,
 ] as const;
 export const isProspectiveTeamStudy = (id: string) =>
   prospectiveTeamStudyIds.some((reserved) => reserved === id);
@@ -248,6 +251,27 @@ export const configuredTeamRuntimes: ReadonlyMap<string, TeamRuntimeLocation> =
           "forecode-tournament",
           "registration",
           "prospective-20261101-07",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      contentGateProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-08",
         ),
         publicKeyPem: [
           "-----BEGIN PUBLIC KEY-----",

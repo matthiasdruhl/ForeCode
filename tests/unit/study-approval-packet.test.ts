@@ -27,6 +27,7 @@ import {
   selectionWindowProspectiveTeamStudyId,
   staticAssetsProspectiveTeamStudyId,
   metaEgressProspectiveTeamStudyId,
+  contentGateProspectiveTeamStudyId,
   isProspectiveTeamStudy,
 } from "../../scripts/experiments/tournament/team-config";
 
@@ -67,6 +68,7 @@ describe("unsigned study approval preparation (synthetic inputs only)", () => {
     selectionWindowProspectiveTeamStudyId,
     staticAssetsProspectiveTeamStudyId,
     metaEgressProspectiveTeamStudyId,
+    contentGateProspectiveTeamStudyId,
   ] as const)(
     "allocates %s with fresh trial identities after a retained failure",
     (targetStudyId) => {

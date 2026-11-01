@@ -53,6 +53,7 @@ import {
   isProspectiveTeamStudy,
   staticAssetsProspectiveTeamStudyId,
   metaEgressProspectiveTeamStudyId,
+  contentGateProspectiveTeamStudyId,
   type TeamRuntimeRegistration,
 } from "./team-config";
 import {
@@ -189,7 +190,9 @@ function buildControls(
   );
   invariant(
     (study.definition.protocol.studyId !== staticAssetsProspectiveTeamStudyId &&
-      study.definition.protocol.studyId !== metaEgressProspectiveTeamStudyId) ||
+      study.definition.protocol.studyId !== metaEgressProspectiveTeamStudyId &&
+      study.definition.protocol.studyId !==
+        contentGateProspectiveTeamStudyId) ||
       measurement?.protocol.schemaVersion ===
         "prospective-tournament-metrics.v3",
     "Static-asset prospective study requires explicit metric protocol v3.",

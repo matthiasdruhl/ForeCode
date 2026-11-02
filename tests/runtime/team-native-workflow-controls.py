@@ -1,6 +1,6 @@
 """Guest-only scripted real-CLI controls. Synthetic responses, no model or upstream.
 Input: public fixture envelope, enforcement and tariffs. Fresh UUIDs only.
-The deliberately minimal adapter passes public bootstrap only, never protected correctness.
+The reviewed synthetic adapter exercises public examples only, never protected correctness.
 """
 import json,pathlib,types,sys,uuid,time,base64,re,shlex
 f=pathlib.Path('/opt/forecode-agent/team-supervisor.py');t=types.ModuleType('native_repro');t.__file__=str(f);exec(compile(f.read_bytes(),str(f),'exec'),t.__dict__)
@@ -11,7 +11,7 @@ exhausted=mode=='final-tool-refused'; refused=exhausted or 'refused' in mode
 root=pathlib.Path('/var/lib/forecode-native-nul-control-'+str(uuid.uuid4()));root.mkdir(mode=0o700)
 # Explicit scripted local Responses control, never a provider transport.
 bad='export function createTeamBenchmark(){return {domain(){return {};},http(){return Response.json({});}};}'
-good='export function createTeamBenchmark(){return {domain(){return {};},http(){return Response.json({}, {headers:{"Set-Cookie":"booking_demo_session=synthetic; HttpOnly; SameSite=Strict; Path=/"}});}};}'
+good=pathlib.Path(__file__).with_name('team-public-control-adapter.txt').read_text()
 def write(content,previous):
  return "node /run/team-workflow.mjs write <<'FORECODE_JSON'\n"+json.dumps({'path':'src/server/team-benchmark.ts','expectedSha256':previous,'content':content})+"\nFORECODE_JSON"
 commands=["printf 'before\\0after'\x00", "node /run/team-workflow.mjs task", "node /run/team-public-checks.mjs --quick",*(["true"]*8),write(bad,None),write(good,t.hashlib.sha256(bad.encode()).hexdigest()),"node /run/team-source-write-controls.mjs"]

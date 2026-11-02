@@ -1,0 +1,66 @@
+// Reviewed synthetic public-check control. Never use as a tournament candidate.
+import { CreateBookingInputSchema } from "../domain/booking";
+import { createBookingService } from "./booking-service";
+import { createBookingHttp } from "./http";
+type Member = { organizationId: string; userId: string; role: string; status: string };
+type Row = { id: string; organizationId: string; createdBy: string; resourceId: string; title: string; startAt: string; endAt: string; status: string; createdAt: string };
+type Options = { seed: { organizations: { id: string; name: string }[]; memberships: Member[]; resources: { id: string; name: string; organizationId: string }[] }; now: () => Date; newId: () => string };
+function failure(code: string): never { throw Object.assign(new Error(code), { code }); }
+export function createTeamBenchmark({ seed, now, newId }: Options) {
+  const memberships = seed.memberships.map(row => ({ ...row }));
+  const rows: Row[] = [];
+  const personal = createBookingService();
+  function domain(action: string, viewer: string | null, org?: string, id?: string, input?: unknown): Record<string, unknown> {
+    if (!viewer || !["u-alice", "u-bob", "u-cara"].includes(viewer)) failure("UNAUTHENTICATED");
+    if (action === "organizations") return { organizations: seed.organizations.filter(row => memberships.some(m => m.organizationId === row.id && m.userId === viewer && m.status === "active")) };
+    const member = memberships.find(row => row.organizationId === org && row.userId === viewer && row.status === "active");
+    if (!member) failure("NOT_FOUND");
+    if (action === "cancel-booking" && !["owner", "admin"].includes(member.role)) failure("FORBIDDEN");
+    if (action === "revoke-membership" && member.role !== "owner") failure("FORBIDDEN");
+    if (action === "bookings") return { bookings: rows.filter(row => row.organizationId === org).map(row => ({ ...row })) };
+    if (action === "create-booking") {
+      if (!input || typeof input !== "object" || Array.isArray(input)) failure("INVALID_INPUT");
+      const value = input as Record<string, unknown>;
+      const resource = seed.resources.find(row => row.id === value.resourceId && row.organizationId === org);
+      const parsed = CreateBookingInputSchema.safeParse({ ...value, resourceId: "room-1" });
+      if (!resource || !parsed.success) failure("INVALID_INPUT");
+      if (rows.some(row => row.resourceId === resource.id && row.status === "active" && Date.parse(row.startAt) < Date.parse(parsed.data.endAt) && Date.parse(parsed.data.startAt) < Date.parse(row.endAt))) failure("CONFLICT");
+      const row: Row = { ...parsed.data, id: newId(), organizationId: org!, createdBy: viewer, resourceId: resource.id, startAt: new Date(parsed.data.startAt).toISOString(), endAt: new Date(parsed.data.endAt).toISOString(), status: "active", createdAt: now().toISOString() };
+      rows.push(row);
+      return { booking: { ...row } };
+    }
+    if (action === "cancel-booking" || action === "booking") {
+      const row = rows.find(value => value.organizationId === org && value.id === id);
+      if (!row) failure("NOT_FOUND");
+      if (action === "cancel-booking") row.status = "cancelled";
+      return { booking: { ...row } };
+    }
+    if (action === "revoke-membership") {
+      const row = memberships.find(value => value.organizationId === org && value.userId === id);
+      if (!row) failure("NOT_FOUND");
+      if (row.role === "owner") failure("FORBIDDEN");
+      row.status = "revoked";
+      return { membership: { ...row } };
+    }
+    failure("INVALID_INPUT");
+  }
+  async function http(request: Request, viewer: string | null) {
+    const path = new URL(request.url).pathname;
+    if (path === "/api/session") return Response.json({}, { headers: { "set-cookie": "booking_demo_session=synthetic; HttpOnly; SameSite=Strict; Path=/" } });
+    const baseline = createBookingHttp(personal, () => viewer);
+    if (path === "/api/resources") return baseline.resources();
+    if (path === "/api/bookings") return baseline.collection(request);
+    try {
+      const match = /^\/api\/organizations\/([^/]+)\/bookings$/.exec(path);
+      if (!match) failure("NOT_FOUND");
+      const result = request.method === "POST" ? domain("create-booking", viewer, match[1], undefined, await request.json()) : domain("bookings", viewer, match[1]);
+      return Response.json(result, { status: request.method === "POST" ? 201 : 200, headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      const code = (error as { code?: string }).code ?? "INVALID_INPUT";
+      const status: Record<string, number> = { INVALID_INPUT: 400, UNAUTHENTICATED: 401, NOT_FOUND: 404, FORBIDDEN: 403, CONFLICT: 409 };
+      const message: Record<string, string> = { INVALID_INPUT: "Check the resource, title and UTC time interval.", UNAUTHENTICATED: "Start a demo session to manage bookings.", NOT_FOUND: "Booking not found.", FORBIDDEN: "Operation not permitted.", CONFLICT: "This room is already booked for that interval." };
+      return Response.json({ error: { code, message: message[code] } }, { status: status[code] ?? 500, headers: { "Cache-Control": "no-store" } });
+    }
+  }
+  return { domain, http };
+}

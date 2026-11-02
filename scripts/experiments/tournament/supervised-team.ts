@@ -14,7 +14,7 @@ import { isTrustedEvaluation } from "../../../src/server/artifacts/evaluation-st
 import { CandidateEnvelopeSchema } from "../artifacts/files";
 import {
   validateGradeInput,
-  validateGradeReport,
+  validateGradeReportForInput,
   teamCheckIds,
 } from "../../evaluator/booking-v1/grade-profile";
 import type { ProcessResult } from "../runner/process";
@@ -611,16 +611,9 @@ function createTeamLifecycle(
           !signal.aborted,
         "Protected grader incomplete.",
       );
-      const report = validateGradeReport(
+      const report = validateGradeReportForInput(
         JSON.parse(result.stdout),
-        {
-          runId: value.runId,
-          evaluatedTreeSha256: value.evaluatedTreeSha256,
-          evaluatorSha256: value.evaluatorSha256,
-          testSuiteSha256: value.testSuiteSha256,
-          requiredPolicySha256: value.requiredPolicySha256,
-        },
-        plan.profile,
+        value,
       );
       invariant(
         sameIds(

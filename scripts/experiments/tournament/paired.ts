@@ -20,6 +20,7 @@ import { snapshotTree } from "../../evaluator/booking-v1/snapshot";
 import {
   validateGradeInput,
   validateGradeReport,
+  validateGradeReportForInput,
   type GradeInput,
   type TeamGradeProfile,
 } from "../../evaluator/booking-v1/grade-profile";
@@ -580,16 +581,9 @@ export async function runPairedTournament(input: {
             !signal.aborted,
           "Protected grader unavailable or interrupted.",
         );
-        attempt.grade = validateGradeReport(
+        attempt.grade = validateGradeReportForInput(
           JSON.parse(graded.stdout),
-          {
-            runId: gradeInput.runId,
-            evaluatedTreeSha256: gradeInput.evaluatedTreeSha256,
-            evaluatorSha256: gradeInput.evaluatorSha256,
-            testSuiteSha256: gradeInput.testSuiteSha256,
-            requiredPolicySha256: gradeInput.requiredPolicySha256,
-          },
-          profile,
+          gradeInput,
         );
         invariant(
           (await snapshotTree(candidate.directory)).treeSha256 ===

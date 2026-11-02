@@ -106,6 +106,7 @@ def main():
         parser.error("--agent-source must be a directory")
     for path in [
         control,
+        control.with_name("team-public-control-adapter.txt"),
         *(
             agent_source / name
             for name in [
@@ -146,6 +147,7 @@ def main():
             "--mount", mount(fixture / "src", "/workspace/src", readonly=False),
             "--mount", mount(agent_source, "/run"),
             "--mount", mount(control, "/controls/control.mjs"),
+            "--mount", mount(control.with_name("team-public-control-adapter.txt"), "/controls/team-public-control-adapter.txt"),
             "--entrypoint=/usr/local/bin/node", args.image,
             "--input-type=module", "-e",
             'import {accessSync} from "node:fs"; '
@@ -178,7 +180,7 @@ def main():
                 stderr=subprocess.PIPE,
                 check=False,
             )
-            if absent.returncode != 1 or b"No such" not in absent.stderr:
+            if absent.returncode != 1 or b"no such" not in absent.stderr.lower():
                 raise RuntimeError("could not confirm disposable container removal")
             if cleanup.returncode not in {0, 1}:
                 raise RuntimeError("disposable container cleanup failed")

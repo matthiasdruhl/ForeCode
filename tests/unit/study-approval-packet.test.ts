@@ -34,6 +34,7 @@ import {
   writerRecoveryProspectiveTeamStudyId,
   predecessorCheckedProspectiveTeamStudyId,
   finalHandoffProspectiveTeamStudyId,
+  validatedCompletionProspectiveTeamStudyId,
   isProspectiveTeamStudy,
 } from "../../scripts/experiments/tournament/team-config";
 
@@ -81,6 +82,7 @@ describe("unsigned study approval preparation (synthetic inputs only)", () => {
     writerRecoveryProspectiveTeamStudyId,
     predecessorCheckedProspectiveTeamStudyId,
     finalHandoffProspectiveTeamStudyId,
+    validatedCompletionProspectiveTeamStudyId,
   ] as const)(
     "allocates %s with fresh trial identities after a retained failure",
     (targetStudyId) => {

@@ -23,7 +23,10 @@ export const META_LIMITS = Object.freeze({
   intervalMs: 10_000,
   perEndpointPerHour: 4,
   totalPerProcess: 12,
-  artifactTtlMs: 30 * 60_000,
+  // A fresh tournament must cover two coding arms, four bounded protected
+  // grades, preparation, cleanup and authenticated reporting. Existing issued
+  // artifacts retain their original expiresAt; this only bounds new issuance.
+  artifactTtlMs: 120 * 60_000,
 });
 // Internal model-content schemas deliberately exclude provenance. Only the
 // transport may establish it; the public frozen response schemas are unchanged.

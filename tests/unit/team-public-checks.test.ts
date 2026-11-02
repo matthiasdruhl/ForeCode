@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   commands: [] as string[][],
   boundary: "scan",
   sessionMarker: true,
+  behaviorMarker: true,
 }));
 vi.mock("node:fs/promises", async (original) => {
   const fs = await original<typeof import("node:fs/promises")>();
@@ -88,9 +89,13 @@ vi.mock("node:child_process", () => ({
       args.includes("/run/team-public-session.mjs") &&
       state.sessionMarker
     ) {
-      stdout = args.includes("--interface-only")
-        ? "PUBLIC_INTERFACE_CHECK_COMPLETED\n"
-        : "PUBLIC_SESSION_CHECK_COMPLETED\n";
+      stdout = args.includes("--behavior-only")
+        ? state.behaviorMarker
+          ? "PUBLIC_BEHAVIOR_CHECK_COMPLETED\n"
+          : ""
+        : args.includes("--interface-only")
+          ? "PUBLIC_INTERFACE_CHECK_COMPLETED\n"
+          : "PUBLIC_SESSION_CHECK_COMPLETED\n";
     }
     return {
       status,
@@ -112,6 +117,7 @@ beforeEach(() => {
   state.commands = [];
   state.boundary = "scan";
   state.sessionMarker = true;
+  state.behaviorMarker = true;
   state.files.set(
     adapter,
     Buffer.from(
@@ -162,10 +168,11 @@ describe("confined public checker orchestration with inert process/filesystem se
     await run();
     expect(process.exitCode).toBe(0);
     expect(output()).toContain("PUBLIC_READINESS READY");
-    expect(state.commands).toHaveLength(6);
+    expect(state.commands).toHaveLength(7);
     expect(state.commands[0]![0]).toBe("/run/team-public-boundary.mjs");
     expect(state.commands[1]).toContain("/run/team-public-session.mjs");
     expect(state.commands[4]).toContain("build");
+    expect(state.commands[6]).toContain("--behavior-only");
   });
   it.each(["missing-marker", "nonzero"])(
     "refuses boundary %s even if the other completion signal succeeds",
@@ -200,4 +207,23 @@ describe("confined public checker orchestration with inert process/filesystem se
     expect(output()).toContain("PUBLIC_READINESS BLOCKED");
     expect(state.commands).toHaveLength(2);
   });
+  it("cannot mark full readiness without completed public behavioral assertions", async () => {
+    state.behaviorMarker = false;
+    await run();
+    expect(process.exitCode).toBe(1);
+    expect(output()).toContain("PUBLIC_CHECK team-public-behavior FAIL");
+    expect(output()).toContain("PUBLIC_READINESS BLOCKED");
+  });
+  it.each(["--quick", "--interface-only"])(
+    "keeps %s feedback distinct from full behavioral readiness",
+    async (flag) => {
+      process.argv.push(flag);
+      await run();
+      expect(process.exitCode).toBe(0);
+      expect(
+        state.commands.some((args) => args.includes("--behavior-only")),
+      ).toBe(false);
+      expect(output()).not.toContain("PUBLIC_READINESS READY");
+    },
+  );
 });

@@ -130,8 +130,10 @@ const toolchain = invoke(
 assert.equal(toolchain.exitCode, 0, JSON.stringify(toolchain));
 assert.match(toolchain.stdout, /DEPENDENCY_ONLY_PROBE_PASS/);
 
-const initial =
-  'export function createTeamBenchmark(){return {domain(){return {};},http(){return Response.json({}, {headers:{"Set-Cookie":"booking_demo_session=synthetic; HttpOnly; SameSite=Strict; Path=/"}});}};}\n';
+const initial = readFileSync(
+  new URL("./team-public-control-adapter.txt", import.meta.url),
+  "utf8",
+);
 refused(
   write("missing-export-new-file", "export const unrelated = 1;\n", null),
   null,
@@ -253,6 +255,7 @@ for (const check of [
   "typecheck",
   "build",
   "session-cookie",
+  "team-public-behavior",
 ])
   assert.ok(
     full.stdout.includes(`PUBLIC_CHECK ${check} PASS`),

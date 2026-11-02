@@ -167,7 +167,7 @@ describe("SYNTHETIC Scientist → protected metrics → approved report integrat
         resolveRegistration: async () => structuredClone(registered),
       }).load(f.assessmentAt),
     ).toBeNull();
-    h.advance(31 * 60_000);
+    h.advance(h.registration.expiresAt - h.registration.issuedAt + 1);
     expect(await f.load()).toBeNull();
     await expect(
       h.service.resolveRegistered(h.registration.id, h.issued.hypothesis.id),

@@ -144,6 +144,12 @@ try {
       ])
     ) {
       run("session-cookie", session, 15_000, sessionCompletion);
+      run(
+        "team-public-behavior",
+        [...session, "--behavior-only"],
+        15_000,
+        "PUBLIC_BEHAVIOR_CHECK_COMPLETED",
+      );
     }
   }
 } catch (error) {

@@ -12,6 +12,7 @@ import { snapshotTree } from "../../evaluator/booking-v1/snapshot";
 import {
   validateGradeInput,
   validateGradeReport,
+  validateGradeReportForInput,
   baselineCheckIds,
   teamCheckIds,
   type GradeInput,
@@ -622,24 +623,7 @@ function buildControls(
       1_048_576,
       590_000,
     );
-    const {
-      runId,
-      evaluatedTreeSha256,
-      evaluatorSha256,
-      testSuiteSha256,
-      requiredPolicySha256,
-    } = input;
-    const report = validateGradeReport(
-      JSON.parse(result),
-      {
-        runId,
-        evaluatedTreeSha256,
-        evaluatorSha256,
-        testSuiteSha256,
-        requiredPolicySha256,
-      },
-      input.evaluationProfile,
-    );
+    const report = validateGradeReportForInput(JSON.parse(result), graderInput);
     invariant(
       sameIds(
         report.checks.map((c) => c.id),
@@ -670,11 +654,11 @@ function buildControls(
               JSON.stringify({
                 profile: input.evaluationProfile,
                 identity: {
-                  runId,
-                  evaluatedTreeSha256,
-                  evaluatorSha256,
-                  testSuiteSha256,
-                  requiredPolicySha256,
+                  runId: input.runId,
+                  evaluatedTreeSha256: input.evaluatedTreeSha256,
+                  evaluatorSha256: input.evaluatorSha256,
+                  testSuiteSha256: input.testSuiteSha256,
+                  requiredPolicySha256: input.requiredPolicySha256,
                 },
               }),
               1_048_576,

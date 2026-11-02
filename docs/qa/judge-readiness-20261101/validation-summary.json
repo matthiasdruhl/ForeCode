@@ -1,0 +1,81 @@
+{
+  "source": "efc6fc6b7bf254be3ac4550e558ec107c7d4984f",
+  "testsOnly": true,
+  "nonInferenceOnly": true,
+  "fullCheck": {
+    "exit": 0,
+    "unitTests": 1618,
+    "files": 73,
+    "lint": "passed",
+    "typecheck": "both passed",
+    "builds": "both passed"
+  },
+  "browsers": {
+    "exit": 0,
+    "total": 92,
+    "ordinaryPasses": 86,
+    "expectedFailures": [
+      {
+        "title": "QA-07: preparation source paths wrap unbroken filenames",
+        "expected": "failed",
+        "actual": "failed",
+        "status": "expected",
+        "project": "desktop"
+      },
+      {
+        "title": "QA-02: mobile memo wraps schema-valid long study and task IDs",
+        "expected": "failed",
+        "actual": "failed",
+        "status": "expected",
+        "project": "desktop"
+      },
+      {
+        "title": "QA-04: inactive chapter numbers meet normal-text contrast",
+        "expected": "failed",
+        "actual": "failed",
+        "status": "expected",
+        "project": "desktop"
+      },
+      {
+        "title": "QA-07: preparation source paths wrap unbroken filenames",
+        "expected": "failed",
+        "actual": "failed",
+        "status": "expected",
+        "project": "mobile"
+      },
+      {
+        "title": "QA-02: mobile memo wraps schema-valid long study and task IDs",
+        "expected": "failed",
+        "actual": "failed",
+        "status": "expected",
+        "project": "mobile"
+      },
+      {
+        "title": "QA-04: inactive chapter numbers meet normal-text contrast",
+        "expected": "failed",
+        "actual": "failed",
+        "status": "expected",
+        "project": "mobile"
+      }
+    ],
+    "unexpected": [],
+    "skipped": 0,
+    "flaky": 0
+  },
+  "fixtureBrowser": {
+    "exit": 0,
+    "passed": 2
+  },
+  "planning": {
+    "exit": 0,
+    "passed": 128,
+    "pin": "695e68a40b5f5009c9b06b83a1181e18cd6d0223"
+  },
+  "restrictedInitialCheck": {
+    "exit": 1,
+    "passed": 1612,
+    "failed": 2,
+    "reason": "Existing Python Unix-socket bind EPERM; unchanged local-socket-capable rerun passed."
+  },
+  "knownDefectsRemainOpen": true
+}

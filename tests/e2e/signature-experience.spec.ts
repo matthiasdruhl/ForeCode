@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test("keyboard stage selection retains arm, source, phase and report evidence focus through history", async ({
   page,
@@ -118,9 +118,7 @@ test("direct links validate stages and never substitute missing replay evidence"
 
 // Bundle the real client component into a disposable test-only document. No
 // fixture endpoint, outcome switch, synthetic catalog or bundler ships in src.
-test("synthetic populated journey preserves exact event focus and restores the requested study before selection", async ({
-  page,
-}) => {
+async function openPopulatedJourney(page: Page) {
   const { build } = await import("esbuild");
   const { readFile } = await import("node:fs/promises");
   const { resolve } = await import("node:path");
@@ -196,14 +194,20 @@ test("synthetic populated journey preserves exact event focus and restores the r
       },
     ],
   });
-  const css = await readFile("src/app/forecode-v6.css", "utf8");
+  const css = (
+    await Promise.all(
+      ["forecode-v6.css", "project-workspaces.css"].map((file) =>
+        readFile(`src/app/${file}`, "utf8"),
+      ),
+    )
+  ).join("\n");
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   const unexpectedRequests: string[] = [];
   await page.route("**/*", (route) => {
     if (
       route.request().resourceType() !== "document" ||
-      !route.request().url().startsWith("http://forecode-synthetic.invalid/")
+      !route.request().url().startsWith("https://forecode-synthetic.invalid/")
     ) {
       unexpectedRequests.push(route.request().url());
       return route.abort();
@@ -214,9 +218,17 @@ test("synthetic populated journey preserves exact event focus and restores the r
     });
   });
   const url =
-    "http://forecode-synthetic.invalid/?study=synthetic-ui-study-two&arm=B&source=store&phase=after&stage=coding#time";
+    "https://forecode-synthetic.invalid/?study=synthetic-ui-study-two&arm=B&source=store&phase=after&stage=coding#time";
   await page.goto(url);
   await page.addScriptTag({ content: bundle.outputFiles[0]!.text });
+  return { studies, props, errors, unexpectedRequests };
+}
+
+test("synthetic populated journey preserves exact event focus and restores the requested study before selection", async ({
+  page,
+}) => {
+  const { studies, props, errors, unexpectedRequests } =
+    await openPopulatedJourney(page);
   await expect(page.locator(".case-context")).toContainText(
     "synthetic-ui-study-two",
   );
@@ -281,6 +293,199 @@ test("synthetic populated journey preserves exact event focus and restores the r
   await expect(page.locator(".case-context")).toContainText(
     "B / store · after",
   );
+  expect(errors).toEqual([]);
+  expect(unexpectedRequests).toEqual([]);
+});
+
+test("populated replay selections cannot revive across local workspace restore and booking drafts need new consent", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const { props, errors, unexpectedRequests } =
+    await openPopulatedJourney(page);
+  const event = props.replays.replays[1]!.events.find(
+    (item) => item.data.kind === "coding_attempt" && item.variant === "B",
+  )!;
+  const manager = page.locator(".workspace-manager");
+  const sharingApproval = page.locator(".sharing-review").getByRole("checkbox");
+  const chapter = (name: string) =>
+    page.getByRole("link", { name, exact: true }).click();
+  async function showShelf() {
+    if (!(await manager.evaluate((node) => (node as HTMLDetailsElement).open)))
+      await manager.locator("summary").first().click();
+  }
+  async function save(name: string, local = false) {
+    await showShelf();
+    await page.getByLabel("Workspace name", { exact: true }).fill(name);
+    await page
+      .getByLabel("I understand this workspace is saved on this device", {
+        exact: true,
+      })
+      .check();
+    if (local)
+      await page
+        .getByLabel("Store project source on this device", { exact: true })
+        .check();
+    await page
+      .getByRole("button", { name: "Save workspace", exact: true })
+      .click();
+    await expect(manager.getByRole("status")).toContainText("Workspace saved");
+  }
+  async function inspectCodingEvent() {
+    await chapter("04 Time Machine");
+    await page
+      .getByRole("navigation", { name: "Replay stage" })
+      .getByRole("button", { name: /03 Coding/ })
+      .click();
+    await page.locator(`[id="inspect-${event.id}"]`).click();
+    await expect(page.locator(".focused-replay-evidence")).toContainText(
+      event.id,
+    );
+    await expect(page).toHaveURL(/event=replay/);
+  }
+  async function expectClearedEvidence() {
+    await expect(page.locator("#chapter-heading")).toHaveText(
+      "Evidence Laboratory",
+    );
+    // Back can dispatch both popstate and hashchange. Check after both have
+    // settled so a second restoration cannot silently revive the old event.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(page.locator(".focused-replay-evidence")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Return to Time Machine" }),
+    ).toHaveCount(0);
+    await expect(page.locator(".case-context")).toContainText(
+      "A / Routes · before",
+    );
+    await expect(
+      page.getByRole("button", {
+        name: "Independent checks & receipts",
+        exact: true,
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+  }
+
+  await chapter("02 Architecture Lab");
+  await page
+    .getByRole("button", { name: "Team permissions", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Confirm requirement", exact: true })
+    .click();
+  await sharingApproval.check();
+  await save("Synthetic booking draft");
+  await inspectCodingEvent();
+
+  await chapter("07 Local Projects");
+  await expect(page).not.toHaveURL(/event=/);
+  await expect(page).toHaveURL(/stage=preparation/);
+  await expect(page).toHaveURL(/question=checks/);
+  // This boundary crossing has not reopened a workspace or changed the intent
+  // revision: project invalidation itself must survive duplicate history events.
+  await page.goBack();
+  await expectClearedEvidence();
+  await page.goForward();
+  await expect(page.locator("#chapter-heading")).toHaveText("Local Projects");
+  await page.getByLabel("Choose source files").setInputFiles({
+    name: "local.ts",
+    mimeType: "text/plain",
+    buffer: Buffer.from("export const syntheticWorkspaceBoundaryMarker = 42;"),
+  });
+  await page.getByRole("button", { name: "Import selected files" }).click();
+  await expect(page.getByLabel("Source code")).toContainText(
+    "syntheticWorkspaceBoundaryMarker",
+  );
+  await showShelf();
+  await page
+    .getByLabel("Project requirement drafts", { exact: true })
+    .fill("Add a local tenant boundary.");
+  await page
+    .getByLabel("Workspace notes", { exact: true })
+    .fill("Synthetic local notes, unrelated to booking evidence.");
+  await save("Synthetic local project", true);
+  await chapter("02 Architecture Lab");
+  await expect(sharingApproval).not.toBeChecked();
+  await inspectCodingEvent();
+
+  await showShelf();
+  await page
+    .getByRole("button", {
+      name: "Open workspace Synthetic local project",
+      exact: true,
+    })
+    .click();
+  await expect(manager.getByRole("status")).toContainText("Workspace reopened");
+  await expect(page).toHaveURL(/#projects$/);
+  await expect(page).not.toHaveURL(/event=/);
+  await expect(page).toHaveURL(/stage=preparation/);
+  await expect(page.getByLabel("Source code")).toContainText(
+    "syntheticWorkspaceBoundaryMarker",
+  );
+  await expect(
+    page.getByLabel("Project requirement drafts", { exact: true }),
+  ).toHaveValue("Add a local tenant boundary.");
+  await expect(page.getByLabel("Workspace notes", { exact: true })).toHaveValue(
+    "Synthetic local notes, unrelated to booking evidence.",
+  );
+  await expect(
+    page.getByLabel("Store project source on this device", { exact: true }),
+  ).not.toBeChecked();
+  await expect(
+    page.getByLabel("I understand this workspace is saved on this device", {
+      exact: true,
+    }),
+  ).not.toBeChecked();
+  await page.goBack();
+  await expectClearedEvidence();
+  await page.goForward();
+  await expect(page.locator("#chapter-heading")).toHaveText("Local Projects");
+
+  await page
+    .getByRole("button", {
+      name: "Open workspace Synthetic booking draft",
+      exact: true,
+    })
+    .click();
+  await expect(manager.getByRole("status")).toContainText("Workspace reopened");
+  await expect(page.locator("#chapter-heading")).toHaveText("Architecture Lab");
+  await expect(
+    page.getByRole("heading", {
+      name: "Restored requirement drafts",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("No confirmed requirements yet.", { exact: true }),
+  ).toBeVisible();
+  await expect(sharingApproval).not.toBeChecked();
+  await expect(
+    page.getByRole("button", { name: "Propose A / B", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "Load draft: Team permissions", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Confirm requirement", exact: true })
+    .click();
+  await expect(sharingApproval).not.toBeChecked();
+  await expect(
+    page.getByRole("button", { name: "Propose A / B", exact: true }),
+  ).toBeDisabled();
+  await chapter("04 Time Machine");
+  await expect(page).not.toHaveURL(/event=/);
+  await expect(page.locator(".case-context")).toContainText(
+    "A / Routes · before",
+  );
+  await expect(
+    page
+      .getByRole("navigation", { name: "Replay stage" })
+      .getByRole("button", { name: /02 Preparation/ }),
+  ).toHaveAttribute("aria-pressed", "true");
   expect(errors).toEqual([]);
   expect(unexpectedRequests).toEqual([]);
 });

@@ -391,3 +391,115 @@ test("a stale file read cannot replace a reopened workspace or clear its drafts"
     page.getByLabel("Project requirement drafts", { exact: true }),
   ).toHaveValue("Preserve this draft");
 });
+
+for (const navigation of ["inspect", "return"] as const) {
+  test(`pending saved-local open is cancelled by ${navigation} evidence navigation`, async ({
+    page,
+  }) => {
+    const parserChunks = new Set<string>();
+    const heldRequests: string[] = [];
+    const errors: string[] = [];
+    const providerCalls: string[] = [];
+    let discoverParser = false;
+    let holdParser = false;
+    let releaseParser = () => {};
+    const parserGate = new Promise<void>((resolve) => {
+      releaseParser = resolve;
+    });
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("request", (request) => {
+      if (request.url().includes("/api/foresight"))
+        providerCalls.push(request.url());
+    });
+    // Learn the production build's actual lazy chunk URLs during an explicit
+    // import. Routing disables HTTP cache; the reload below clears module state.
+    // No application hook, fake module or hardcoded build hash is involved.
+    await page.route("**/_next/static/chunks/**", async (route) => {
+      const request = route.request();
+      if (discoverParser && request.resourceType() === "script")
+        parserChunks.add(request.url());
+      if (holdParser && parserChunks.has(request.url())) {
+        heldRequests.push(request.url());
+        await parserGate;
+      }
+      await route.continue();
+    });
+    try {
+      await page.goto("/#projects");
+      await page.getByLabel("Choose source files").setInputFiles({
+        name: "saved-race.ts",
+        mimeType: "text/plain",
+        buffer: Buffer.from("export const savedWorkspaceRaceMarker = true;"),
+      });
+      discoverParser = true;
+      await page
+        .getByRole("button", { name: "Import selected files", exact: true })
+        .click();
+      await expect(page.getByLabel("Source code")).toContainText(
+        "savedWorkspaceRaceMarker",
+      );
+      discoverParser = false;
+      expect(parserChunks.size).toBeGreaterThan(0);
+      await save(page, "Pending local reopen", true);
+      await page
+        .getByRole("link", { name: "06 Decision Report", exact: true })
+        .click();
+      await page.reload();
+      await expect(page.locator("#chapter-heading")).toHaveText(
+        "Decision Report",
+      );
+      if (navigation === "return") {
+        await page.locator("#memo-observations").click();
+        await expect(page.locator("#chapter-heading")).toHaveText(
+          "Evidence Laboratory",
+        );
+      }
+      await showShelf(page);
+      await page
+        .getByLabel("Workspace notes", { exact: true })
+        .fill("Keep the current booking notes while navigating.");
+      holdParser = true;
+      await page
+        .getByRole("button", {
+          name: "Open workspace Pending local reopen",
+          exact: true,
+        })
+        .click();
+      await expect.poll(() => heldRequests.length).toBeGreaterThan(0);
+      await expect(shelf(page).getByRole("status")).toHaveText(
+        "Updating saved workspaces…",
+      );
+      if (navigation === "inspect")
+        await page.locator("#memo-observations").click();
+      else
+        await page
+          .getByRole("button", { name: "Return to Decision Report" })
+          .click();
+      const destination =
+        navigation === "inspect" ? "Evidence Laboratory" : "Decision Report";
+      await expect(page.locator("#chapter-heading")).toHaveText(destination);
+      releaseParser();
+      // Wait for the pending open to finish, then verify it did not override
+      // the user's newer navigation or replace the current workspace data.
+      await expect(shelf(page).getByRole("status")).not.toHaveText(
+        "Updating saved workspaces…",
+      );
+      await expect(page.locator("#chapter-heading")).toHaveText(destination);
+      await expect(page).toHaveURL(
+        navigation === "inspect" ? /#evidence$/ : /#report$/,
+      );
+      await expect(shelf(page).getByRole("alert")).toContainText(
+        "Opening was cancelled",
+      );
+      await expect(
+        page.getByLabel("Workspace notes", { exact: true }),
+      ).toHaveValue("Keep the current booking notes while navigating.");
+      await expect(page.getByLabel("Source code")).toHaveCount(0);
+      expect(errors).toEqual([]);
+      expect(providerCalls).toEqual([]);
+    } finally {
+      releaseParser();
+      await page.unrouteAll({ behavior: "wait" });
+    }
+  });
+}

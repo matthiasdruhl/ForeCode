@@ -6,6 +6,7 @@ import {
 } from "next/font/google";
 import "./globals.css";
 import "./forecode-v6.css";
+import "./project-workspaces.css";
 const sans = IBM_Plex_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600"],

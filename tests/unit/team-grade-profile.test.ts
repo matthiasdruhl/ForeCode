@@ -10,6 +10,7 @@ import {
   selectedChecks,
   validateGradeInput,
   validateGradeReport,
+  validateGradeReportForInput,
   teamTaskSha256,
   teamEvaluatorIdentity,
 } from "../../scripts/evaluator/booking-v1/grade-profile";
@@ -23,6 +24,73 @@ import {
 import { teamGradeData } from "../support/team-grade-data";
 
 describe("fixed grading profile and candidate data integrity", () => {
+  it("validates a returned protected grade against full execution input without weakening strict identity", () => {
+    const data = teamGradeData();
+    // This reproduces the diagnostic wrapper's post-grading failure. TypeScript
+    // structural assignability allows the call, but the runtime schema rejects
+    // candidate, workerImage and evaluationProfile as extra identity keys.
+    expect(() =>
+      validateGradeReport(data.report, data.input, data.profile),
+    ).toThrow();
+    expect(
+      validateGradeReportForInput(
+        JSON.parse(JSON.stringify(data.report)),
+        data.input,
+      ),
+    ).toEqual(data.report);
+    const incomplete = {
+      ...data.report,
+      checks: data.report.checks.slice(0, 5),
+    };
+    expect(
+      validateGradeReportForInput(incomplete, data.input).checks,
+    ).toHaveLength(5);
+    const failed = structuredClone(data.report);
+    failed.checks[0] = { ...failed.checks[0]!, status: "fail", exitCode: 1 };
+    expect(
+      validateGradeReportForInput(failed, data.input).checks[0]?.status,
+    ).toBe("fail");
+  });
+  it("binds wrapper observations to candidate bytes, all five identities and the selected profile", () => {
+    const data = teamGradeData();
+    for (const key of [
+      "runId",
+      "evaluatedTreeSha256",
+      "evaluatorSha256",
+      "testSuiteSha256",
+      "requiredPolicySha256",
+    ] as const)
+      expect(() =>
+        validateGradeReportForInput(
+          {
+            ...data.report,
+            [key]:
+              key === "runId"
+                ? "11111111-1111-4111-8111-111111111111"
+                : "0".repeat(64),
+          },
+          data.input,
+        ),
+      ).toThrow();
+    const changed = structuredClone(data.input);
+    changed.candidate.files[1]!.base64 =
+      Buffer.from("substituted source").toString("base64");
+    expect(() => validateGradeReportForInput(data.report, changed)).toThrow(
+      "Candidate identity mismatch",
+    );
+    expect(() =>
+      validateGradeReportForInput(
+        { ...data.report, evaluationProfile: undefined },
+        data.input,
+      ),
+    ).toThrow("Unexpected grading profile");
+    expect(() =>
+      validateGradeReportForInput(data.report, {
+        ...data.input,
+        ignored: true,
+      }),
+    ).toThrow();
+  });
   it("keeps five baseline checks and requires all eight in the team policy", () => {
     const data = teamGradeData();
     expect(selectedChecks()).toEqual(bookingPolicy.requiredCheckIds);

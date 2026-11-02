@@ -34,6 +34,7 @@ describe("Scientist implementation identity", () => {
         "src/server/meta/transport.ts",
         "src/server/meta/service.ts",
         "src/lib/foresight/prompts.ts",
+        "src/lib/foresight/provider-schema.ts",
         "src/server/config/meta.ts",
         "src/server/http/errors.ts",
       ]) {

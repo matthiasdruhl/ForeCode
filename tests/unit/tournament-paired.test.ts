@@ -182,6 +182,65 @@ async function fixture(order: "A_then_B" | "B_then_A" = "A_then_B") {
   };
 }
 describe("paired tournament sequential no-inference lifecycle", () => {
+  it("keeps an expired coding timer out of sealing and protected grading", async () => {
+    const f = await fixture();
+    let codingClock: AbortController;
+    const timeout = vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+      codingClock = new AbortController();
+      return codingClock.signal;
+    });
+    const agent = f.transport.agent;
+    f.transport.agent = vi.fn<PairedTransport["agent"]>(async (...args) => {
+      expect(args[1]).not.toBe(f.input.signal);
+      return agent(...args);
+    });
+    const finalize = f.transport.finalizeAgent;
+    f.transport.finalizeAgent = vi.fn<PairedTransport["finalizeAgent"]>(
+      async (...args) => {
+        // Coding has already terminated. Its allowance can expire while the
+        // separately bounded finalization/grader operations are still running.
+        codingClock.abort();
+        expect(args[1].aborted).toBe(false);
+        return finalize(...args);
+      },
+    );
+    const grade = f.transport.grade;
+    f.transport.grade = vi.fn<PairedTransport["grade"]>(async (...args) => {
+      expect(args[1].aborted).toBe(false);
+      return grade(...args);
+    });
+    const out = await runPairedTournament(f.input);
+    expect(out.attempts.map((a) => a.run.status)).toEqual([
+      "completed",
+      "completed",
+    ]);
+    expect(f.transport.grade).toHaveBeenCalledTimes(2);
+    expect(timeout.mock.calls.map(([ms]) => ms)).toEqual([
+      f.study.definition.protocol.conditions[0]!.budget.maxSeconds * 1000,
+      f.study.definition.protocol.conditions[0]!.budget.maxSeconds * 1000,
+    ]);
+    expect(out.cleanupConfirmed && out.leaseReleased).toBe(true);
+  });
+  it("still interrupts an agent that exceeds its coding allowance", async () => {
+    const f = await fixture();
+    let codingClock: AbortController;
+    vi.spyOn(AbortSignal, "timeout").mockImplementation(() => {
+      codingClock = new AbortController();
+      return codingClock.signal;
+    });
+    f.transport.agent = vi.fn(async (_runId, signal) => {
+      codingClock.abort();
+      signal.throwIfAborted();
+      throw new Error("Expired coding must not continue");
+    });
+    const out = await runPairedTournament(f.input);
+    expect(out.attempts.map((a) => a.run.status)).toEqual([
+      "timed_out",
+      "timed_out",
+    ]);
+    expect(f.transport.grade).not.toHaveBeenCalled();
+    expect(out.cleanupConfirmed && out.leaseReleased).toBe(true);
+  });
   it.each(["A_then_B", "B_then_A"] as const)(
     "follows frozen order %s, seals before grading and withholds opposing outcomes",
     async (order) => {

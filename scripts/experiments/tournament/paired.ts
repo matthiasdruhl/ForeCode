@@ -20,6 +20,7 @@ import { snapshotTree } from "../../evaluator/booking-v1/snapshot";
 import {
   validateGradeInput,
   validateGradeReport,
+  validateGradeReportForInput,
   type GradeInput,
   type TeamGradeProfile,
 } from "../../evaluator/booking-v1/grade-profile";
@@ -82,7 +83,13 @@ export type PairedTransport = {
     shared: ReturnType<typeof sharedFutureTask>,
     signal: AbortSignal,
   ): Promise<void>;
-  agent(runId: string, signal: AbortSignal): Promise<ProcessResult>;
+  agent(
+    runId: string,
+    signal: AbortSignal,
+    // Other synthetic transports may omit it; the supervised profile refuses
+    // any start without this absolute bound.
+    deadlineEpochMs?: number,
+  ): Promise<ProcessResult>;
   finalizeAgent(
     runId: string,
     signal: AbortSignal,
@@ -408,12 +415,12 @@ export async function runPairedTournament(input: {
         failure: null,
       };
       attempts.push(attempt);
-      const signal = AbortSignal.any([
-        input.signal,
-        AbortSignal.timeout(
-          study.definition.protocol.conditions[0]!.budget.maxSeconds * 1000,
-        ),
-      ]);
+      // The coding allowance belongs to agent execution. Admission, sealing and
+      // protected grading have their own bounded operations and remain subject
+      // to the enclosing study cancellation/deadline. Reusing the coding timer
+      // for them can discard a normally terminated agent's real outcome.
+      const signal = input.signal;
+      let agentSignal: AbortSignal | undefined;
       let failureStage:
         "admission" | "preparation" | "agent" | "finalization" | "grading" =
         "admission";
@@ -453,8 +460,17 @@ export async function runPairedTournament(input: {
         await fresh(variant);
         failureStage = "agent";
         await transition("agent", variant);
+        const codingMilliseconds =
+          study.definition.protocol.conditions[0]!.budget.maxSeconds * 1000;
+        // Capture the absolute bound before any transport setup. A fresh
+        // relative allowance at guest start would advertise time already spent.
+        const deadlineEpochMs = Date.now() + codingMilliseconds;
+        agentSignal = AbortSignal.any([
+          signal,
+          AbortSignal.timeout(codingMilliseconds),
+        ]);
         const process = ProcessSchema.parse(
-          await transport.agent(runId, signal),
+          await transport.agent(runId, agentSignal, deadlineEpochMs),
         );
         attempt.run.status =
           process.reason === "timed_out"
@@ -565,16 +581,9 @@ export async function runPairedTournament(input: {
             !signal.aborted,
           "Protected grader unavailable or interrupted.",
         );
-        attempt.grade = validateGradeReport(
+        attempt.grade = validateGradeReportForInput(
           JSON.parse(graded.stdout),
-          {
-            runId: gradeInput.runId,
-            evaluatedTreeSha256: gradeInput.evaluatedTreeSha256,
-            evaluatorSha256: gradeInput.evaluatorSha256,
-            testSuiteSha256: gradeInput.testSuiteSha256,
-            requiredPolicySha256: gradeInput.requiredPolicySha256,
-          },
-          profile,
+          gradeInput,
         );
         invariant(
           (await snapshotTree(candidate.directory)).treeSha256 ===
@@ -586,7 +595,8 @@ export async function runPairedTournament(input: {
         await transport.retainFailure?.(runId, failureStage, error);
         if (attempt.run.status === "completed") attempt.run.status = "failed";
         if (input.signal.aborted) attempt.run.status = "cancelled";
-        else if (signal.aborted) attempt.run.status = "timed_out";
+        else if (failureStage === "agent" && agentSignal?.aborted)
+          attempt.run.status = "timed_out";
         attempt.failure = "PAIRED_ATTEMPT_BLOCKED_INTERRUPTED_OR_INVALID";
       } finally {
         try {

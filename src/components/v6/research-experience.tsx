@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { IntentWorkspace } from "../intent-workspace";
 import { TournamentOverview } from "../tournament-overview";
@@ -9,6 +9,8 @@ import { SourceHistory } from "./source-phase-inspector";
 import { EvidenceDetail } from "./evidence-ledger";
 import { MeasurementRail } from "./tournament-measurements";
 import { DecisionMemo } from "./decision-memo";
+import { StudySeries } from "./study-series";
+import { EvidenceFeedbackStatus } from "./evidence-feedback-status";
 import { TraceContext } from "./trace-context";
 import { bookingGraph } from "@/lib/foresight/booking-context";
 import {
@@ -21,10 +23,34 @@ import type { EvidenceQuestion } from "@/lib/presentation/decision-memo";
 import type { PublicForesightConfiguration } from "@/server/meta/configuration";
 import type { TournamentCatalog } from "@/server/artifacts/tournament-recordings";
 import type { DecisionReportCatalog } from "@/server/artifacts/decision-reports";
+import type { SourceEvidenceCatalog } from "@/server/artifacts/source-publication";
 import type { ProspectiveEvidenceCatalog } from "@/server/artifacts/prospective-publication";
 import type { PublicTournament } from "@/lib/experiment/tournament-publication";
-import type { TournamentReplayCatalog } from "@/lib/replay";
+import { replayStages } from "@/lib/replay/contracts";
+import type { ReplayStage, TournamentReplayCatalog } from "@/lib/replay";
 import { ReplayHistory } from "./replay-history";
+import { ReplayStageExplorer } from "./replay-stage-explorer";
+import { ReplayEventDetail } from "./replay-event-detail";
+import {
+  ProjectExplorer,
+  type ProjectExplorerState,
+} from "../projects/project-explorer";
+import { WorkspaceManager } from "../projects/workspace-manager";
+import type {
+  BookingDraftState,
+  WorkspaceRecord,
+  WorkspaceSnapshot,
+} from "@/lib/projects/workspace-store";
+
+const emptyBookingDrafts: BookingDraftState = {
+  editor: { title: "", statement: "", priority: "high", horizon: "near" },
+  requirements: [],
+};
+const emptyExplorer: ProjectExplorerState = {
+  project: null,
+  selected: "",
+  query: "",
+};
 
 const chapters = [
   ["case", "Case"],
@@ -33,6 +59,7 @@ const chapters = [
   ["time", "Time Machine"],
   ["evidence", "Evidence Laboratory"],
   ["report", "Decision Report"],
+  ["projects", "Local Projects"],
 ] as const;
 type Chapter = (typeof chapters)[number][0];
 const questions: Record<EvidenceQuestion, [string, string]> = {
@@ -54,20 +81,7 @@ const questions: Record<EvidenceQuestion, [string, string]> = {
   ],
 };
 function traceIdentity(study: PublicTournament | undefined, revision: number) {
-  return JSON.stringify([
-    bookingGraph.repoCommit,
-    revision,
-    study?.studyId,
-    study?.definitionSha256,
-    study?.protocolOriginalSha256,
-    study?.preparedOriginalSha256,
-    study?.arms.map((arm) => [
-      arm.initialTreeSha256,
-      arm.finalTreeSha256,
-      arm.runId,
-      arm.receiptId,
-    ]),
-  ]);
+  return JSON.stringify([bookingGraph.repoCommit, revision, study]);
 }
 function chapterAt(url: URL): Chapter {
   const hash = url.hash.slice(1);
@@ -79,21 +93,50 @@ function questionAt(url: URL): EvidenceQuestion {
   const q = url.searchParams.get("question");
   return q && Object.hasOwn(questions, q) ? (q as EvidenceQuestion) : "checks";
 }
+function stageAt(url: URL): ReplayStage {
+  return (
+    replayStages.find((stage) => stage === url.searchParams.get("stage")) ??
+    "preparation"
+  );
+}
 export function ResearchExperience({
   configuration,
   tournaments,
   reports,
   replays,
   prospectiveEvidence = { state: "empty", evidence: [], unavailableCount: 0 },
+  sourceEvidence = { state: "empty", evidence: [], unavailableCount: 0 },
 }: {
   configuration: PublicForesightConfiguration;
   tournaments: TournamentCatalog;
   reports: DecisionReportCatalog;
   replays: TournamentReplayCatalog;
   prospectiveEvidence?: ProspectiveEvidenceCatalog;
+  sourceEvidence?: SourceEvidenceCatalog;
 }) {
   const [chapter, setChapter] = useState<Chapter>("case");
   const [revision, setRevision] = useState(0);
+  const [projectEpoch, setProjectEpoch] = useState(0);
+  const [explorerEpoch, setExplorerEpoch] = useState(0);
+  const [bookingEpoch, setBookingEpoch] = useState(0);
+  const [explorerInitial, setExplorerInitial] = useState(emptyExplorer);
+  const [explorerState, setExplorerState] = useState(emptyExplorer);
+  const [bookingInitial, setBookingInitial] = useState(emptyBookingDrafts);
+  const [bookingDrafts, setBookingDrafts] = useState(emptyBookingDrafts);
+  const [bookingNotes, setBookingNotes] = useState("");
+  const [localNotes, setLocalNotes] = useState("");
+  const [localRequirements, setLocalRequirements] = useState("");
+  const restoreGeneration = useRef(0);
+  const getContextVersion = useCallback(() => restoreGeneration.current, []);
+  const reportExplorer = useCallback(
+    (state: ProjectExplorerState) => setExplorerState(state),
+    [],
+  );
+  const reportBookingDrafts = useCallback(
+    (state: BookingDraftState) => setBookingDrafts(state),
+    [],
+  );
+  const chapterRef = useRef<Chapter>("case");
   const [confirmedTitle, setConfirmedTitle] = useState<string | null>(null);
   const [studyId, setStudyId] = useState(tournaments.studies[0]?.studyId);
   const study = tournaments.studies.find((item) => item.studyId === studyId);
@@ -109,42 +152,76 @@ export function ResearchExperience({
   );
   const focus = reconcileTraceFocus(selection, contextIdentity);
   const [question, setQuestion] = useState<EvidenceQuestion>("checks");
+  const [replayStage, setReplayStage] = useState<ReplayStage>("preparation");
+  const [evidenceEventId, setEvidenceEventId] = useState<string | null>(null);
+  const evidenceEvent = replay?.events.find(
+    (event) => event.id === evidenceEventId,
+  );
   const [returnTo, setReturnTo] = useState<{
     chapter: Chapter;
     trigger: string;
   } | null>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const evidence = useRef<HTMLDivElement>(null);
-  const contextRef = useRef(contextIdentity);
-  useEffect(() => {
-    contextRef.current = contextIdentity;
-  }, [contextIdentity]);
-
   useEffect(() => {
     function restore(event?: PopStateEvent | HashChangeEvent) {
+      restoreGeneration.current += 1;
       const url = new URL(window.location.href);
-      setChapter(chapterAt(url));
-      setQuestion(questionAt(url));
-      const historyContext = window.history.state?.forecodeContext;
-      setSelection(
-        historyContext && historyContext !== contextRef.current
-          ? initialTraceFocus(contextRef.current)
-          : readTraceSelection(url, contextRef.current),
-      );
+      const restoredChapter = chapterAt(url);
+      const changedProject =
+        (chapterRef.current === "projects") !==
+        (restoredChapter === "projects");
+      if (changedProject) setProjectEpoch((value) => value + 1);
+      chapterRef.current = restoredChapter;
+      setChapter(restoredChapter);
       const requestedStudy = url.searchParams.get("study");
-      if (
-        requestedStudy &&
-        tournaments.studies.some((item) => item.studyId === requestedStudy)
-      )
-        setStudyId(requestedStudy);
-      if (!historyContext)
+      const restoredStudy =
+        tournaments.studies.find((item) => item.studyId === requestedStudy) ??
+        tournaments.studies[0];
+      const restoredIdentity = traceIdentity(restoredStudy, revision);
+      setStudyId(restoredStudy?.studyId);
+      const historyContext = window.history.state?.forecodeContext;
+      const stale =
+        changedProject ||
+        Boolean(historyContext && historyContext !== restoredIdentity);
+      setQuestion(stale ? "checks" : questionAt(url));
+      setReplayStage(stale ? "preparation" : stageAt(url));
+      setEvidenceEventId(stale ? null : url.searchParams.get("event"));
+      setSelection(
+        stale
+          ? initialTraceFocus(restoredIdentity)
+          : readTraceSelection(url, restoredIdentity),
+      );
+      if (stale) {
+        // A single history traversal may emit both popstate and hashchange.
+        // Canonicalize the invalidated entry so a second restore cannot revive
+        // the previous project's replay selection or return-focus target.
+        const reset = initialTraceFocus(restoredIdentity);
+        url.searchParams.set("arm", reset.arm);
+        url.searchParams.set("responsibility", reset.responsibility);
+        url.searchParams.set("phase", reset.phase);
+        url.searchParams.set("stage", "preparation");
+        url.searchParams.set("question", "checks");
+        url.searchParams.delete("source");
+        url.searchParams.delete("event");
         window.history.replaceState(
-          { ...window.history.state, forecodeContext: contextRef.current },
+          {
+            ...window.history.state,
+            forecodeContext: restoredIdentity,
+            forecodeReturn: null,
+            forecodeFocus: undefined,
+          },
+          "",
+          url,
+        );
+      } else if (!historyContext)
+        window.history.replaceState(
+          { ...window.history.state, forecodeContext: restoredIdentity },
           "",
           window.location.href,
         );
       const origin = window.history.state?.forecodeReturn;
-      setReturnTo(origin ?? null);
+      setReturnTo(stale ? null : (origin ?? null));
       if (event)
         requestAnimationFrame(() => {
           const target = window.history.state?.forecodeFocus;
@@ -155,18 +232,13 @@ export function ResearchExperience({
         });
     }
     restore();
-    window.history.replaceState(
-      { ...window.history.state, forecodeContext: contextRef.current },
-      "",
-      window.location.href,
-    );
     window.addEventListener("popstate", restore);
     window.addEventListener("hashchange", restore);
     return () => {
       window.removeEventListener("popstate", restore);
       window.removeEventListener("hashchange", restore);
     };
-  }, [tournaments.studies]);
+  }, [tournaments.studies, revision]);
 
   function writeUrl(
     nextChapter: Chapter,
@@ -175,20 +247,28 @@ export function ResearchExperience({
       question?: EvidenceQuestion;
       origin?: { chapter: Chapter; trigger: string } | null;
       study?: string;
+      stage?: ReplayStage;
+      eventId?: string | null;
     },
   ) {
+    // Every explicit navigation/selection supersedes an in-flight workspace
+    // reopen, including evidence inspection/return and study changes.
+    restoreGeneration.current += 1;
     const url = new URL(window.location.href);
     url.hash = nextChapter;
     url.searchParams.set("arm", next.arm);
     url.searchParams.set("responsibility", next.responsibility);
     url.searchParams.set("phase", next.phase);
+    url.searchParams.set("stage", options?.stage ?? replayStage);
     if (next.sourceId) url.searchParams.set("source", next.sourceId);
     else url.searchParams.delete("source");
     if (options?.study ?? studyId)
       url.searchParams.set("study", (options?.study ?? studyId)!);
-    if (nextChapter === "evidence")
-      url.searchParams.set("question", options?.question ?? question);
-    else url.searchParams.delete("question");
+    url.searchParams.set("question", options?.question ?? question);
+    const selectedEventId =
+      options && "eventId" in options ? options.eventId : evidenceEvent?.id;
+    if (selectedEventId) url.searchParams.set("event", selectedEventId);
+    else url.searchParams.delete("event");
     window.history.pushState(
       {
         ...window.history.state,
@@ -201,11 +281,46 @@ export function ResearchExperience({
     );
   }
   function navigate(next: Chapter, nextFocus = focus) {
+    restoreGeneration.current += 1;
+    const changedProject = (chapter === "projects") !== (next === "projects");
+    if (changedProject) {
+      setProjectEpoch((value) => value + 1);
+      nextFocus = initialTraceFocus(contextIdentity);
+      setSelection(nextFocus);
+      setReplayStage("preparation");
+      setEvidenceEventId(null);
+      setQuestion("checks");
+      setReturnTo(null);
+    }
     setChapter(next);
-    writeUrl(next, nextFocus);
+    chapterRef.current = next;
+    writeUrl(
+      next,
+      nextFocus,
+      changedProject
+        ? { stage: "preparation", eventId: null, question: "checks" }
+        : undefined,
+    );
     requestAnimationFrame(() => {
       title.current?.focus();
       window.scrollTo({ top: 0, behavior: "instant" });
+    });
+  }
+  function selectStudy(id: string) {
+    const nextStudy = tournaments.studies.find((item) => item.studyId === id);
+    if (!nextStudy) return;
+    setStudyId(nextStudy.studyId);
+    const next = initialTraceFocus(traceIdentity(nextStudy, revision));
+    setSelection(next);
+    setReplayStage("preparation");
+    setEvidenceEventId(null);
+    setReturnTo(null);
+    setQuestion("checks");
+    writeUrl(chapter, next, {
+      study: nextStudy.studyId,
+      stage: "preparation",
+      eventId: null,
+      question: "checks",
     });
   }
   function select(patch: Partial<Omit<TraceFocus, "contextIdentity">>) {
@@ -214,7 +329,11 @@ export function ResearchExperience({
     setSelection(next);
     writeUrl(chapter, next);
   }
-  function inspect(nextQuestion: EvidenceQuestion, trigger: string) {
+  function inspect(
+    nextQuestion: EvidenceQuestion,
+    trigger: string,
+    eventId?: string,
+  ) {
     const origin = { chapter, trigger };
     window.history.replaceState(
       { ...window.history.state, forecodeFocus: trigger },
@@ -223,8 +342,14 @@ export function ResearchExperience({
     );
     setReturnTo(origin);
     setQuestion(nextQuestion);
+    setEvidenceEventId(eventId ?? null);
     setChapter("evidence");
-    writeUrl("evidence", focus, { question: nextQuestion, origin });
+    chapterRef.current = "evidence";
+    writeUrl("evidence", focus, {
+      question: nextQuestion,
+      origin,
+      eventId: eventId ?? null,
+    });
     requestAnimationFrame(() => {
       evidence.current?.focus();
       window.scrollTo({ top: 0, behavior: "instant" });
@@ -234,26 +359,135 @@ export function ResearchExperience({
     if (!returnTo) return;
     const origin = returnTo;
     setChapter(origin.chapter);
+    chapterRef.current = origin.chapter;
     writeUrl(origin.chapter, focus);
     setReturnTo(null);
     requestAnimationFrame(() =>
       document.getElementById(origin.trigger)?.focus(),
     );
   }
-  function invalidate(nextRevision: number, title: string | null) {
+  function invalidate(requestedRevision: number, title: string | null) {
+    // Reopened editors start their own counter at zero; the shell context must
+    // remain monotonic so old history cannot regain a previously used identity.
+    const nextRevision = Math.max(revision + 1, requestedRevision);
     setConfirmedTitle(title);
     setRevision(nextRevision);
     const identity = traceIdentity(study, nextRevision);
     const next = initialTraceFocus(identity);
     setSelection(next);
-    writeUrl(chapter, next);
+    setReplayStage("preparation");
+    setEvidenceEventId(null);
+    setQuestion("checks");
+    setReturnTo(null);
+    writeUrl(chapter, next, {
+      stage: "preparation",
+      eventId: null,
+      question: "checks",
+    });
+  }
+  const isLocal = chapter === "projects";
+  const workspaceSnapshot: WorkspaceSnapshot | null =
+    isLocal && !explorerState.project
+      ? null
+      : {
+          project:
+            isLocal && explorerState.project
+              ? {
+                  kind: "local",
+                  name: explorerState.project.name,
+                  files: explorerState.project.files,
+                }
+              : { kind: "booking" },
+          bookingDrafts: isLocal ? emptyBookingDrafts : bookingDrafts,
+          localRequirements: isLocal ? localRequirements : "",
+          notes: isLocal ? localNotes : bookingNotes,
+          navigation: {
+            chapter,
+            selectedPath: isLocal ? explorerState.selected : "",
+            query: isLocal ? explorerState.query : "",
+          },
+        };
+  async function openWorkspace(record: WorkspaceRecord) {
+    const generation = ++restoreGeneration.current;
+    const saved = record.snapshot;
+    let restoredExplorer = emptyExplorer;
+    if (saved.project.kind === "local") {
+      const { parseLocalProject } =
+        await import("@/lib/projects/local-project");
+      const project = parseLocalProject(
+        saved.project.name,
+        saved.project.files,
+      );
+      if (
+        project.files.length !== saved.project.files.length ||
+        !project.files.length
+      )
+        throw new Error(
+          "Saved source did not pass current import validation. Delete this workspace or import its original files again.",
+        );
+      restoredExplorer = {
+        project,
+        selected: project.files.some(
+          (file) => file.path === saved.navigation.selectedPath,
+        )
+          ? saved.navigation.selectedPath
+          : project.files[0]!.path,
+        query: saved.navigation.query,
+      };
+    }
+    if (generation !== restoreGeneration.current)
+      throw new Error(
+        "Opening was cancelled because the research context changed. Reopen the workspace to try again.",
+      );
+    setExplorerInitial(restoredExplorer);
+    setExplorerState(restoredExplorer);
+    setExplorerEpoch((value) => value + 1);
+    setBookingInitial(
+      saved.project.kind === "booking"
+        ? saved.bookingDrafts
+        : emptyBookingDrafts,
+    );
+    setBookingDrafts(
+      saved.project.kind === "booking"
+        ? saved.bookingDrafts
+        : emptyBookingDrafts,
+    );
+    setBookingEpoch((value) => value + 1);
+    setBookingNotes(saved.project.kind === "booking" ? saved.notes : "");
+    setLocalNotes(saved.project.kind === "local" ? saved.notes : "");
+    setLocalRequirements(
+      saved.project.kind === "local" ? saved.localRequirements : "",
+    );
+    setProjectEpoch((value) => value + 1);
+    setConfirmedTitle(null);
+    setRevision((value) => value + 1);
+    setReplayStage("preparation");
+    setEvidenceEventId(null);
+    setQuestion("checks");
+    setReturnTo(null);
+    const nextChapter =
+      saved.project.kind === "local"
+        ? "projects"
+        : saved.navigation.chapter === "projects"
+          ? "lab"
+          : saved.navigation.chapter;
+    const next = initialTraceFocus(traceIdentity(study, revision + 1));
+    setSelection(next);
+    setChapter(nextChapter);
+    chapterRef.current = nextChapter;
+    writeUrl(nextChapter, next, {
+      stage: "preparation",
+      eventId: null,
+      question: "checks",
+    });
+    requestAnimationFrame(() => title.current?.focus());
   }
   const trace = (
     <ChangeTrace
       focus={focus}
       onSelect={select}
       requirement={
-        study ? "Published future task" : (confirmedTitle ?? "Team permissions")
+        study ? study.taskId : (confirmedTitle ?? "Team permissions")
       }
       requirementConfirmed={!study && confirmedTitle !== null}
     />
@@ -312,7 +546,7 @@ export function ResearchExperience({
           </nav>
           <span className="chapter-scroll-hint">Scroll chapters →</span>
         </div>
-        <div className="case-context">
+        <div className="case-context" hidden={chapter === "projects"}>
           <span>BOOKING / 01</span>
           <span>
             {study?.studyId ??
@@ -320,6 +554,9 @@ export function ResearchExperience({
                 ? `${confirmedTitle} · confirmed by you`
                 : "Team permissions · proposed future requirement")}
           </span>
+          {study && (
+            <span className="case-requirement">{study.futureProblem}</span>
+          )}
           <span>
             {focus.arm} / {focus.sourceId ?? focus.responsibility} ·{" "}
             {focus.phase}
@@ -341,6 +578,43 @@ export function ResearchExperience({
           >
             {activeName}
           </h1>
+          <WorkspaceManager
+            snapshot={workspaceSnapshot}
+            onOpen={openWorkspace}
+            notes={isLocal ? localNotes : bookingNotes}
+            onNotesChange={isLocal ? setLocalNotes : setBookingNotes}
+            localRequirements={localRequirements}
+            onLocalRequirementsChange={setLocalRequirements}
+            isLocal={isLocal}
+          />
+          <section
+            hidden={chapter !== "projects"}
+            aria-label="Local project workspace"
+          >
+            <ProjectExplorer
+              key={explorerEpoch}
+              initialState={explorerInitial}
+              onStateChange={reportExplorer}
+              getContextVersion={getContextVersion}
+              onSourceChange={() => {
+                restoreGeneration.current += 1;
+                setLocalNotes("");
+                setLocalRequirements("");
+                setProjectEpoch((value) => value + 1);
+                const next = initialTraceFocus(contextIdentity);
+                setSelection(next);
+                setReplayStage("preparation");
+                setEvidenceEventId(null);
+                setQuestion("checks");
+                setReturnTo(null);
+                writeUrl(chapter, next, {
+                  stage: "preparation",
+                  eventId: null,
+                  question: "checks",
+                });
+              }}
+            />
+          </section>
           <section
             hidden={chapter !== "case"}
             className="case-story"
@@ -366,6 +640,12 @@ export function ResearchExperience({
                     onClick={() => navigate("lab")}
                   >
                     Explore the booking case <span aria-hidden="true">↗</span>
+                  </button>
+                  <button
+                    className="v6-text-link"
+                    onClick={() => navigate("projects")}
+                  >
+                    Import a local project ↗
                   </button>
                   <a
                     href="#comparison-explainer"
@@ -486,6 +766,10 @@ export function ResearchExperience({
             className="embedded-workspace"
           >
             <IntentWorkspace
+              key={bookingEpoch}
+              initialDraftState={bookingInitial}
+              onDraftStateChange={reportBookingDrafts}
+              projectEpoch={projectEpoch}
               configuration={configuration}
               onResearchRevision={invalidate}
             />
@@ -551,22 +835,17 @@ export function ResearchExperience({
                 </p>
               </div>
             </div>
+            <StudySeries
+              catalog={tournaments}
+              selectedStudyId={studyId}
+              onSelectStudy={selectStudy}
+            />
             {tournaments.studies.length > 1 && (
               <label className="study-select">
                 Published study
                 <select
                   value={studyId}
-                  onChange={(event) => {
-                    const nextStudy = tournaments.studies.find(
-                      (item) => item.studyId === event.target.value,
-                    )!;
-                    setStudyId(nextStudy.studyId);
-                    const next = initialTraceFocus(
-                      traceIdentity(nextStudy, revision),
-                    );
-                    setSelection(next);
-                    writeUrl(chapter, next, { study: nextStudy.studyId });
-                  }}
+                  onChange={(event) => selectStudy(event.target.value)}
                 >
                   {tournaments.studies.map((item) => (
                     <option key={item.studyId} value={item.studyId}>
@@ -598,7 +877,28 @@ export function ResearchExperience({
               Inspect approved identities and file comparisons. A conceptual
               preparation is never a historical source snapshot.
             </p>
-            {trace}
+            <ReplayStageExplorer
+              catalog={replays}
+              replay={replay}
+              stage={replayStage}
+              focus={focus}
+              requirement={
+                study?.futureProblem ??
+                confirmedTitle ??
+                "Team permissions: delegate who can create, reschedule and cancel bookings."
+              }
+              requirementConfirmed={!study && confirmedTitle !== null}
+              onStage={(stage) => {
+                setReplayStage(stage);
+                writeUrl("time", focus, { stage });
+              }}
+              onArm={(arm) => select({ arm })}
+              inspect={inspect}
+            />
+            <details className="publication-details conceptual-history">
+              <summary>Inspect conceptual architecture relationships</summary>
+              {trace}
+            </details>
             <div
               className="phase-controls"
               role="group"
@@ -618,7 +918,21 @@ export function ResearchExperience({
                 </button>
               ))}
             </div>
-            <SourceHistory study={study} focus={focus} />
+            <SourceHistory
+              study={study}
+              focus={focus}
+              evidence={
+                sourceEvidence.state === "available"
+                  ? sourceEvidence.evidence.find(
+                      (item) => item.studyId === study?.studyId,
+                    )
+                  : undefined
+              }
+              disclosuresUnavailable={
+                sourceEvidence.state === "unavailable" ||
+                sourceEvidence.unavailableCount > 0
+              }
+            />
             <ReplayHistory catalog={replays} replay={replay} />
             <button
               id="time-source"
@@ -638,6 +952,25 @@ export function ResearchExperience({
               </span>
               <h2>{questions[question][0]}</h2>
               <p>{questions[question][1]}</p>
+              {evidenceEvent && (
+                <section
+                  className="focused-replay-evidence"
+                  aria-label="Selected replay evidence"
+                >
+                  <h3>{evidenceEvent.label}</h3>
+                  <p>
+                    Exact event in {study?.studyId}:{" "}
+                    <code>{evidenceEvent.id}</code>
+                  </p>
+                  <ReplayEventDetail event={evidenceEvent} />
+                </section>
+              )}
+              {evidenceEventId && !evidenceEvent && (
+                <p className="focused-replay-evidence">
+                  The selected event is unavailable in this approved study. No
+                  evidence from another study has been substituted.
+                </p>
+              )}
               {returnTo && (
                 <button className="v6-text-link" onClick={returnFromEvidence}>
                   Return to{" "}
@@ -656,9 +989,11 @@ export function ResearchExperience({
                   aria-pressed={question === key}
                   onClick={() => {
                     setQuestion(key);
+                    setEvidenceEventId(null);
                     writeUrl("evidence", focus, {
                       question: key,
                       origin: returnTo,
+                      eventId: null,
                     });
                   }}
                 >
@@ -688,11 +1023,13 @@ export function ResearchExperience({
             className="report-chapter"
             aria-label="Decision Report"
           >
+            <EvidenceFeedbackStatus studyId={study?.studyId} />
             <DecisionMemo
               catalog={reports}
               studyId={studyId}
               definitionSha256={study?.definitionSha256}
               projectionSha256={replay?.projectionSha256}
+              requirement={study?.futureProblem ?? confirmedTitle ?? undefined}
               inspect={inspect}
             />
           </section>

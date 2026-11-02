@@ -228,7 +228,7 @@ describe("consented Foresight HTTP and issued-context bindings (synthetic networ
       provider: "meta",
       mode: "live",
       model: env.META_MODEL,
-      promptVersion: "booking-scientist-2",
+      promptVersion: "booking-scientist-3",
       sourceEvidenceId: `meta-${digest("chatcmpl-synthetic-challenge-3")}`,
     });
     expect(h.network).toHaveBeenCalledTimes(3);
@@ -690,7 +690,22 @@ describe("server-only Meta protocol and process limits", () => {
     for (const step of ["hypothesize", "challenge"] as const)
       for (let i = 0; i < 4; i++) {
         h.advance(11_000);
-        await h.transport.call(step, proposalRequest(), signal);
+        const proposal = browserSyntheticResponse(
+          "propose",
+          proposalRequest(),
+        ) as ProposeResponse;
+        const hypothesize = hypothesisRequest(proposalRequest(), proposal);
+        const hypothesis = browserSyntheticResponse(
+          "hypothesize",
+          hypothesize,
+        ) as HypothesizeResponse;
+        await h.transport.call(
+          step,
+          step === "challenge"
+            ? challengeRequest(hypothesize, hypothesis)
+            : hypothesize,
+          signal,
+        );
       }
     h.advance(3_600_001);
     await expect(

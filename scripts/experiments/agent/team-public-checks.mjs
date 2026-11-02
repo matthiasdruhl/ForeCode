@@ -13,9 +13,10 @@ import {
 import { spawnSync } from "node:child_process";
 const quick = process.argv.includes("--quick");
 const interfaceOnly = process.argv.includes("--interface-only");
+const behaviorOnly = process.argv.includes("--behavior-only");
 const began = Date.now();
 const deadline = Math.min(
-  began + (quick || interfaceOnly ? 20_000 : 170_000),
+  began + (quick || interfaceOnly || behaviorOnly ? 20_000 : 170_000),
   Number(process.env.FORECODE_DEADLINE || Infinity) * 1000,
 );
 const rows = [];
@@ -42,7 +43,9 @@ async function writable(root) {
   }
 }
 function run(id, args, limit = 90_000, completionMarker) {
-  const remaining = deadline - Date.now();
+  // Keep the original deadline, but never pass fractional or zero (unbounded)
+  // milliseconds to spawnSync when Python supplied a fractional epoch value.
+  const remaining = Math.floor(deadline - Date.now());
   const result =
     remaining > 0
       ? spawnSync("/usr/local/bin/node", args, {
@@ -66,12 +69,23 @@ function run(id, args, limit = 90_000, completionMarker) {
   rows.push({ id, passed });
   console.log(`PUBLIC_CHECK ${id} ${passed ? "PASS" : "FAIL"}`);
   if (!passed && result) {
+    console.log(
+      "PUBLIC_CHECK_FAILURE " +
+        JSON.stringify({
+          id,
+          exitCode: result.status,
+          signal: result.signal,
+          interrupted: !!result.error,
+        }),
+    );
     process.stdout.write(result.stdout ?? "");
     process.stderr.write(result.stderr ?? "");
   }
   return passed;
 }
 try {
+  if ([quick, interfaceOnly, behaviorOnly].filter(Boolean).length > 1)
+    throw new Error("PUBLIC_CHECK_MODE_CONFLICT");
   // Missing adapter is caught before copying, typegen or expensive builds.
   const proposed = process.argv.indexOf("--proposed-adapter");
   const adapter = await lstat(
@@ -112,20 +126,26 @@ try {
     "/run/team-public-session.mjs",
     work,
     ...(interfaceOnly ? ["--interface-only"] : []),
+    ...(behaviorOnly ? ["--behavior-only"] : []),
   ];
-  const sessionCompletion = interfaceOnly
-    ? "PUBLIC_INTERFACE_CHECK_COMPLETED"
-    : "PUBLIC_SESSION_CHECK_COMPLETED";
-  if (
-    run(
-      interfaceOnly ? "adapter-interface" : "adapter-session",
-      session,
-      15_000,
-      sessionCompletion,
-    ) &&
-    !quick &&
-    !interfaceOnly
-  ) {
+  const sessionCompletion = behaviorOnly
+    ? "PUBLIC_BEHAVIOR_CHECK_COMPLETED"
+    : interfaceOnly
+      ? "PUBLIC_INTERFACE_CHECK_COMPLETED"
+      : "PUBLIC_SESSION_CHECK_COMPLETED";
+  run(
+    behaviorOnly
+      ? "team-public-behavior"
+      : interfaceOnly
+        ? "adapter-interface"
+        : "adapter-session",
+    session,
+    15_000,
+    sessionCompletion,
+  );
+  // Public behavior and compilation are independent requirements. A session
+  // regression must not hide the compiler diagnostics needed for the next fix.
+  if (!quick && !interfaceOnly && !behaviorOnly) {
     if (
       run("typegen", [
         "/toolchain/node_modules/next/dist/bin/next",
@@ -134,6 +154,8 @@ try {
       run("typecheck", [
         "/toolchain/node_modules/typescript/bin/tsc",
         "--noEmit",
+        "--pretty",
+        "false",
       ]) &&
       run("build", [
         "/toolchain/node_modules/next/dist/bin/next",
@@ -142,6 +164,12 @@ try {
       ])
     ) {
       run("session-cookie", session, 15_000, sessionCompletion);
+      run(
+        "team-public-behavior",
+        [...session, "--behavior-only"],
+        15_000,
+        "PUBLIC_BEHAVIOR_CHECK_COMPLETED",
+      );
     }
   }
 } catch (error) {
@@ -154,7 +182,7 @@ try {
 } finally {
   const passed = rows.length > 0 && rows.every((row) => row.passed);
   console.log(
-    `PUBLIC_READINESS ${passed ? (interfaceOnly ? "INTERFACE_ONLY" : quick ? "QUICK_PASS" : "READY") : "BLOCKED"}`,
+    `PUBLIC_READINESS ${passed ? (interfaceOnly ? "INTERFACE_ONLY" : behaviorOnly ? "BEHAVIOR_ONLY" : quick ? "QUICK_PASS" : "READY") : "BLOCKED"}`,
   );
   process.exitCode = passed ? 0 : 1;
   if (work) await rm(work, { recursive: true, force: true });

@@ -21,6 +21,6 @@ export const BrokerStopSchema = z.strictObject({
     "upstream",
     "response-validation",
   ]),
-  requestCount: z.number().int().min(0).max(100),
+  requestCount: z.number().int().min(0).max(1000),
   refusalSha256: Sha256Schema,
 });

@@ -3,13 +3,86 @@
 // concurrent symlink replacement. No shell evaluation or code normalization.
 import * as fs from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
+
+// Guest-only staging affordance. Preserve literal source bytes without asking
+// the model to JSON-escape an entire file. The same transactional writer and
+// proposed-interface check still validate the resulting envelope.
+export function sourceFileInput(target, staging, expected) {
+  if (
+    typeof staging !== "string" ||
+    !/^\/(?:tmp|work)\//.test(staging) ||
+    staging.split("/").some((part) => part === "." || part === "..") ||
+    !(expected === "null" || /^[a-f0-9]{64}$/.test(expected ?? ""))
+  )
+    throw new Error("SOURCE_WRITE_FILE");
+  let fd;
+  const directories = [];
+  try {
+    const parts = staging.split("/").filter(Boolean);
+    const flags =
+      fs.constants.O_RDONLY |
+      fs.constants.O_DIRECTORY |
+      fs.constants.O_NOFOLLOW;
+    let directory = fs.openSync("/" + parts[0], flags);
+    directories.push(directory);
+    for (const part of parts.slice(1, -1)) {
+      directory = fs.openSync(`/proc/self/fd/${directory}/${part}`, flags);
+      directories.push(directory);
+    }
+    fd = fs.openSync(
+      `/proc/self/fd/${directory}/${parts.at(-1)}`,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK,
+    );
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.nlink !== 1 || stat.size > 2_097_152)
+      throw new Error("SOURCE_WRITE_FILE");
+    const bytes = Buffer.alloc(2_097_153);
+    let length = 0;
+    for (;;) {
+      const count = fs.readSync(fd, bytes, length, bytes.length - length, null);
+      if (!count) break;
+      length += count;
+      if (length > 2_097_152) throw new Error("SOURCE_WRITE_FILE");
+    }
+    const after = fs.fstatSync(fd);
+    if (
+      after.size !== length ||
+      after.mtimeMs !== stat.mtimeMs ||
+      after.ctimeMs !== stat.ctimeMs
+    )
+      throw new Error("SOURCE_WRITE_FILE");
+    const content = new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(bytes.subarray(0, length));
+    return JSON.stringify({
+      path: target,
+      expectedSha256: expected === "null" ? null : expected,
+      content,
+    });
+  } catch {
+    throw new Error("SOURCE_WRITE_FILE");
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+    for (const directory of directories.reverse()) fs.closeSync(directory);
+  }
+}
+
 export function writeSource(
   raw,
   root = "/workspace/src",
   beforeCommit = () => {},
 ) {
-  const value = JSON.parse(raw);
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error("SOURCE_WRITE_JSON");
+  }
   if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
     Object.keys(value).sort().join() !== "content,expectedSha256,path" ||
     typeof value.content !== "string" ||
     !/^src\/(?:[A-Za-z0-9_()[\].-]+\/)*[A-Za-z0-9_()[\].-]+\.(ts|tsx|css|svg)$/.test(

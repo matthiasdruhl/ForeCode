@@ -76,6 +76,40 @@ export const contentGateProspectiveTeamStudyId =
   "forecode-team-20261101-prospective-08";
 export const schemaConstrainedProspectiveTeamStudyId =
   "forecode-team-20261101-prospective-09";
+export const portableSchemaProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-10";
+export const correctedInventoryProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-11";
+export const boundChallengeProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-12";
+export const phaseClockProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-13";
+export const writerRecoveryProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-14";
+export const predecessorCheckedProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-15";
+export const finalHandoffProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-16";
+export const validatedCompletionProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-17";
+export const baselineCompatibilityProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-18";
+export const outputHeadroomProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-19";
+export const cumulativeHeadroomProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-20";
+export const providerRecoveryProspectiveTeamStudyId =
+  "forecode-team-20261101-prospective-21";
+export const repairedRuntimeProspectiveTeamStudyId =
+  "forecode-team-20261102-prospective-22";
+export const seedErrorCodeProspectiveTeamStudyId =
+  "forecode-team-20261102-prospective-23";
+export const metadataReadProspectiveTeamStudyId =
+  "forecode-team-20261102-prospective-24";
+export const largeBudgetProspectiveTeamStudyId =
+  "forecode-team-20261102-prospective-25";
+export const entryMappingProspectiveTeamStudyId =
+  "forecode-team-20261102-prospective-26";
 export const prospectiveTeamStudyIds = [
   prospectiveTeamStudyId,
   nextProspectiveTeamStudyId,
@@ -86,6 +120,23 @@ export const prospectiveTeamStudyIds = [
   metaEgressProspectiveTeamStudyId,
   contentGateProspectiveTeamStudyId,
   schemaConstrainedProspectiveTeamStudyId,
+  portableSchemaProspectiveTeamStudyId,
+  correctedInventoryProspectiveTeamStudyId,
+  boundChallengeProspectiveTeamStudyId,
+  phaseClockProspectiveTeamStudyId,
+  writerRecoveryProspectiveTeamStudyId,
+  predecessorCheckedProspectiveTeamStudyId,
+  finalHandoffProspectiveTeamStudyId,
+  validatedCompletionProspectiveTeamStudyId,
+  baselineCompatibilityProspectiveTeamStudyId,
+  outputHeadroomProspectiveTeamStudyId,
+  cumulativeHeadroomProspectiveTeamStudyId,
+  providerRecoveryProspectiveTeamStudyId,
+  repairedRuntimeProspectiveTeamStudyId,
+  seedErrorCodeProspectiveTeamStudyId,
+  metadataReadProspectiveTeamStudyId,
+  largeBudgetProspectiveTeamStudyId,
+  entryMappingProspectiveTeamStudyId,
 ] as const;
 export const isProspectiveTeamStudy = (id: string) =>
   prospectiveTeamStudyIds.some((reserved) => reserved === id);
@@ -296,6 +347,363 @@ export const configuredTeamRuntimes: ReadonlyMap<string, TeamRuntimeLocation> =
           "forecode-tournament",
           "registration",
           "prospective-20261101-09",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      portableSchemaProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-10",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      correctedInventoryProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-11",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      boundChallengeProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-12",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      phaseClockProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-13",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      writerRecoveryProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-14",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      predecessorCheckedProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-15",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      finalHandoffProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-16",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      validatedCompletionProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-17",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      baselineCompatibilityProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-18",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      outputHeadroomProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-19",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      cumulativeHeadroomProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-20",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      providerRecoveryProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261101-21",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      repairedRuntimeProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261102-22",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      seedErrorCodeProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261102-23",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      metadataReadProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261102-24",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      largeBudgetProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261102-25",
+        ),
+        publicKeyPem: [
+          "-----BEGIN PUBLIC KEY-----",
+          "MCowBQYDK2VwAyEAWt7GiHz942hk4Feu06kF4HpwHSM/I+qyf/ijtAqzfGg=",
+          "-----END PUBLIC KEY-----",
+          "",
+        ].join("\n"),
+        publicKeySha256:
+          "ad6a10c33da9beb64021fabc896ccd6793b6e02e88ebed68845c13e8eb7d821b",
+      },
+    ],
+    [
+      entryMappingProspectiveTeamStudyId,
+      {
+        registrationRoot: path.join(
+          homedir(),
+          ".local",
+          "share",
+          "forecode-tournament",
+          "registration",
+          "prospective-20261102-26",
         ),
         publicKeyPem: [
           "-----BEGIN PUBLIC KEY-----",

@@ -30,3 +30,7 @@ export function inspectApprovedTournamentPublication() {
 export function loadApprovedProspectiveEvidence() {
   return approvedTournamentPublication.loadProspectiveEvidence();
 }
+
+export function loadApprovedSourceEvidence() {
+  return approvedTournamentPublication.loadSourceEvidence();
+}

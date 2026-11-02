@@ -1,5 +1,10 @@
 import "server-only";
 import {
+  loadSourcePublications,
+  type SourcePublicationConfig,
+  type SourceEvidenceCatalog,
+} from "./source-publication";
+import {
   loadProspectivePublications,
   assertProspectivePublicationAuthority,
   type ProspectiveEvidenceCatalog,
@@ -24,6 +29,7 @@ export type ApprovedTournamentConfig = Omit<
   "registrations"
 > & {
   prospectiveEvidence?: ProspectivePublicationStoreConfig;
+  sourceEvidence?: SourcePublicationConfig;
   registrations: readonly (TournamentRecordingConfig["registrations"][number] & {
     // Pins the entire approved task, conditions, arm identities and history.
     projectionSha256: string;
@@ -90,6 +96,18 @@ export function createTournamentPublicationReader(
     return config;
   }
   return Object.freeze({
+    async loadSourceEvidence(): Promise<SourceEvidenceCatalog> {
+      try {
+        const current = currentConfig();
+        return await loadSourcePublications(
+          current,
+          current?.sourceEvidence,
+          now(),
+        );
+      } catch {
+        return { state: "unavailable", evidence: [], unavailableCount: 1 };
+      }
+    },
     async loadProspectiveEvidence(): Promise<ProspectiveEvidenceCatalog> {
       try {
         const current = currentConfig();

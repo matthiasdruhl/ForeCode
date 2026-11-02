@@ -22,7 +22,9 @@ sample = {
  'completed': 'print("SYNTHETIC constant smoke observation")',
  'nonzero': 'raise SystemExit(7)',
  'timed_out': 'import time; time.sleep(30)',
- 'output_limit': 'import sys; sys.stdout.write("S" * 100000); sys.stdout.flush()',
+ # Stay alive after flushing so output-limit termination, rather than the
+ # platform's pipe scheduling versus natural exit, determines the exit code.
+ 'output_limit': 'import sys, time; sys.stdout.write("S" * 100000); sys.stdout.flush(); time.sleep(30)',
 }[sys.argv[2]]
 def launch(command, **options):
     assert command == ['/opt/forecode-booking/bin/node', '--conditions=react-server', '--import', '/opt/forecode-booking/node_modules/tsx/dist/loader.mjs', '/opt/forecode-booking/controller/installed-smoke.mjs']

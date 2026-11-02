@@ -287,11 +287,18 @@ class Supervisor:
             state['terminalFailure'] = 'driver-error.json'
             budget.atomic(p / 'state.json', state)
 
-    def start(self, run_id, nonce):
+    def start(self, run_id, nonce, deadline_epoch_ms=None):
         with self.lock(run_id):
             p, state = self.state(run_id, nonce)
             if state['stage'] != 'prepared' or state['bootId'] != self.boot():
                 raise ValueError('run cannot resume')
+            if deadline_epoch_ms is not None:
+                now = time.time()
+                if (type(deadline_epoch_ms) is not int
+                        or not 0 < deadline_epoch_ms <= 2**53 - 1
+                        or not now * 1000 < deadline_epoch_ms <= (now + state['request']['maxSeconds']) * 1000):
+                    raise ValueError('bounded host deadline required')
+                state['hostDeadlineEpochMs'] = deadline_epoch_ms
             state['stage'] = 'starting'
             budget.atomic(p / 'state.json', state)
             (p / 'heartbeat').write_text(str(time.time()))
@@ -321,7 +328,15 @@ class Supervisor:
             if state['stage'] != 'starting':
                 raise ValueError('cancelled before supervisor start')
             request = state['request']
-            request['deadline'] = time.time() + request['maxSeconds']
+            now = time.time()
+            request['deadline'] = now + request['maxSeconds']
+            if 'hostDeadlineEpochMs' in state:
+                bound = state['hostDeadlineEpochMs']
+                if type(bound) is not int or not 0 < bound <= 2**53 - 1:
+                    raise ValueError('bounded host deadline required')
+                request['deadline'] = min(request['deadline'], bound / 1000)
+                if request['deadline'] <= now:
+                    raise ValueError('host deadline elapsed before worker start')
             state.update(stage='running', supervisorPid=os.getpid(), supervisorBirth=birth(os.getpid()),
                          deadline=request['deadline'])
             budget.atomic(p / 'state.json', state)

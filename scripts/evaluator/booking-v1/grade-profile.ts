@@ -168,6 +168,27 @@ export function validateGradeInput(raw: unknown): GradeInput {
   return input;
 }
 
+// GradeInput has execution-only fields that the strict identity schema must
+// reject. Validate those fields and the candidate binding before projecting the
+// five-field expected identity for a returned observation.
+export function validateGradeReportForInput(
+  raw: unknown,
+  rawInput: unknown,
+): GradeReport {
+  const input = validateGradeInput(rawInput);
+  return validateGradeReport(
+    raw,
+    {
+      runId: input.runId,
+      evaluatedTreeSha256: input.evaluatedTreeSha256,
+      evaluatorSha256: input.evaluatorSha256,
+      testSuiteSha256: input.testSuiteSha256,
+      requiredPolicySha256: input.requiredPolicySha256,
+    },
+    input.evaluationProfile,
+  );
+}
+
 // Missing checks are retained for the existing publisher/store to mark unrun.
 // Neither candidate JSON nor process exit can supply a verification verdict.
 export function validateGradeReport(

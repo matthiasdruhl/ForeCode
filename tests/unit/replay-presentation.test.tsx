@@ -124,3 +124,102 @@ describe("fresh replay presentation composition (synthetic catalogs only)", () =
     expect(html).toContain("Replay missing evidence");
   });
 });
+
+import { syntheticSourceHistory } from "../support/source-history";
+
+describe("fresh source presentation join (synthetic only)", () => {
+  function sourceFixture() {
+    const { study, evidence } = syntheticSourceHistory();
+    return {
+      tournaments: {
+        state: "available" as const,
+        studies: [study],
+        unavailableCount: 0,
+      },
+      reports: { state: "empty" as const, reports: [], unavailableCount: 0 },
+      sources: {
+        state: "available" as const,
+        evidence: [evidence],
+        unavailableCount: 0,
+      },
+    };
+  }
+  it("retains exact fresh selected identities with existing reports/replays unchanged", () => {
+    const f = sourceFixture();
+    const baseline = composeReplayPresentation(f.tournaments, f.reports);
+    const joined = composeReplayPresentation(
+      f.tournaments,
+      f.reports,
+      undefined,
+      f.sources,
+    );
+    expect(joined.sourceEvidence.evidence).toEqual(f.sources.evidence);
+    expect(joined.replays).toEqual(baseline.replays);
+    expect(joined.reports).toEqual(baseline.reports);
+    expect(joined.prospectiveEvidence).toEqual(baseline.prospectiveEvidence);
+    expect(baseline.sourceEvidence).toEqual({
+      state: "empty",
+      evidence: [],
+      unavailableCount: 0,
+    });
+  });
+  it.each([
+    "changed",
+    "removed",
+    "unavailable",
+    "malformed",
+    "study",
+    "projection",
+    "prepared",
+    "duplicate",
+    "withdrawn",
+  ])("withholds stale/ambiguous source on %s", (mode) => {
+    const f = sourceFixture();
+    if (mode === "changed") f.tournaments.studies[0]!.title += " changed";
+    if (mode === "removed") f.tournaments.studies = [];
+    if (mode === "unavailable")
+      Object.assign(f.tournaments, { state: "unavailable", studies: [] });
+    if (mode === "malformed")
+      f.tournaments.studies[0]!.arms[0]!.receiptId = null;
+    if (mode === "study") f.sources.evidence[0]!.studyId += "-other";
+    if (mode === "projection")
+      f.sources.evidence[0]!.projectionSha256 = "0".repeat(64);
+    if (mode === "prepared")
+      f.sources.evidence[0]!.preparedOriginalSha256 = "0".repeat(64);
+    if (mode === "duplicate")
+      f.sources.evidence.push(structuredClone(f.sources.evidence[0]!));
+    if (mode === "withdrawn")
+      Object.assign(f.sources, { state: "unavailable", unavailableCount: 1 });
+    const joined = composeReplayPresentation(
+      f.tournaments,
+      f.reports,
+      undefined,
+      f.sources,
+    );
+    expect(joined.sourceEvidence.state).toBe("unavailable");
+    expect(joined.sourceEvidence.evidence).toEqual([]);
+    expect(joined.sourceEvidence.unavailableCount).toBeGreaterThanOrEqual(1);
+  });
+  it("cannot revive earlier source after withdrawal or removal", () => {
+    const f = sourceFixture();
+    expect(
+      composeReplayPresentation(f.tournaments, f.reports, undefined, f.sources)
+        .sourceEvidence.evidence,
+    ).toHaveLength(1);
+    expect(
+      composeReplayPresentation(f.tournaments, f.reports, undefined, {
+        state: "unavailable",
+        evidence: [],
+        unavailableCount: 1,
+      }).sourceEvidence.evidence,
+    ).toEqual([]);
+    expect(
+      composeReplayPresentation(
+        { ...f.tournaments, studies: [] },
+        f.reports,
+        undefined,
+        f.sources,
+      ).sourceEvidence.evidence,
+    ).toEqual([]);
+  });
+});

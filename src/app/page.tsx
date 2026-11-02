@@ -3,6 +3,7 @@ import {
   loadApprovedTournamentRecordings,
   loadApprovedDecisionReports,
   loadApprovedProspectiveEvidence,
+  loadApprovedSourceEvidence,
 } from "@/server/artifacts/recording-catalog";
 import { publicForesightConfiguration } from "@/server/meta/configuration";
 import { composeReplayPresentation } from "@/server/artifacts/replay-presentation";
@@ -10,15 +11,18 @@ import { composeReplayPresentation } from "@/server/artifacts/replay-presentatio
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const [tournaments, reports, prospectiveEvidence] = await Promise.all([
-    loadApprovedTournamentRecordings(),
-    loadApprovedDecisionReports(),
-    loadApprovedProspectiveEvidence(),
-  ]);
+  const [tournaments, reports, prospectiveEvidence, sourceEvidence] =
+    await Promise.all([
+      loadApprovedTournamentRecordings(),
+      loadApprovedDecisionReports(),
+      loadApprovedProspectiveEvidence(),
+      loadApprovedSourceEvidence(),
+    ]);
   const presentation = composeReplayPresentation(
     tournaments,
     reports,
     prospectiveEvidence,
+    sourceEvidence,
   );
   return (
     <ResearchExperience

@@ -1,5 +1,6 @@
 import "server-only";
 import { jsonDigest } from "@/lib/report/digests";
+import type { SourceEvidenceCatalog } from "./source-publication";
 import type { ProspectiveEvidenceCatalog } from "./prospective-publication";
 import { projectTournamentReplayCatalog } from "@/lib/replay";
 import type { TournamentCatalog } from "./tournament-recordings";
@@ -10,6 +11,11 @@ export function composeReplayPresentation(
   tournaments: TournamentCatalog,
   reports: DecisionReportCatalog,
   prospectiveEvidence: ProspectiveEvidenceCatalog = {
+    state: "empty",
+    evidence: [],
+    unavailableCount: 0,
+  },
+  sourceEvidence: SourceEvidenceCatalog = {
     state: "empty",
     evidence: [],
     unavailableCount: 0,
@@ -66,10 +72,41 @@ export function composeReplayPresentation(
     evidence: matchedEvidence,
     unavailableCount: missing,
   };
+  // Custody/report authentication remains in the loader. Recheck the fresh
+  // projection here, withholding ambiguous duplicate study disclosures.
+  const sources =
+    sourceEvidence.state === "available"
+      ? sourceEvidence.evidence.filter(
+          (source) =>
+            sourceEvidence.evidence.filter(
+              (item) => item.studyId === source.studyId,
+            ).length === 1 &&
+            tournaments.state === "available" &&
+            tournaments.studies.some(
+              (study) =>
+                study.studyId === source.studyId &&
+                jsonDigest(study) === source.projectionSha256 &&
+                study.preparedOriginalSha256 === source.preparedOriginalSha256,
+            ),
+        )
+      : [];
+  const sourceCatalog: SourceEvidenceCatalog = {
+    state: sources.length
+      ? "available"
+      : sourceEvidence.state === "empty" && sourceEvidence.evidence.length === 0
+        ? "empty"
+        : "unavailable",
+    evidence: sources,
+    unavailableCount:
+      sourceEvidence.unavailableCount +
+      sourceEvidence.evidence.length -
+      sources.length,
+  };
   return {
     tournaments,
     replays,
     reports: joined,
     prospectiveEvidence: evidence,
+    sourceEvidence: sourceCatalog,
   };
 }

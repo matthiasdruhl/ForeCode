@@ -21,6 +21,7 @@ import type { EvidenceQuestion } from "@/lib/presentation/decision-memo";
 import type { PublicForesightConfiguration } from "@/server/meta/configuration";
 import type { TournamentCatalog } from "@/server/artifacts/tournament-recordings";
 import type { DecisionReportCatalog } from "@/server/artifacts/decision-reports";
+import type { SourceEvidenceCatalog } from "@/server/artifacts/source-publication";
 import type { ProspectiveEvidenceCatalog } from "@/server/artifacts/prospective-publication";
 import type { PublicTournament } from "@/lib/experiment/tournament-publication";
 import { replayStages } from "@/lib/replay/contracts";
@@ -102,12 +103,14 @@ export function ResearchExperience({
   reports,
   replays,
   prospectiveEvidence = { state: "empty", evidence: [], unavailableCount: 0 },
+  sourceEvidence = { state: "empty", evidence: [], unavailableCount: 0 },
 }: {
   configuration: PublicForesightConfiguration;
   tournaments: TournamentCatalog;
   reports: DecisionReportCatalog;
   replays: TournamentReplayCatalog;
   prospectiveEvidence?: ProspectiveEvidenceCatalog;
+  sourceEvidence?: SourceEvidenceCatalog;
 }) {
   const [chapter, setChapter] = useState<Chapter>("case");
   const [revision, setRevision] = useState(0);
@@ -910,7 +913,21 @@ export function ResearchExperience({
                 </button>
               ))}
             </div>
-            <SourceHistory study={study} focus={focus} />
+            <SourceHistory
+              study={study}
+              focus={focus}
+              evidence={
+                sourceEvidence.state === "available"
+                  ? sourceEvidence.evidence.find(
+                      (item) => item.studyId === study?.studyId,
+                    )
+                  : undefined
+              }
+              disclosuresUnavailable={
+                sourceEvidence.state === "unavailable" ||
+                sourceEvidence.unavailableCount > 0
+              }
+            />
             <ReplayHistory catalog={replays} replay={replay} />
             <button
               id="time-source"

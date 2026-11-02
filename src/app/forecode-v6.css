@@ -2074,3 +2074,91 @@ code {
     overflow-wrap: anywhere;
   }
 }
+
+/* Bounded, inert source disclosure inspector. */
+.source-history,
+.source-viewer,
+.source-side {
+  min-width: 0;
+}
+.source-scope {
+  border-left: 2px solid var(--rule);
+  padding-left: 16px;
+  margin: 24px 0;
+}
+.source-file-control {
+  display: grid;
+  gap: 8px;
+  font-size: 12px;
+}
+.source-file-control select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  color: inherit;
+  background: var(--night);
+  border: 1px solid var(--rule);
+  font: inherit;
+  text-overflow: ellipsis;
+}
+.source-mode {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+.source-mode button {
+  padding: 8px 16px;
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: inherit;
+}
+.source-mode button[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--night);
+}
+.source-history h3,
+.source-history dd,
+.source-hash,
+.source-comparison-label {
+  overflow-wrap: anywhere;
+}
+.source-sides {
+  display: grid;
+  gap: 16px;
+  margin: 16px 0;
+}
+.source-side h4 {
+  margin: 8px 0;
+  font-size: 12px;
+}
+.source-hash {
+  display: block;
+  font-size: 11px;
+}
+.source-code {
+  max-width: 100%;
+  overflow: auto;
+  white-space: pre;
+  padding: 16px;
+  border: 1px solid var(--rule);
+  font-size: 12px;
+  line-height: 1.7;
+  tab-size: 2;
+}
+.source-row {
+  display: inline;
+}
+.source-row-added {
+  background: #dce8d755;
+}
+.source-row-removed {
+  background: #efd6cb66;
+}
+.source-ending {
+  color: var(--muted);
+  font-size: 10px;
+}
+.source-history :is(button, select, pre):focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}

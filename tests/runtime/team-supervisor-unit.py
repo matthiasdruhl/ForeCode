@@ -520,3 +520,49 @@ for defect in ['alias', 'storage']:
         assert (p/'source/src/control.ts').is_file()
         assert supervisor.state(run, nonce)[1]['stage'] == 'failed'
 print('unsafe source/archive storage failure retains scratch and fails cleanup')
+
+# Exercise the real dispatch -> durable start -> daemon deadline -> worker task
+# path with a delayed daemon. Only process creation and the inert broker socket
+# are substituted; no Docker, provider or candidate execution is permitted.
+class StopBeforeBroker(RuntimeError):
+    pass
+
+
+for daemon_now in [1003, 1009]:
+    with tempfile.TemporaryDirectory() as temp:
+        supervisor = team.TeamSupervisor(pathlib.Path(temp), lambda args: b'', lambda: 'synthetic-boot')
+        with patch.object(team.base.os, 'chown'):
+            supervisor.prepare_team(request, {'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+        p, before = supervisor.state(run, nonce)
+        policy = {'arms': [{'runId': run}]}
+        command = {'operation': 'start', 'runId': run, 'nonce': nonce, 'deadlineEpochMs': 1008000}
+        with patch.object(team.time, 'time', return_value=1000), patch.object(team.base.os, 'fork', return_value=12345) as fork:
+            for invalid in [True, '1008000', 1008000.5, 1000000, 1010001, 2**53]:
+                denied(lambda: team.dispatch({**command, 'deadlineEpochMs': invalid}, supervisor, policy))
+            denied(lambda: team.dispatch({k: v for k, v in command.items() if k != 'deadlineEpochMs'}, supervisor, policy))
+            assert supervisor.state(run, nonce)[1]['stage'] == 'prepared'
+            assert not fork.called
+            assert team.dispatch(command, supervisor, policy)['stage'] == 'starting'
+            fork.assert_called_once()
+            denied(lambda: team.dispatch(command, supervisor, policy))
+        with patch.object(team.time, 'time', return_value=daemon_now), patch.object(team.base, 'birth', return_value='synthetic-birth'), patch.object(team.base.budget, 'serve', side_effect=StopBeforeBroker) as serve:
+            if daemon_now > 1008:
+                denied(lambda: supervisor.drive(run, nonce))
+                assert not serve.called
+                assert not (p / 'budget.json').exists()
+            else:
+                try:
+                    supervisor.drive(run, nonce)
+                except StopBeforeBroker:
+                    pass
+                else:
+                    raise AssertionError('control must stop before creating a broker')
+                state = supervisor.state(run, nonce)[1]
+                assert state['deadline'] == state['request']['deadline'] == 1008
+                assert state['hostDeadlineEpochMs'] == 1008000
+                assert state['requestSha256'] == before['requestSha256']
+                assert state['request']['maxSeconds'] == 10
+                supervisor.worker_args(run, request['enforcement']['runtime']['workerImage'])
+                assert json.loads((p / 'task.json').read_bytes())['deadline'] == 1008
+                assert not json.loads((p / 'budget.json').read_bytes())['requests']
+print('trusted absolute host deadline survives setup delay; expired/malformed/missing/replayed starts refuse before worker or provider')

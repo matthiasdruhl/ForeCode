@@ -581,6 +581,10 @@ class TeamSupervisor(base.Supervisor):
     def __init__(self, root=ROOT, docker=base.command, boot=base.boot_id):
         super().__init__(root, docker, boot)
 
+    def start(self, run_id, nonce, deadline_epoch_ms):
+        exact_int(deadline_epoch_ms, 1, 2**53 - 1)
+        return super().start(run_id, nonce, deadline_epoch_ms)
+
     def writable_mounts(self):
         return (*super().writable_mounts(), '/work')
 
@@ -893,12 +897,18 @@ def dispatch(request, supervisor, policy):
                                                   'sourceTreeSha256', 'sharedTaskSha256'])):
             raise ValueError('exact installed study/run/source/conditions mismatch')
         return supervisor.prepare_team(body, policy['provider'])
-    if (set(request) != {'operation', 'runId', 'nonce'}
+    fields = {'operation', 'runId', 'nonce'}
+    if operation == 'start':
+        fields.add('deadlineEpochMs')
+    if (set(request) != fields
             or operation not in ['start', 'status', 'finalize', 'cleanup']
             or request['runId'] not in {a['runId'] for a in policy['arms']}):
         raise ValueError('fixed owned team command required')
     # Host authority expiry/revocation does not prevent owned cleanup. The
     # installation/policy must remain the same pinned immutable installation.
+    if operation == 'start':
+        exact_int(request['deadlineEpochMs'], 1, 2**53 - 1)
+        return supervisor.start(request['runId'], request['nonce'], request['deadlineEpochMs'])
     return getattr(supervisor, operation)(request['runId'], request['nonce'])
 
 

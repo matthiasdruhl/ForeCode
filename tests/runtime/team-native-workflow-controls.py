@@ -99,7 +99,7 @@ if mode=='final-response': e['maxIterations']=2;e['restrictions']['maxRequests']
 e['completionReserveRequests']=min(3,e['maxIterations'],e['restrictions']['maxRequests'])
 q={'runId':run,'nonce':nonce,'studyId':'synthetic-native-nul-control','variant':'A','sourceCommit':'0'*40,'sourceTreeSha256':t.base.digest(manifest),'sharedTaskSha256':'0'*64,'enforcement':e,'candidate':{'runId':run,'files':files}}
 try:
- s.prepare_team(q,r['provider']);s.start(run,nonce)
+ s.prepare_team(q,r['provider']);s.start(run,nonce,int((time.time()+q['enforcement']['maxSeconds'])*1000))
  until=time.monotonic()+340
  while time.monotonic()<until:
   st=s.status(run,nonce)

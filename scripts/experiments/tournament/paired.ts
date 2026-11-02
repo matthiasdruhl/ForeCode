@@ -82,7 +82,13 @@ export type PairedTransport = {
     shared: ReturnType<typeof sharedFutureTask>,
     signal: AbortSignal,
   ): Promise<void>;
-  agent(runId: string, signal: AbortSignal): Promise<ProcessResult>;
+  agent(
+    runId: string,
+    signal: AbortSignal,
+    // Other synthetic transports may omit it; the supervised profile refuses
+    // any start without this absolute bound.
+    deadlineEpochMs?: number,
+  ): Promise<ProcessResult>;
   finalizeAgent(
     runId: string,
     signal: AbortSignal,
@@ -453,14 +459,17 @@ export async function runPairedTournament(input: {
         await fresh(variant);
         failureStage = "agent";
         await transition("agent", variant);
+        const codingMilliseconds =
+          study.definition.protocol.conditions[0]!.budget.maxSeconds * 1000;
+        // Capture the absolute bound before any transport setup. A fresh
+        // relative allowance at guest start would advertise time already spent.
+        const deadlineEpochMs = Date.now() + codingMilliseconds;
         agentSignal = AbortSignal.any([
           signal,
-          AbortSignal.timeout(
-            study.definition.protocol.conditions[0]!.budget.maxSeconds * 1000,
-          ),
+          AbortSignal.timeout(codingMilliseconds),
         ]);
         const process = ProcessSchema.parse(
-          await transport.agent(runId, agentSignal),
+          await transport.agent(runId, agentSignal, deadlineEpochMs),
         );
         attempt.run.status =
           process.reason === "timed_out"

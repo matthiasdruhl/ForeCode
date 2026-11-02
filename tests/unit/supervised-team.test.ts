@@ -321,6 +321,54 @@ async function startFirst(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("dedicated supervised team contract, no inference", () => {
+  it.each(["missing", "nan", "infinite", "fractional", "expired", "extended"])(
+    "refuses a %s absolute coding deadline before starting controls",
+    async (kind) => {
+      const f = await fixture(),
+        next = await startFirst(f);
+      await f.transport.prepare(
+        next.runId,
+        next.source,
+        next.shared,
+        next.signal,
+      );
+      const deadline = {
+        missing: undefined,
+        nan: NaN,
+        infinite: Infinity,
+        fractional: Date.now() + 1000.5,
+        expired: Date.now() - 1,
+        extended: Date.now() + f.plan.maxSeconds * 1000 + 60_000,
+      }[kind];
+      await expect(
+        f.transport.agent(next.runId, next.signal, deadline),
+      ).rejects.toThrow("Finite current coding deadline required");
+      expect(f.controls.agent).not.toHaveBeenCalled();
+      await f.transport.cleanup(next.runId);
+    },
+  );
+  it("forwards a shorter absolute deadline without rebasing the signed preparation", async () => {
+    const f = await fixture(),
+      next = await startFirst(f);
+    await f.transport.prepare(
+      next.runId,
+      next.source,
+      next.shared,
+      next.signal,
+    );
+    const prepared = jsonDigest(f.requests[0]),
+      deadlineEpochMs = Date.now() + 1000;
+    await f.transport.agent(next.runId, next.signal, deadlineEpochMs);
+    expect(f.controls.agent).toHaveBeenCalledWith(
+      next.runId,
+      f.requests[0]!.nonce,
+      next.signal,
+      deadlineEpochMs,
+    );
+    expect(jsonDigest(f.requests[0])).toBe(prepared);
+    expect(f.requests[0]).not.toHaveProperty("deadlineEpochMs");
+    await f.transport.cleanup(next.runId);
+  });
   it("maps exact complete input, both baselines, sealed trees and eight checks through the paired controller", async () => {
     const f = await fixture(),
       out = await runPairedTournament(f.input);
@@ -697,7 +745,11 @@ describe("dedicated supervised team contract, no inference", () => {
         next.shared,
         next.signal,
       );
-      await f.transport.agent(next.runId, next.signal);
+      await f.transport.agent(
+        next.runId,
+        next.signal,
+        Date.now() + f.plan.maxSeconds * 1000,
+      );
       const finalized = await f.transport.finalizeAgent(
         next.runId,
         next.signal,

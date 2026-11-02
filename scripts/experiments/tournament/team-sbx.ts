@@ -518,12 +518,19 @@ function buildControls(
     operation: "prepare" | "start" | "status" | "finalize" | "cleanup",
     s: RunState,
     signal: AbortSignal,
+    deadlineEpochMs?: number,
   ) {
     await verifyFiles("agent", signal);
+    if (operation === "start") assertCodingDeadline(deadlineEpochMs);
     const body =
       operation === "prepare"
         ? { operation, request: s.request }
-        : { operation, runId: s.request.runId, nonce: s.request.nonce };
+        : {
+            operation,
+            runId: s.request.runId,
+            nonce: s.request.nonce,
+            ...(operation === "start" ? { deadlineEpochMs } : {}),
+          };
     const input = JSON.stringify(body);
     invariant(
       Buffer.byteLength(input) <= 12_000_000,
@@ -546,6 +553,17 @@ function buildControls(
         16_000_000,
         operation === "finalize" ? 180_000 : 30_000,
       ),
+    );
+  }
+  function assertCodingDeadline(
+    value: number | undefined,
+  ): asserts value is number {
+    invariant(
+      typeof value === "number" &&
+        Number.isSafeInteger(value) &&
+        value > Date.now() &&
+        value <= Date.now() + plan.maxSeconds * 1000,
+      "Finite current coding deadline required.",
     );
   }
   function state(runId: string, nonce: string) {
@@ -984,10 +1002,11 @@ function buildControls(
       s.bootId = value.bootId;
       return ack;
     },
-    async agent(runId, nonce, signal) {
+    async agent(runId, nonce, signal, deadlineEpochMs) {
       if (measurement) signal = measurement.bindSignal(signal);
       const s = state(runId, nonce);
       try {
+        assertCodingDeadline(deadlineEpochMs);
         invariant(
           !recovering && !s.cancelled && !s.startRequested,
           "One unfenced worker start required.",
@@ -995,7 +1014,7 @@ function buildControls(
         s.startRequested = true;
         if (measurement) await measurement.release(signal);
         await inspect(signal);
-        await helper("start", s, signal);
+        await helper("start", s, signal, deadlineEpochMs);
         for (;;) {
           invariant(!s.cancelled, "Owned worker cancelled for cleanup.");
           signal.throwIfAborted();

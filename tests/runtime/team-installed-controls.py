@@ -107,7 +107,7 @@ def main():
                 rows.append({'case':case,'runId':run_id,'terminalFailureRetained':True,'cleanupConfirmed':True,'providerRequests':0})
                 continue
             supervisor.prepare_team(request, template['provider'])
-            supervisor.start(run_id, nonce)
+            supervisor.start(run_id, nonce, int((time.time() + request['enforcement']['maxSeconds']) * 1000))
             if case in ['SIGINT', 'SIGTERM']:
                 observed = wait(supervisor, run_id, nonce, heartbeat=True)
                 supervisor.docker(['kill', '--signal', case, observed['containerId']])

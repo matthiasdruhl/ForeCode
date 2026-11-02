@@ -209,7 +209,12 @@ export type NoInferenceTeamControls = {
     signal: AbortSignal,
   ): Promise<unknown>;
   prepare(request: Request, signal: AbortSignal): Promise<unknown>;
-  agent(runId: string, nonce: string, signal: AbortSignal): Promise<unknown>;
+  agent(
+    runId: string,
+    nonce: string,
+    signal: AbortSignal,
+    deadlineEpochMs: number,
+  ): Promise<unknown>;
   finalize(runId: string, nonce: string, signal: AbortSignal): Promise<unknown>;
   grade(
     input: Parameters<PairedTransport["grade"]>[0],
@@ -516,9 +521,16 @@ function createTeamLifecycle(
       );
       s.phase = "prepared";
     },
-    async agent(runId, signal) {
+    async agent(runId, signal, deadlineEpochMs) {
       const s = current(runId, "prepared");
       await fresh(signal, s.variant);
+      invariant(
+        typeof deadlineEpochMs === "number" &&
+          Number.isSafeInteger(deadlineEpochMs) &&
+          deadlineEpochMs > Date.now() &&
+          deadlineEpochMs <= Date.now() + plan.maxSeconds * 1000,
+        "Finite current coding deadline required.",
+      );
       s.phase = "started";
       const result = identitySchema
         .extend({
@@ -526,7 +538,7 @@ function createTeamLifecycle(
           terminationConfirmed: z.literal(true),
           restartAbsenceConfirmed: z.literal(true),
         })
-        .parse(await controls.agent(runId, s.nonce, signal));
+        .parse(await controls.agent(runId, s.nonce, signal, deadlineEpochMs));
       invariant(
         result.runId === runId &&
           result.nonce === s.nonce &&

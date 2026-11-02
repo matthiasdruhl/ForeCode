@@ -66,6 +66,112 @@ describe(
   "fixed team production composition under no-inference control",
   { timeout: 30_000 },
   () => {
+    it("passes the original coding deadline through delayed setup to the actual start command", async () => {
+      const f = await fixture(),
+        original = f.deps.run,
+        codingDeadlines: number[] = [],
+        starts: { deadlineEpochMs: number; startedAt: number }[] = [];
+      const timeout = AbortSignal.timeout.bind(AbortSignal);
+      vi.spyOn(AbortSignal, "timeout").mockImplementation((milliseconds) => {
+        if (milliseconds === f.plan.maxSeconds * 1000)
+          codingDeadlines.push(Date.now() + milliseconds);
+        return timeout(milliseconds);
+      });
+      vi.spyOn(f.deps, "run").mockImplementation(async (exe, args, options) => {
+        if (options.input?.includes('"operation":"start"')) {
+          // The real lifecycle has already spent this part of the same coding
+          // phase on inventory/source checks; it must not rebase the budget.
+          vi.setSystemTime(Date.now() + 25_592);
+          const command = JSON.parse(options.input);
+          starts.push({
+            deadlineEpochMs: command.deadlineEpochMs,
+            startedAt: Date.now(),
+          });
+        }
+        return original(exe, args, options);
+      });
+      const outcome = await runPairedTournament(f.input);
+      expect(outcome.attempts).toHaveLength(2);
+      expect(starts).toHaveLength(2);
+      expect(starts.map((s) => s.deadlineEpochMs)).toEqual(codingDeadlines);
+      for (const start of starts)
+        expect(start.deadlineEpochMs - start.startedAt).toBe(
+          f.plan.maxSeconds * 1000 - 25_592,
+        );
+      expect(outcome.cleanupConfirmed && outcome.leaseReleased).toBe(true);
+    });
+    it("does not start or extend coding when its signal expires during setup", async () => {
+      const f = await fixture(),
+        original = f.deps.run;
+      let expireSetup: AbortController | undefined;
+      const timeout = AbortSignal.timeout.bind(AbortSignal);
+      vi.spyOn(AbortSignal, "timeout").mockImplementation((milliseconds) => {
+        if (milliseconds === f.plan.maxSeconds * 1000) {
+          expireSetup = new AbortController();
+          return expireSetup.signal;
+        }
+        return timeout(milliseconds);
+      });
+      vi.spyOn(f.deps, "run").mockImplementation(async (exe, args, options) => {
+        if (expireSetup) {
+          const coding = expireSetup;
+          expireSetup = undefined;
+          coding.abort();
+          return {
+            reason: "cancelled",
+            exitCode: null,
+            signal: null,
+            stdout: "",
+            stderr: "",
+            elapsedMs: 1,
+          };
+        }
+        return original(exe, args, options);
+      });
+      const outcome = await runPairedTournament(f.input);
+      expect(
+        f.calls.some((c) => c.input?.includes('"operation":"start"')),
+      ).toBe(false);
+      expect(
+        outcome.attempts.every(
+          (a) => !a.finalizationConfirmed && a.grade === null,
+        ),
+      ).toBe(true);
+      expect(outcome.cleanupConfirmed && outcome.leaseReleased).toBe(true);
+    });
+    it("rechecks an absolute deadline consumed by setup even before its signal aborts", async () => {
+      const f = await fixture(),
+        original = f.deps.run;
+      let consumeSetup = false,
+        codingSignal: AbortSignal | undefined;
+      f.input.transport = {
+        ...f.transport,
+        agent: (runId, signal) => {
+          consumeSetup = true;
+          codingSignal = signal;
+          // A tighter absolute bound is permitted, never a longer allowance.
+          return f.transport.agent(runId, signal, Date.now() + 1000);
+        },
+      };
+      vi.spyOn(f.deps, "run").mockImplementation(async (exe, args, options) => {
+        if (consumeSetup) {
+          consumeSetup = false;
+          vi.setSystemTime(Date.now() + 1001);
+          expect(codingSignal?.aborted).toBe(false);
+        }
+        return original(exe, args, options);
+      });
+      const outcome = await runPairedTournament(f.input);
+      expect(
+        f.calls.some((c) => c.input?.includes('"operation":"start"')),
+      ).toBe(false);
+      expect(
+        outcome.attempts.every(
+          (a) => !a.finalizationConfirmed && a.grade === null,
+        ),
+      ).toBe(true);
+      expect(outcome.cleanupConfirmed && outcome.leaseReleased).toBe(true);
+    });
     it("refuses malformed trusted broker-stop metadata instead of deriving it from native stdout", async () => {
       const f = await fixture(),
         original = f.deps.run;

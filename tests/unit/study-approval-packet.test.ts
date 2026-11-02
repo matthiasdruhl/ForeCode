@@ -31,6 +31,7 @@ import {
   schemaConstrainedProspectiveTeamStudyId,
   portableSchemaProspectiveTeamStudyId,
   correctedInventoryProspectiveTeamStudyId,
+  writerRecoveryProspectiveTeamStudyId,
   isProspectiveTeamStudy,
 } from "../../scripts/experiments/tournament/team-config";
 
@@ -75,6 +76,7 @@ describe("unsigned study approval preparation (synthetic inputs only)", () => {
     schemaConstrainedProspectiveTeamStudyId,
     portableSchemaProspectiveTeamStudyId,
     correctedInventoryProspectiveTeamStudyId,
+    writerRecoveryProspectiveTeamStudyId,
   ] as const)(
     "allocates %s with fresh trial identities after a retained failure",
     (targetStudyId) => {

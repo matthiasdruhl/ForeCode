@@ -187,7 +187,29 @@ export function ResearchExperience({
           ? initialTraceFocus(restoredIdentity)
           : readTraceSelection(url, restoredIdentity),
       );
-      if (!historyContext)
+      if (stale) {
+        // A single history traversal may emit both popstate and hashchange.
+        // Canonicalize the invalidated entry so a second restore cannot revive
+        // the previous project's replay selection or return-focus target.
+        const reset = initialTraceFocus(restoredIdentity);
+        url.searchParams.set("arm", reset.arm);
+        url.searchParams.set("responsibility", reset.responsibility);
+        url.searchParams.set("phase", reset.phase);
+        url.searchParams.set("stage", "preparation");
+        url.searchParams.set("question", "checks");
+        url.searchParams.delete("source");
+        url.searchParams.delete("event");
+        window.history.replaceState(
+          {
+            ...window.history.state,
+            forecodeContext: restoredIdentity,
+            forecodeReturn: null,
+            forecodeFocus: undefined,
+          },
+          "",
+          url,
+        );
+      } else if (!historyContext)
         window.history.replaceState(
           { ...window.history.state, forecodeContext: restoredIdentity },
           "",

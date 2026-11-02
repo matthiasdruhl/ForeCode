@@ -246,6 +246,9 @@ export function ResearchExperience({
       eventId?: string | null;
     },
   ) {
+    // Every explicit navigation/selection supersedes an in-flight workspace
+    // reopen, including evidence inspection/return and study changes.
+    restoreGeneration.current += 1;
     const url = new URL(window.location.href);
     url.hash = nextChapter;
     url.searchParams.set("arm", next.arm);
@@ -412,7 +415,7 @@ export function ResearchExperience({
     }
     if (generation !== restoreGeneration.current)
       throw new Error(
-        "Opening was cancelled because the active project changed. Reopen the workspace to try again.",
+        "Opening was cancelled because the research context changed. Reopen the workspace to try again.",
       );
     setExplorerInitial(restoredExplorer);
     setExplorerState(restoredExplorer);

@@ -1,5 +1,7 @@
 # First new prospective tournament: operator runbook
 
+**November 1 operational update:** see the [local release and closed Study09 handoff](E2E-LOCAL-RELEASE-HANDOFF-20261101.md) for actual execution, conserved accounting, cleanup and the owner's local-only release choice. The readiness audit below is historical and cannot override consumed attempts or current originals.
+
 **Current disposition: BLOCKED.** This procedure is preparation for a later separately authorized operation. Agent D performed only the safe checks recorded in [readiness](TOURNAMENT-NEXT-STUDY-READINESS.md). Source basis: `03f5deb2521facb58c26fd3fcf4bc6199bd8b210`. The integrated implementation and final canonical mapping are recorded in [integration report](INTEGRATION-52-55-REPORT.md). The source basis above describes Agent D’s historical audit, not admission of the integration. Reinspect reviewed implementation before use; [integration gates](TOURNAMENT-NEXT-STUDY-INTEGRATION-GATES.md) specify the necessary A/B acceptance work.
 
 ## 1. Establish scope before accessing originals

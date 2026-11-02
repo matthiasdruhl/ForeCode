@@ -97,6 +97,12 @@ for streaming in (False, True):
                 assert contract['toolNames'] == ([] if ordinal == 20 else ['exec_command'])
                 assert contract['toolTypes'] == ([] if ordinal == 20 else ['function'])
                 assert contract['requestsRemainingAfterAdmission'] == 20-ordinal
+                if ordinal == 20:
+                    assert q['tools'] == [] and q['tool_choice'] == 'auto'
+                    assert 'Return a completed assistant message summarizing saved source changes, observed public checks and unfinished work.' in q['instructions']
+                    assert 'Do not emit function_call or custom_tool_call items, even alongside a message.' in q['instructions']
+                    assert 'If nothing was saved, say so explicitly.' in q['instructions']
+                    assert hashlib.sha256(q['instructions'].encode()).hexdigest() == contract['instructionsSha256']
                 response = reply(call=ordinal < 20, mixed=ordinal == 20 and final_call,
                                  streaming=streaming, sent=sent)
                 actual = upstream(r, lambda b: response)(sent)

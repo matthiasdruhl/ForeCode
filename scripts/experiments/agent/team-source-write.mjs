@@ -8,8 +8,16 @@ export function writeSource(
   root = "/workspace/src",
   beforeCommit = () => {},
 ) {
-  const value = JSON.parse(raw);
+  let value;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error("SOURCE_WRITE_JSON");
+  }
   if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
     Object.keys(value).sort().join() !== "content,expectedSha256,path" ||
     typeof value.content !== "string" ||
     !/^src\/(?:[A-Za-z0-9_()[\].-]+\/)*[A-Za-z0-9_()[\].-]+\.(ts|tsx|css|svg)$/.test(

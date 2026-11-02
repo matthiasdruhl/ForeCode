@@ -385,7 +385,7 @@ class TeamReservations(base.budget.Reservations):
             guidance = {
                 3: 'Completion phase: 3 admitted requests remain including this one. Finish essential repairs only; do not start a rewrite. Run public checks, then submit a final response within the remaining requests. The last request has tools disabled.',
                 2: 'Validation phase: 2 admitted requests remain including this one. Use this last tool-enabled request for necessary validation or a minimal repair, then submit your final response. Disclose unchecked or unfinished work. No extra request is available.',
-                1: 'Final admitted request: tools are disabled. Submit a final response and disclose unfinished work; no further call is available.',
+                1: 'Final admitted request: tools are disabled. Return a completed assistant message summarizing saved source changes, observed public checks and unfinished work. Do not emit function_call or custom_tool_call items, even alongside a message. Do not attempt another write, check or tool call; no further call is available. If nothing was saved, say so explicitly.',
             }[remaining]
             body['instructions'] = instructions + '\n' + guidance
         # Final response consumes a normal reservation inside every ceiling.

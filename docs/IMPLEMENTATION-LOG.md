@@ -2718,3 +2718,26 @@ Focused final checks: 138 tests/7 Vitest files, application ESLint and TypeScrip
 The initial draft browser fixture had inconsistent negative arm/attempt states; that test input was corrected. A source-history browser assertion expected a prior file to remain selected across phase traversal; it now asserts the existing reset behavior and explicitly reselects the file. A test-only empty replay prop omitted required provenance/stages; it now uses the existing replay adapter. These draft failures are not represented as successful checks. Final focused checks cover the corrected source. No provider call, genuine experiment, training or deployment occurred.
 
 Required full app `npm run check` and full `npm run test:e2e -- --workers=2` are pending independent exact-commit validation and review. Production data/display approval remains unavailable; this is eligible code presentation, not a genuine compatible-repeat or feedback demonstration. Next: independent validation, then the separately planned BL-03-A authenticated memory adapter and dependent B/C/D slices from the next validated integration SHA.
+
+## BL-02/03/04 unavailable-state copy repair 1 — November 2, 2026
+
+Bounded repair cycle 1 of at most 3 starts from failed candidate
+`847c168ff4fa8094228d3103dddc341a48d5d07d`, whose prerequisite and last
+validated integration base remains `9ca08ef512a27f0e4f4acbf43d3d5700e36351b9`.
+The Meta result interpretation panel now explains that completed historical
+trials cannot acquire new original predictions and that expired lineage requires
+abstention, without asserting that a particular study expired or was revoked.
+It describes any model interpretation as an advisory assessment separate from
+protected verification and the deterministic decision report. Only this log and
+`src/components/v6/evidence-feedback-status.tsx` changed; no controls, requests,
+logic, styles, backend or schemas changed.
+
+Observed checks: the inherited read-only Prettier executable checked the changed
+component (exit 0); `git diff --check` passed (exit 0). Required full
+`npm run check`, full `npm run test:e2e -- --workers=2`, rendered acceptance and
+independent review remain assigned to the independent validators for this exact
+repair commit. They were not rerun by this bounded copy implementer, to preserve
+serialized resource ownership. No dependency installation or shared writes,
+provider calls, experiments, training, deployment, protected-resource changes,
+push or protected-branch integration occurred. Next: independently validate this
+repair's exact commit, then let the Git manager integrate only if it passes.

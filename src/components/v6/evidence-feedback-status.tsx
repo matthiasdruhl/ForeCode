@@ -24,8 +24,13 @@ export function EvidenceFeedbackStatus({ studyId }: { studyId?: string }) {
           separate permission to share the exact bounded summary with Meta.
         </p>
         <p>
-          Model interpretation would remain a hypothesis, separate from
-          protected verification and the deterministic decision report.
+          A historical trial cannot acquire a new original prediction after
+          completion. If its hypothesis-to-study lineage has expired,
+          interpretation must abstain.
+        </p>
+        <p>
+          Any model interpretation would be an advisory assessment, separate
+          from protected verification and the deterministic decision report.
         </p>
       </section>
       <section aria-labelledby="memory-status-heading">

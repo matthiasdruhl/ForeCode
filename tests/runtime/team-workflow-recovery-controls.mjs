@@ -2,7 +2,15 @@
 // no provider calls, historical candidate bytes or protected correctness claim.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+  symlinkSync,
+  linkSync,
+  mkdirSync,
+} from "node:fs";
 import { spawnSync } from "node:child_process";
 
 assert.equal(process.platform, "linux", "confined Linux guest required");
@@ -232,6 +240,134 @@ accepted(
 assert.notEqual(currentHash(), before);
 const repairedHash = currentHash();
 
+// Literal-file staging avoids JSON escaping while retaining the same atomic
+// writer, interface validation, digest conflicts and post-commit feedback.
+const stagedSource =
+  '\ufeff// Literal quotes " backslash \\ dollar $HOME and escaped NUL \\u0000\nexport const staged = "Ω";\n';
+const staging = "/tmp/literal-proposal.ts";
+writeFileSync(staging, stagedSource);
+const staged = invoke("literal-source-file-write", [
+  "/run/team-workflow.mjs",
+  "write-file",
+  "src/staged-control.ts",
+  staging,
+  "null",
+]);
+assert.equal(staged.exitCode, 0, JSON.stringify(staged));
+assert.equal(
+  readFileSync("/workspace/src/staged-control.ts", "utf8"),
+  stagedSource,
+);
+assert.match(staged.stdout, new RegExp(hash(stagedSource)));
+assert.equal(currentHash(), repairedHash);
+for (const [name, file] of [
+  ["missing", "/tmp/absent-proposal"],
+  ["directory", "/tmp/proposal-directory"],
+  ["invalid-utf8", "/tmp/invalid-utf8"],
+  ["symlink", "/tmp/aliased-proposal"],
+  ["oversized", "/tmp/oversized-proposal"],
+]) {
+  if (name === "directory") mkdirSync(file);
+  if (name === "invalid-utf8") writeFileSync(file, Buffer.from([0xc3, 0x28]));
+  if (name === "symlink") symlinkSync(staging, file);
+  if (name === "oversized") writeFileSync(file, Buffer.alloc(2_097_153));
+  rejected(
+    invoke(`staged-${name}`, [
+      "/run/team-workflow.mjs",
+      "write-file",
+      "src/server/team-benchmark.ts",
+      file,
+      repairedHash,
+    ]),
+    repairedHash,
+    "SOURCE_WRITE_FILE",
+  );
+  rmSync(file, { recursive: true, force: true });
+}
+linkSync(staging, "/tmp/hardlinked-proposal");
+rejected(
+  invoke("staged-hardlink", [
+    "/run/team-workflow.mjs",
+    "write-file",
+    "src/server/team-benchmark.ts",
+    staging,
+    repairedHash,
+  ]),
+  repairedHash,
+  "SOURCE_WRITE_FILE",
+);
+rmSync("/tmp/hardlinked-proposal");
+symlinkSync("/tmp", "/tmp/aliased-directory");
+rejected(
+  invoke("staged-parent-symlink", [
+    "/run/team-workflow.mjs",
+    "write-file",
+    "src/server/team-benchmark.ts",
+    "/tmp/aliased-directory/literal-proposal.ts",
+    repairedHash,
+  ]),
+  repairedHash,
+  "SOURCE_WRITE_FILE",
+);
+rmSync("/tmp/aliased-directory");
+rejected(
+  invoke("staged-stale-digest", [
+    "/run/team-workflow.mjs",
+    "write-file",
+    "src/server/team-benchmark.ts",
+    staging,
+    "0".repeat(64),
+  ]),
+  repairedHash,
+  "SOURCE_WRITE_CONFLICT",
+);
+rmSync("/workspace/src/staged-control.ts");
+
+// Reproduce the public HTTPS-origin regression AND a real compiler error in
+// one source snapshot. A failed session must not hide the TypeScript message.
+const originDefect = repaired.replace(
+  'request.headers.get("origin") !== url.origin',
+  'request.headers.get("origin") !== "http://127.0.0.1:3006"',
+);
+assert.notEqual(originDefect, repaired);
+writeFileSync(staging, originDefect);
+const dualWrite = invoke("staged-known-origin-defect", [
+  "/run/team-workflow.mjs",
+  "write-file",
+  "src/server/team-benchmark.ts",
+  staging,
+  repairedHash,
+]);
+receipt(dualWrite, originDefect);
+assert.equal(dualWrite.exitCode, 1);
+writeFileSync(
+  "/workspace/src/public-compile-control.ts",
+  "export const broken: string = 1;\n",
+);
+const dual = invoke(
+  "independent-https-and-compiler-diagnostics",
+  ["/run/team-public-checks.mjs"],
+  undefined,
+  180_000,
+);
+assert.equal(dual.exitCode, 1, JSON.stringify(dual));
+assert.match(dual.stdout, /PUBLIC_CHECK adapter-session FAIL/);
+assert.match(dual.stdout, /PUBLIC_CHECK typecheck FAIL/);
+assert.match(dual.output, /public-compile-control.ts\(1,14\): error TS2322/);
+assert.doesNotMatch(dual.stdout, /PUBLIC_CHECK build PASS/);
+rmSync("/workspace/src/public-compile-control.ts");
+writeFileSync(staging, repaired);
+const dualRepair = invoke("staged-origin-and-compiler-recovery", [
+  "/run/team-workflow.mjs",
+  "write-file",
+  "src/server/team-benchmark.ts",
+  staging,
+  hash(originDefect),
+]);
+accepted(dualRepair, repaired);
+assert.equal(currentHash(), repairedHash);
+rmSync(staging);
+
 const quick = invoke("quick-public-check", [
   "/run/team-public-checks.mjs",
   "--quick",
@@ -264,6 +400,68 @@ for (const check of [
 assert.match(full.stdout, /PUBLIC_READINESS READY/);
 assert.equal(currentHash(), repairedHash);
 assert.equal(existsSync("/workspace/node_modules"), false);
+
+// Each deliberate defect must fail a named assertion from PUBLIC requirements.
+// These controls never read or execute a historical candidate or private test.
+const mutations = [
+  [
+    "seed-error-code",
+    'if (!parsedSeed.success) failure("INVALID_INPUT");',
+    'if (!parsedSeed.success) throw new Error("INVALID_SEED");',
+    /public invalid seed/,
+  ],
+  [
+    "seed-validation",
+    "if (!unique(seed.organizations.map(x => x.id))",
+    "if (false && !unique(seed.organizations.map(x => x.id))",
+    /public invalid seed/,
+  ],
+  [
+    "catalog-roles",
+    "return m ? [{ ...o, role: m.role }] : [];",
+    'return m ? [{ ...o, role: "owner" }] : [];',
+    /public organization roles and sorting/,
+  ],
+  [
+    "returned-copies",
+    "return { booking: { ...row } };",
+    "return { booking: row };",
+    /public booking return must be copied/,
+  ],
+  [
+    "revoked-occupancy",
+    'row.status = "revoked";',
+    'row.status = "revoked"; for (const booking of rows) if (booking.createdBy === target) booking.status = "cancelled";',
+    /public revocation preserves conflict occupancy/,
+  ],
+  [
+    "strict-utf8",
+    'new TextDecoder("utf-8", { fatal: true }).decode(bytes)',
+    'new TextDecoder("utf-8").decode(bytes)',
+    /public malformed wire body/,
+  ],
+  ["body-limit", "count > 8192", "count > 16384", /public malformed wire body/],
+  [
+    "method-order",
+    "if (!allowed.includes(request.method)) return new Response(null, { status: 405 });",
+    "if (!allowed.includes(request.method)) { identity(viewer); return new Response(null, { status: 405 }); }",
+    /public unsupported method precedes all validation/,
+  ],
+];
+for (const [name, beforeText, afterText, expected] of mutations) {
+  const defective = repaired.replaceAll(beforeText, afterText);
+  assert.notEqual(defective, repaired, `mutation ${name} was not applied`);
+  writeFileSync(adapter, defective);
+  const result = invoke(
+    `public-negative-${name}`,
+    ["/run/team-public-checks.mjs", "--behavior-only"],
+    undefined,
+    25_000,
+  );
+  assert.notEqual(result.exitCode, 0, JSON.stringify(result));
+  assert.match(result.output, expected, JSON.stringify(result));
+}
+writeFileSync(adapter, repaired);
 
 // The real supervisor uses Python time.time(), so its deadline has fractional
 // milliseconds. Exercise the actual CLIs below the 180s/90s timeout caps; the

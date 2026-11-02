@@ -142,7 +142,7 @@ class TeamReservations(base.budget.Reservations):
             'maxOutputTokens': body['max_output_tokens'],
             'maxRequests': self.request['maxRequests'], 'maxIterations': self.request['maxIterations'],
             'tokenLimit': self.request['tokenLimit'], 'spendMicroUsd': self.request['spendMicroUsd'],
-            'nativeRolloutTokenLimit': min(self.request['tokenLimit'], 1_000_000),
+            'nativeRolloutTokenLimit': self.request.get('nativeRolloutTokenLimit', min(self.request['tokenLimit'], 1_000_000)),
             'deadlineEpochMs': int(self.request['deadline'] * 1000),
             'deadlineRemainingMs': max(0, int((self.request['deadline'] - time.time()) * 1000)),
         }
@@ -507,6 +507,58 @@ def serve_team(socket_path, reservations, upstream=None):
     server = _base_serve(socket_path, reservations, observed_upstream, reservations.record_refusal)
     handler = server.RequestHandlerClass
     class TeamHandler(handler):
+        def do_POST(self):
+            retries = reservations.request.get('maxTransientRetries', 0)
+            if not retries:
+                return super().do_POST()
+            stage = 'http-preflight'
+            try:
+                size = int(self.headers.get('Content-Length', '-1'))
+                if self.path != '/v1/responses' or not 0 <= size <= 1_048_576 or self.headers.get('Transfer-Encoding'):
+                    raise ValueError('unsupported request')
+                raw = self.rfile.read(size)
+                for attempt in range(retries + 1):
+                    stage = 'reservation'
+                    body = reservations.reserve(raw)
+                    stage = 'upstream'
+                    try:
+                        output, content_type = observed_upstream(body)
+                        break
+                    except urllib.error.HTTPError as error:
+                        # Only a definite HTTP503 response is retryable. Unknown
+                        # transport/partial responses and validation errors latch.
+                        record = reservations.value['requests'][-1]
+                        record['transientHttpStatus'] = error.code
+                        record['retryOrdinal'] = attempt
+                        base.budget.atomic(reservations.file, reservations.value)
+                        if error.code != 503 or attempt == retries:
+                            raise
+                        delay = attempt + 1
+                        if time.time() + delay + 1 >= reservations.request['deadline']:
+                            raise
+                        time.sleep(delay)
+                        # The next attempt gets its own durable full reservation
+                        # and consumes the same call/token/money/time ceilings.
+                stage = 'response-validation'
+                reservations.observe(output, content_type, body)
+                self.send_response(200)
+                self.send_header('Content-Type', content_type)
+                self.send_header('X-Forecode-Admitted-Requests', str(len(reservations.value['requests'])))
+            except Exception as error:
+                if stage == 'upstream':
+                    reservations.block()
+                try:
+                    reservations.record_refusal(error, stage)
+                except Exception:
+                    pass
+                output = b'{"error":{"message":"Bounded provider request unavailable"}}'
+                self.send_response(503 if isinstance(error, urllib.error.HTTPError) and error.code == 503 else 403)
+                self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(output)))
+            self.send_header('Connection', 'close')
+            self.end_headers()
+            self.wfile.write(output)
+
         def end_headers(self):
             code = getattr(reservations, 'refusal_code', None)
             if code in ('request-count', 'iteration-count', 'token-capacity', 'money-capacity', 'token-and-money-capacity', 'deadline-or-request-bytes'):
@@ -532,24 +584,27 @@ def preparation_request(request):
             or request['variant'] not in ('A', 'B')):
         raise ValueError('fixed team profile required')
     r, resources = e['restrictions'], e['resources']
-    if (set(r) != {'writablePaths', 'network', 'credentials', 'maxRequests', 'maxOutputTokens'}
+    required_restrictions = {'writablePaths', 'network', 'credentials', 'maxRequests', 'maxOutputTokens'}
+    if (not required_restrictions <= set(r) or set(r) - required_restrictions - {'maxTransientRetries', 'nativeRolloutTokenLimit'}
             or r['writablePaths'] != ['src/'] or r['network'] != 'none'
             or r['credentials'] != 'trusted_broker_only'
             or resources['cpus'] != 1 or resources['memoryMiB'] != 768 or resources['pids'] != 128):
         raise ValueError('unsupported confinement')
-    exact_int(e['maxIterations'], 1, 100)
-    exact_int(e['maxSeconds'], 1, 600)
-    exact_int(e['tokenLimit'], 1, 32_000_000)
-    native_limit = min(e['tokenLimit'], 1_000_000)
+    exact_int(e['maxIterations'], 1, 1000)
+    exact_int(e['maxSeconds'], 1, 1800)
+    exact_int(e['tokenLimit'], 1, 1_000_000_000)
+    if 'nativeRolloutTokenLimit' in r: exact_int(r['nativeRolloutTokenLimit'], 1, 1_000_000_000)
+    native_limit = min(e['tokenLimit'], r.get('nativeRolloutTokenLimit', 1_000_000))
     if e.get('nativeRolloutTokenLimit', native_limit) != native_limit:
         raise ValueError('fixed native rollout guard')
-    exact_int(e['spendMicroUsd'], 1, 40_000_000)
-    exact_int(r['maxRequests'], 1, 100)
+    exact_int(e['spendMicroUsd'], 1, 1_000_000_000)
+    exact_int(r['maxRequests'], 1, 1000)
+    exact_int(r.get('maxTransientRetries', 0), 0, 2)
     completion_reserve = min(3, e['maxIterations'], r['maxRequests'])
     if 'completionReserveRequests' in e: exact_int(e['completionReserveRequests'], 1, 3)
     if e.get('completionReserveRequests', completion_reserve) != completion_reserve:
         raise ValueError('fixed completion reserve')
-    exact_int(r['maxOutputTokens'], 16, min(32768, e['tokenLimit']))
+    exact_int(r['maxOutputTokens'], 16, min(65536, e['tokenLimit']))
     exact_int(resources['outputBytes'], 1024, 8_000_000)
     candidate = request['candidate']
     manifest = [{'path': f['path'], 'sha256': hashlib.sha256(base.base64.b64decode(f['base64'], validate=True)).hexdigest()}
@@ -564,9 +619,11 @@ def preparation_request(request):
     return {
         'runId': request['runId'], 'nonce': request['nonce'], 'candidate': candidate,
         'prompt': e['prompt'], 'model': e['model'], 'tokenLimit': e['tokenLimit'],
+        'nativeRolloutTokenLimit': native_limit,
         'spendMicroUsd': e['spendMicroUsd'], 'maxSeconds': e['maxSeconds'],
         'maxOutputBytes': resources['outputBytes'], 'maxRequests': r['maxRequests'],
         'maxIterations': e['maxIterations'],
+        'maxTransientRetries': r.get('maxTransientRetries', 0),
         'completionReserveRequests': completion_reserve,
         'workerImage': e['runtime']['workerImage'],
         'codexBinarySha256': e['runtime']['agentBinarySha256'],
@@ -612,10 +669,9 @@ class TeamSupervisor(base.Supervisor):
         transformed['provider'] = {**provider, 'endpoint': 'https://api.meta.ai/v1/responses',
                                    'maxOutputTokens': request['enforcement']['restrictions']['maxOutputTokens']}
         result = super().prepare(transformed)
-        # The unchanged smoke bridge validates a1M native rollout counter.
-        # Keep that stricter actual-token guard while the outside-worker
-        # broker separately reserves up to32M worst-case byte/opaque tokens.
-        native_limit = min(transformed['tokenLimit'], 1_000_000)
+        # Apply only the explicit reviewed team guard. Older definitions keep
+        # their original 1M default; smoke tasks retain their original ceiling.
+        native_limit = transformed['nativeRolloutTokenLimit']
         if native_limit != transformed['tokenLimit']:
             p = self.directory(request['runId'])
             task = json.loads(base.read_regular(p / 'task.json'))

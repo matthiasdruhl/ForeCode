@@ -9,14 +9,17 @@ import {
 } from "node:fs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { writeSource } from "./team-source-write.mjs";
-export const orientation = `Public workflow v5 (identical in both arms):
+import { writeSource, sourceFileInput } from "./team-source-write.mjs";
+export const orientation = `Public workflow v7 (identical in both arms):
 The complete task envelope is already in this prompt. Its task is nested inside the prompt string in /run/forecode-task.json.
 Run node /run/team-workflow.mjs task to print the parsed public task and adapter contract once.
 Node, bash, rg, and the readonly /toolchain/node_modules exist; Python and a shell apply_patch executable do not.
 The readonly /workspace has no node_modules. Bare ESM dependency imports there fail even with NODE_PATH; this is not a missing installation. Use the public checks below for application imports: they copy source into writable scratch and link the installed dependencies. For a dependency-only probe, run Node from /toolchain. Do not spend requests retrying workspace imports or installing dependencies.
+Start with one bounded inspection pass: list the source files and read the relevant domain, service, storage and HTTP interfaces together. Reuse what you have read; reopen a file only to resolve a specific implementation question, a checker error or its changed digest. Do not spend successive requests reprinting the task or unchanged source while postponing the first write.
 Construct the required src/server/team-benchmark.ts exported factory and domain/http interface within the first four provider requests, then implement behavior incrementally. Keep a working interface; do not delete it to start a partial rewrite. No solution stub is supplied.
-For ALL source edits use atomic whole-file writes, not shell redirection, rm, partial appends or shell apply_patch. Use node /run/team-workflow.mjs write <<'FORECODE_JSON'
+After that initial inspection, make the next executable step a small complete source write. Keep each response focused on the next implementation or validation step; do not attempt to plan and emit the entire solution in one response. Split work into complete, coherent file revisions, use the returned digest and public feedback, and continue until the full task is implemented. Early interface success is a checkpoint, not permission to omit behavior or finish without full checks.
+For source edits use atomic whole-file writes. Prefer staging literal TypeScript using cat > /tmp/proposal.ts <<'FORECODE_SOURCE', followed by the complete file and FORECODE_SOURCE on its own line. Then run node /run/team-workflow.mjs write-file src/server/team-benchmark.ts /tmp/proposal.ts null. Replace null with the current returned SHA256 when updating an existing source file. Staging under /tmp or /work does not edit saved source. Do not redirect, remove or partially append files under /workspace/src. No shell apply_patch executable exists.
+The alternate JSON interface is node /run/team-workflow.mjs write <<'FORECODE_JSON'
 ${JSON.stringify({ path: "src/example.ts", expectedSha256: null, content: 'export const example = "text";\n' })}
 FORECODE_JSON
 Use null only for a new file; for replacement use its current SHA256. Send complete file content as JSON. Encode control bytes in JSON; never embed raw NUL in a shell command. Literal source backslashes must be JSON escaped. A rejected write leaves the previous file intact.
@@ -99,74 +102,77 @@ if (process.argv[1]?.endsWith("/team-workflow.mjs")) {
     if (command === "task") {
       const task = JSON.parse(readFileSync("/run/forecode-task.json", "utf8"));
       console.log(JSON.stringify(JSON.parse(task.prompt), null, 2));
-    } else if (command === "write") {
+    } else if (command === "write" || command === "write-file") {
       // Bounded read including JSON overhead; no partial/append mode.
       const chunks = [];
       let size = 0;
-      for await (const chunk of process.stdin) {
-        size += chunk.length;
-        if (size > 8_000_000) throw new Error("SOURCE_WRITE_TOO_LARGE");
-        chunks.push(chunk);
+      let raw;
+      if (command === "write-file") {
+        if (process.argv.length !== 6) throw new Error("SOURCE_WRITE_FILE");
+        raw = sourceFileInput(...process.argv.slice(3));
+      } else {
+        for await (const chunk of process.stdin) {
+          size += chunk.length;
+          if (size > 8_000_000) throw new Error("SOURCE_WRITE_TOO_LARGE");
+          chunks.push(chunk);
+        }
+        raw = Buffer.concat(chunks).toString("utf8");
       }
       if (Date.now() >= progress().deadline * 1000)
         throw new Error("SOURCE_WRITE_DEADLINE");
       console.log(
         "SOURCE_WRITE " +
           JSON.stringify(
-            writeSource(
-              Buffer.concat(chunks).toString("utf8"),
-              "/workspace/src",
-              (value) => {
-                if (value.path !== "src/server/team-benchmark.ts") return;
-                const staging = mkdtempSync("/work/proposed-adapter-");
-                try {
-                  writeFileSync(`${staging}/adapter.ts`, value.content, {
-                    flag: "wx",
-                    mode: 0o600,
-                  });
-                  const remaining = Math.floor(
-                    progress().deadline * 1000 - Date.now(),
-                  );
-                  if (remaining < 1) throw new Error("SOURCE_WRITE_DEADLINE");
-                  const result = spawnSync(
-                    "/usr/local/bin/node",
-                    [
-                      "/run/team-public-checks.mjs",
-                      "--interface-only",
-                      "--proposed-adapter",
-                      `${staging}/adapter.ts`,
-                    ],
-                    {
-                      timeout: Math.min(20000, remaining),
-                      maxBuffer: 65536,
-                      env: {
-                        PATH: "/usr/local/bin:/usr/bin:/bin",
-                        FORECODE_DEADLINE: String(progress().deadline),
-                        NEXT_TELEMETRY_DISABLED: "1",
-                      },
+            writeSource(raw, "/workspace/src", (value) => {
+              if (value.path !== "src/server/team-benchmark.ts") return;
+              const staging = mkdtempSync("/work/proposed-adapter-");
+              try {
+                writeFileSync(`${staging}/adapter.ts`, value.content, {
+                  flag: "wx",
+                  mode: 0o600,
+                });
+                const remaining = Math.floor(
+                  progress().deadline * 1000 - Date.now(),
+                );
+                if (remaining < 1) throw new Error("SOURCE_WRITE_DEADLINE");
+                const result = spawnSync(
+                  "/usr/local/bin/node",
+                  [
+                    "/run/team-public-checks.mjs",
+                    "--interface-only",
+                    "--proposed-adapter",
+                    `${staging}/adapter.ts`,
+                  ],
+                  {
+                    timeout: Math.min(20000, remaining),
+                    maxBuffer: 65536,
+                    env: {
+                      PATH: "/usr/local/bin:/usr/bin:/bin",
+                      FORECODE_DEADLINE: String(progress().deadline),
+                      NEXT_TELEMETRY_DISABLED: "1",
                     },
+                  },
+                );
+                const output = result.stdout?.toString() ?? "";
+                if (
+                  result.error ||
+                  result.signal ||
+                  result.status !== 0 ||
+                  !output.includes("PUBLIC_READINESS INTERFACE_ONLY")
+                ) {
+                  console.log(
+                    "SOURCE_WRITE_BLOCKED public adapter interface; previous file preserved",
                   );
-                  const output = result.stdout?.toString() ?? "";
-                  if (
-                    result.error ||
-                    result.signal ||
-                    result.status !== 0 ||
-                    !output.includes("PUBLIC_READINESS INTERFACE_ONLY")
-                  ) {
-                    console.log(
-                      "SOURCE_WRITE_BLOCKED public adapter interface; previous file preserved",
-                    );
-                    process.stdout.write(result.stdout ?? "");
-                    process.stderr.write(result.stderr ?? "");
-                    throw new Error("SOURCE_WRITE_INTERFACE");
-                  }
-                  if (Date.now() >= progress().deadline * 1000)
-                    throw new Error("SOURCE_WRITE_DEADLINE");
-                } finally {
-                  rmSync(staging, { recursive: true, force: true });
+                  process.stdout.write(result.stdout ?? "");
+                  process.stderr.write(result.stderr ?? "");
+                  throw new Error("SOURCE_WRITE_INTERFACE");
                 }
-              },
-            ),
+                if (Date.now() >= progress().deadline * 1000)
+                  throw new Error("SOURCE_WRITE_DEADLINE");
+              } finally {
+                rmSync(staging, { recursive: true, force: true });
+              }
+            }),
           ),
       );
       // A failed quick check does not undo or mislabel a successfully saved file.
@@ -264,6 +270,8 @@ if (process.argv[1]?.endsWith("/team-workflow.mjs")) {
         "Adapter rejected. Fix the public checker error above and resubmit a complete createTeamBenchmark export with domain/http methods, using the unchanged previous digest.",
       SOURCE_WRITE_TOO_LARGE:
         "JSON input exceeds the bounded writer allowance. Reduce the submission size.",
+      SOURCE_WRITE_FILE:
+        "Use write-file src/path.ts /tmp/proposal.ts null-or-current-sha256. Stage a regular UTF-8 file under /tmp or /work; symlinks, hardlinks and files over 2MiB are rejected.",
       SOURCE_WRITE_DEADLINE:
         "The existing coding deadline has expired. No additional write is allowed.",
     };

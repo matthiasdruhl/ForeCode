@@ -5,8 +5,11 @@ The reviewed synthetic adapter exercises public examples only, never protected c
 import json,pathlib,types,sys,uuid,time,base64,re,shlex
 f=pathlib.Path('/opt/forecode-agent/team-supervisor.py');t=types.ModuleType('native_repro');t.__file__=str(f);exec(compile(f.read_bytes(),str(f),'exec'),t.__dict__)
 r=json.load(sys.stdin); mode=r.get('controlMode','repair')
-full=mode.startswith('full-'); json_response=mode.endswith('-json')
-assert mode in ('repair','final-response','final-tool-refused','full-final-response','full-final-tool-refused','full-final-mixed-refused','full-final-tool-refused-json','full-final-mixed-refused-json')
+full=mode.startswith('full-'); total=100 if mode in ('full-100-final-response','full-large-budget-final-response') else 20; json_response=mode.endswith('-json')
+# Long replay remains independently bounded by token/money reservations. Keep the
+# 100-call transport control compact enough to test its request boundary.
+history_padding=128 if mode=='full-100-final-response' else 2048
+assert mode in ('full-large-budget-final-response','full-100-final-response','retry503-repair','repair','final-response','final-tool-refused','full-final-response','full-final-tool-refused','full-final-mixed-refused','full-final-tool-refused-json','full-final-mixed-refused-json')
 exhausted=mode=='final-tool-refused'; refused=exhausted or 'refused' in mode
 root=pathlib.Path('/var/lib/forecode-native-nul-control-'+str(uuid.uuid4()));root.mkdir(mode=0o700)
 # Explicit scripted local Responses control, never a provider transport.
@@ -23,27 +26,31 @@ if full:
  def boundary_write(content,previous):
   return write(content,previous).replace('src/server/team-benchmark.ts','src/contract-control.ts')
  commands += [boundary_write(dynamic,None),boundary_write('export const control = 1;',t.hashlib.sha256(dynamic.encode()).hexdigest())]
+if mode=='retry503-repair':commands=[write(bad,None),write(good,t.hashlib.sha256(bad.encode()).hexdigest())]
 index=0
 command_index=0
+transport_attempts=0
 def synthetic(body):
- global index,command_index
+ global index,command_index,transport_attempts
+ transport_attempts+=1
+ if mode=='retry503-repair' and transport_attempts==1:raise t.urllib.error.HTTPError('https://api.meta.ai/v1/responses',503,'synthetic temporary failure',{},None)
  request=json.loads(body)
  history=request.get('input',[])
  outputs=[x.get('output','') for x in history if isinstance(x,dict) and x.get('type')=='function_call_output']
  last=str(outputs[-1]) if outputs else ''
  session=re.search(r'(?:session ID|session id) (\d+)',last)
  if full:
-  assert index<20,'request21 reached scripted upstream'
-  if index==19:
+  assert index<total,'extra request reached scripted upstream'
+  if index==total-1:
    assert request.get('tools')==[] and request.get('tool_choice')=='auto'
    assert 'Final admitted request: tools are disabled.' in request['instructions']
-   assert len(outputs)==19, 'native replay must contain nineteen previous tool results'
+   assert len(outputs)==total-1, 'native replay must contain every previous tool result'
    assert any('adapterInstructions' in x and '"task"' in x for x in outputs), 'public task was not discovered'
    assert any('PUBLIC_CHECK adapter-session FAIL' in x for x in outputs), 'public failure missing from native history'
    assert any('PUBLIC_CHECK adapter-session PASS' in x for x in outputs), 'public repair missing from native history'
  if request.get('tools')==[] and not refused:
   output=[{'id':'msg_final','type':'message','role':'assistant','status':'completed','content':[{'type':'output_text','text':'Synthetic final response within existing allowance; no protected correctness claim.'}]}]
- elif full and index==19:
+ elif full and index==total-1:
   output=[{'id':'fc_refused','type':'function_call','call_id':'call_refused','name':'exec_command','arguments':json.dumps({'cmd':write(bad,t.hashlib.sha256(good.encode()).hexdigest()),'yield_time_ms':10000,'max_output_tokens':3000})}]
   if 'mixed' in mode:
    output.insert(0,{'id':'msg_mixed','type':'message','role':'assistant','status':'completed','content':[{'type':'output_text','text':'Message must not excuse a prohibited call.'}]})
@@ -53,13 +60,13 @@ def synthetic(body):
   output=[{'id':'fc_'+str(index),'type':'function_call','call_id':'call_'+str(index),'name':'exec_command','arguments':json.dumps({'cmd':commands[command_index],'yield_time_ms':10000,'max_output_tokens':3000})}]
   command_index+=1
  elif full:
-  output=[{'id':'fc_'+str(index),'type':'function_call','call_id':'call_'+str(index),'name':'exec_command','arguments':json.dumps({'cmd':"node -e "+shlex.quote("console.log("+json.dumps('synthetic history '+str(index)+' '+('x'*2048))+");"),'yield_time_ms':10000,'max_output_tokens':3000})}]
+  output=[{'id':'fc_'+str(index),'type':'function_call','call_id':'call_'+str(index),'name':'exec_command','arguments':json.dumps({'cmd':"node -e "+shlex.quote("console.log("+json.dumps('synthetic history '+str(index)+' '+('x'*history_padding))+");"),'yield_time_ms':10000,'max_output_tokens':3000})}]
  else:output=[{'id':'msg_control','type':'message','role':'assistant','status':'completed','content':[{'type':'output_text','text':'Synthetic no-model control complete.'}]}]
  index+=1
  response={'id':'resp_'+str(index),'object':'response','created_at':int(time.time()),'model':'muse-spark-1.3-contributor','service_tier':'auto','status':'completed','output':output,'usage':{'input_tokens':1,'output_tokens':1,'total_tokens':2}}
  # Exercise JSON refusal at the final boundary; preceding native rounds use
  # their requested stream transport and are unaffected by this negative case.
- if json_response and index==20:return t.base.budget.canonical(response),'application/json'
+ if json_response and index==total:return t.base.budget.canonical(response),'application/json'
  events=[{'type':'response.created','response':{**response,'status':'in_progress','output':[]}}]
  for i,item in enumerate(output):
   events.extend([{'type':'response.output_item.added','output_index':i,'item':item},{'type':'response.output_item.done','output_index':i,'item':item}])
@@ -72,7 +79,7 @@ class AuditedReservations(t.TeamReservations):
   if full:
    ordinal=len(self.value['requests']); body=json.loads(sent)
    assert t.hashlib.sha256(sent).hexdigest()==self.value['requests'][-1]['requestSha256']
-   if ordinal>=18:
+   if ordinal>=total-2:
     record=json.loads((root/run/f'request-{ordinal:04d}-admitted.json').read_bytes())['details']
     assert {k:v for k,v in record.items() if k!='deadlineRemainingMs'}=={k:v for k,v in self.request_contract(sent).items() if k!='deadlineRemainingMs'}
     assert record['toolNames']==sorted({x['name'] for x in body['tools']})
@@ -93,7 +100,12 @@ class Control(t.TeamSupervisor):
   args[at:at]=['--mount','type=bind,src=/opt/forecode-workflow-controls/team-source-write-controls.mjs,dst=/run/team-source-write-controls.mjs,readonly']
   return args
 s=Control(root);run,nonce=str(uuid.uuid4()),str(uuid.uuid4());files=r['files'];manifest=[{'path':x['path'],'sha256':t.hashlib.sha256(base64.b64decode(x['base64'])).hexdigest()} for x in files]
-e=r['enforcement'];e.update(maxSeconds=300,tokenLimit=32000000,spendMicroUsd=32000000,maxIterations=20);e['restrictions'].update(maxRequests=20,maxOutputTokens=32768);e['resources']['outputBytes']=1048576
+e=r['enforcement'];e.update(maxSeconds=300,tokenLimit=32000000,spendMicroUsd=32000000,maxIterations=total);e['restrictions'].update(maxRequests=total,maxOutputTokens=65536);e['resources']['outputBytes']=1048576
+if mode in ('full-100-final-response','full-large-budget-final-response'):e['maxSeconds']=1800
+if mode=='full-large-budget-final-response':
+ e.update(tokenLimit=1_000_000_000,spendMicroUsd=1_000_000_000,nativeRolloutTokenLimit=1_000_000_000)
+ e['restrictions']['nativeRolloutTokenLimit']=1_000_000_000
+if mode=='retry503-repair':e['restrictions']['maxTransientRetries']=2
 if exhausted: e['maxIterations']=1;e['restrictions']['maxRequests']=1
 if mode=='final-response': e['maxIterations']=2;e['restrictions']['maxRequests']=2
 e['completionReserveRequests']=min(3,e['maxIterations'],e['restrictions']['maxRequests'])
@@ -110,12 +122,12 @@ try:
   budget=json.loads((root/run/'budget.json').read_bytes())
   # The broker owns the responder counter in its child process. Durable
   # reservations and contract observations are the parent's evidence.
-  assert len(budget['requests'])==20
+  assert len(budget['requests'])==total, {'admitted':len(budget['requests']),'expected':total,'reservedTokens':budget['reservedTokens'],'agent':st['agent']}
   assert st['agent']['exitCode']==(1 if refused else 0),st['agent']
   assert (root/run/'source/src/server/team-benchmark.ts').read_text()==good,'refused call changed source or repair did not complete'
   assert 'PUBLIC_CHECK adapter-session FAIL' in st['agent']['stdout'],st['agent']
-  contracts=[json.loads((root/run/f'request-{n:04d}-admitted.json').read_bytes()) for n in [18,19,20]]
-  assert [x['ordinal'] for x in contracts]==[18,19,20]
+  contracts=[json.loads((root/run/f'request-{n:04d}-admitted.json').read_bytes()) for n in [total-2,total-1,total]]
+  assert [x['ordinal'] for x in contracts]==[total-2,total-1,total]
   assert contracts[-1]['requestSha256']==budget['requests'][-1]['requestSha256']
   assert contracts[-1]['details']['toolCount']==0 and contracts[-1]['details']['phase']=='final'
   assert contracts[-1]['details']['toolNames']==contracts[-1]['details']['toolTypes']==[]
@@ -123,24 +135,27 @@ try:
    assert metadata.stat().st_mode&0o777==0o400 and metadata.stat().st_uid==0
    assert metadata.stat().st_size<=8192
    assert not any(x in metadata.read_text() for x in ['"instructions":','"input":','"arguments":','booking_demo_session','synthetic;','adapterInstructions'])
-  assert len(list((root/run).glob('request-*.json')))==80
+  assert len(list((root/run).glob('request-*.json')))==4*total
   assert (root/run/'source/src/contract-control.ts').read_text()=='export const control = 1;'
   assert 'PUBLIC_BOUNDARY' in st['agent']['stdout']
   assert budget['reservedTokens']==sum(x['inputTokenUpperBound']+x['maximumOutputTokens'] for x in budget['requests'])
   assert budget['reservedMicroUsd']==sum(x['reservedMicroUsd'] for x in budget['requests'])
   if refused:
-   assert sum('observedUsage' in x for x in budget['requests'])==19
+   assert sum('observedUsage' in x for x in budget['requests'])==total-1
    assert 'observedUsage' not in budget['requests'][-1]
    assert (root/run/'unverified-response.bin').is_file()
    failure=json.loads((root/run/'unverified-response.json').read_bytes())
    assert failure['requestSha256']==contracts[-1]['requestSha256']
    assert failure['contentType']==('application/json' if json_response else 'text/event-stream')
-   observation=json.loads((root/run/'request-0020-response-received.json').read_bytes())
+   observation=json.loads((root/run/f'request-{total:04d}-response-received.json').read_bytes())
    assert observation['responseValidated'] is False
    types=observation['details']['outputItemKinds']['counts']
    assert types.get('function_call')==1 and types.get('message',0)==int('mixed' in mode)
    assert json.loads((root/run/'broker-refusal.json').read_bytes())['reasonCode']=='response-validation'
   else:assert budget['requests'][-1]['observedUsage']['totalTokens']==2
+  if mode=='full-large-budget-final-response':
+   assert budget['reservedTokens']>32_000_000, 'must cross the previous token ceiling'
+   assert contracts[-1]['details']['nativeRolloutTokenLimit']==1_000_000_000
  if mode=='repair':assert 'nul byte found in provided data' in st['agent']['stdout'],st['agent']
  if mode=='repair':
   assert (root/run/'source/src/server/team-benchmark.ts').read_text()==good
@@ -151,6 +166,11 @@ try:
  elif exhausted:
   assert st['agent']['exitCode']==1
   assert json.loads((root/run/'broker-refusal.json').read_bytes())['reasonCode']=='response-validation'
+ elif mode=='retry503-repair':
+  budget=json.loads((root/run/'budget.json').read_bytes());assert st['agent']['exitCode']==0 and len(budget['requests'])==4
+  assert budget['requests'][0]['transientHttpStatus']==503 and 'observedUsage' not in budget['requests'][0]
+  assert sum('observedUsage' in x for x in budget['requests'])==3
+  assert 'requestsRemaining=18' in st['agent']['stdout'] and 'requestsRemaining=17' in st['agent']['stdout'],st['agent']
  elif not full:
   assert st['agent']['exitCode']==0 and len(json.loads((root/run/'budget.json').read_bytes())['requests'])==2
   assert (root/run/'source/src/server/team-benchmark.ts').read_text()==good
@@ -164,8 +184,8 @@ try:
 finally:
  cleanup=s.cleanup(run,nonce)
  assert cleanup['absent'] and cleanup['scratchRemoved']
- if full:
-  assert (root/run/'request-0020-admitted.json').is_file() and (root/run/'cleanup-source.json').is_file()
+ if full and sys.exc_info()[0] is None:
+  assert (root/run/f'request-{total:04d}-admitted.json').is_file() and (root/run/'cleanup-source.json').is_file()
   snapshot=json.loads((root/run/'cleanup-source.json').read_bytes())
   assert base64.b64decode(next(x['base64'] for x in snapshot['candidate']['files'] if x['path']=='src/server/team-benchmark.ts')).decode()==good
   assert not any((root/run/x).exists() for x in ['source','sealed','gateway','task.json','public-source'])

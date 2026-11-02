@@ -32,7 +32,8 @@ for case in ['missing-adapter','missing-export','unusable-interface','cookie-fai
   p=subprocess.run(args,capture_output=True,timeout=185)
   row={'case':case,'exitCode':p.returncode,'stdout':p.stdout.decode(),'stderr':p.stderr.decode()};rows.append(row)
   assert (p.returncode==0)==(case in ['positive','static-local-import']),row
-  if case in ['missing-adapter','missing-export','unusable-interface','cookie-failure']:assert 'PUBLIC_CHECK build' not in row['stdout'],row
+  if case=='missing-adapter':assert 'PUBLIC_CHECK build' not in row['stdout'],row
+  if case=='cookie-failure':assert 'PUBLIC_CHECK adapter-session FAIL' in row['stdout'] and 'PUBLIC_CHECK typecheck PASS' in row['stdout'],row
   assert 'PUBLIC_READINESS '+('READY' if case in ['positive','static-local-import'] else 'BLOCKED') in row['stdout'],row
   if case=='dynamic-local-import':
    assert 'DYNAMIC_IMPORT_USE_STATIC_IMPORT' in row['stdout'],row

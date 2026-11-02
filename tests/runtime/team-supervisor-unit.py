@@ -441,7 +441,15 @@ with tempfile.TemporaryDirectory() as temp:
     denied(lambda: team.preparation_request(body))
 print('separate32M conservative broker /1M native rollout guards passed; no upstream')
 
-for field, value in [('tokenLimit', 32_000_001), ('spendMicroUsd', 40_000_001)]:
+changed = json.loads(json.dumps(request))
+changed['enforcement']['restrictions']['maxTransientRetries'] = 2
+assert team.preparation_request(changed)['maxTransientRetries'] == 2
+assert team.preparation_request(request)['maxTransientRetries'] == 0
+for invalid in [3, -1, True, 1.5]:
+    changed['enforcement']['restrictions']['maxTransientRetries'] = invalid
+    denied(lambda: team.preparation_request(changed))
+
+for field, value in [('tokenLimit', 1_000_000_001), ('spendMicroUsd', 1_000_000_001)]:
     changed = json.loads(json.dumps(request))
     changed['enforcement'][field] = value
     denied(lambda: team.preparation_request(changed))
@@ -566,3 +574,114 @@ for daemon_now in [1003, 1009]:
                 assert json.loads((p / 'task.json').read_bytes())['deadline'] == 1008
                 assert not json.loads((p / 'budget.json').read_bytes())['requests']
 print('trusted absolute host deadline survives setup delay; expired/malformed/missing/replayed starts refuse before worker or provider')
+
+# Prospective larger output allowance uses the exact production preparation and
+# broker interfaces. Historical 32768 caps remain unchanged; incomplete reasoning
+# is usage, never synthesized into a successful final response.
+for cap in [32768, 65536]:
+    for streaming in [False, True]:
+        for outcome in ['completed', 'incomplete', 'over-reservation']:
+            with tempfile.TemporaryDirectory() as temp:
+                body = json.loads(json.dumps(request))
+                body['enforcement'].update(maxSeconds=1800, tokenLimit=32_000_000, spendMicroUsd=40_000_000, maxIterations=100)
+                body['enforcement']['restrictions'].update(maxRequests=100, maxOutputTokens=cap)
+                supervisor = team.TeamSupervisor(pathlib.Path(temp), lambda args: b'', lambda: 'synthetic-boot')
+                with patch.object(team.base.os, 'chown'):
+                    supervisor.prepare_team(body, {'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+                p, state = supervisor.state(run, nonce)
+                r = state['request']
+                assert r['maxSeconds'] == 1800 and r['provider']['maxOutputTokens'] == cap
+                assert r['maxRequests'] == r['maxIterations'] == 100
+                assert r['tokenLimit'] == 32_000_000
+                r['deadline'] = time.time() + 60
+                reservations = team.TeamReservations(p, r)
+                sent = reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert reasoning control', 'max_output_tokens': 999999}).encode())
+                assert json.loads(sent)['max_output_tokens'] == cap
+                reserved = reservations.value['requests'][0]
+                assert reserved['maximumOutputTokens'] == cap
+                before = (reservations.value['reservedTokens'], reservations.value['reservedMicroUsd'])
+                assert before == (reserved['inputTokenUpperBound'] + cap,) * 2
+                status = 'incomplete' if outcome == 'incomplete' else 'completed'
+                response = {'object': 'response', 'model': r['model'], 'service_tier': 'auto',
+                    'status': status, 'output': [{'type': 'reasoning', 'id': 'synthetic'}] if status == 'incomplete' else [{'type': 'message', 'role': 'assistant', 'status': 'completed', 'content': [{'type': 'output_text', 'text': 'synthetic completed'}]}],
+                    'usage': {'input_tokens': 1, 'output_tokens': cap + (outcome == 'over-reservation'), 'total_tokens': cap + 1 + (outcome == 'over-reservation')}}
+                if status == 'incomplete': response['incomplete_details'] = {'reason': 'max_output_tokens'}
+                raw = team.base.budget.canonical(response)
+                if streaming: raw = b'data: ' + team.base.budget.canonical({'type': 'response.' + status, 'response': response}) + b'\n\n'
+                media = 'text/event-stream' if streaming else 'application/json'
+                if outcome == 'over-reservation':
+                    denied(lambda: reservations.observe(raw, media, sent))
+                    assert 'observedUsage' not in reserved
+                    assert reservations.value['blockedReason'] == 'provider-outcome-unverified'
+                else:
+                    reservations.observe(raw, media, sent)
+                    assert reserved['observedUsage']['outputTokens'] == cap
+                    assert reserved['responseStatus'] == status
+                    assert reservations.value['blockedReason'] is None
+                assert (reservations.value['reservedTokens'], reservations.value['reservedMicroUsd']) == before
+for field, value in [('maxSeconds', 1801), ('maxSeconds', 1800.5), ('maxIterations', 1001), ('maxRequests', 1001), ('maxOutputTokens', 65537), ('maxOutputTokens', 65536.5)]:
+    body = json.loads(json.dumps(request))
+    target = body['enforcement']['restrictions'] if field in ['maxOutputTokens', 'maxRequests'] else body['enforcement']
+    target[field] = value
+    denied(lambda: team.preparation_request(body))
+print('prospective65536 output /1800s /100calls /32M tokens exact preparation and strict JSON+SSE broker reservations passed; incomplete retained; no upstream')
+
+# Exercise every admitted response at the new maximum, including call 20 and
+# the final tool-free response. The 101st send must remain impossible.
+with tempfile.TemporaryDirectory() as temp:
+    body = json.loads(json.dumps(request))
+    body['enforcement'].update(maxSeconds=1800, tokenLimit=32_000_000,
+                              spendMicroUsd=40_000_000, maxIterations=100)
+    body['enforcement']['restrictions'].update(maxRequests=100, maxOutputTokens=65536)
+    r = team.preparation_request(body)
+    r.update(deadline=time.time()+60, provider={
+        'endpoint': 'https://api.meta.ai/v1/responses', 'maxOutputTokens': 65536,
+        'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+    reservations = team.TeamReservations(pathlib.Path(temp), r)
+    for ordinal in range(1, 101):
+        sent = reservations.reserve(json.dumps({'model': r['model'], 'input': 'inert',
+            'tools': [{'type': 'function', 'name': 'exec_command'}]}).encode())
+        outgoing = json.loads(sent)
+        assert bool(outgoing['tools']) == (ordinal < 100)
+        response = {'object': 'response', 'model': r['model'], 'service_tier': 'auto',
+            'status': 'completed', 'output': [{'type': 'message', 'role': 'assistant',
+                'status': 'completed', 'content': [{'type': 'output_text', 'text': 'inert'}]}],
+            'usage': {'input_tokens': 1, 'output_tokens': 1, 'total_tokens': 2}}
+        reservations.observe(json.dumps(response).encode(), 'application/json', sent)
+    denied(lambda: reservations.reserve(json.dumps({'model': r['model'], 'input': 'extra'}).encode()))
+    assert len(reservations.value['requests']) == 100
+print('all100 maximum-budget responses admitted; call101 refused; no upstream')
+
+# Explicit larger team guards do not alter legacy definitions or smoke tasks.
+with tempfile.TemporaryDirectory() as temp:
+    body = json.loads(json.dumps(request))
+    e = body['enforcement']
+    e.update(maxSeconds=1800, tokenLimit=1_000_000_000, nativeRolloutTokenLimit=1_000_000_000, spendMicroUsd=1_000_000_000, maxIterations=1000)
+    e['restrictions'].update(maxRequests=1000, maxOutputTokens=65536, nativeRolloutTokenLimit=1_000_000_000)
+    supervisor = team.TeamSupervisor(pathlib.Path(temp), lambda args: b'', lambda: 'synthetic-boot')
+    with patch.object(team.base.os, 'chown'):
+        supervisor.prepare_team(body, {'inputMicroUsdPerToken': 1, 'outputMicroUsdPerToken': 1})
+    p, state = supervisor.state(run, nonce)
+    r = state['request']
+    assert r['tokenLimit'] == r['nativeRolloutTokenLimit'] == 1_000_000_000
+    assert r['maxRequests'] == r['maxIterations'] == 1000
+    assert json.loads((p/'task.json').read_bytes())['tokenLimit'] == 1_000_000_000
+    r['deadline'] = time.time() + 300
+    reservations = team.TeamReservations(p, r)
+    for ordinal in range(1,1001):
+        sent = reservations.reserve(json.dumps({'model':r['model'], 'input':'inert compact history', 'tools':[{'type':'function','name':'exec_command'}]}).encode())
+        outgoing = json.loads(sent)
+        assert bool(outgoing['tools']) == (ordinal < 1000)
+        response = {'object':'response','model':r['model'],'service_tier':'auto','status':'completed','output':[{'type':'message','role':'assistant','status':'completed','content':[{'type':'output_text','text':'inert'}]}], 'usage':{'input_tokens':1,'output_tokens':1,'total_tokens':2}}
+        reservations.observe(json.dumps(response).encode(),'application/json',sent)
+    assert len(reservations.value['requests']) == 1000
+    assert reservations.request_contract(sent)['nativeRolloutTokenLimit'] == 1_000_000_000
+    denied(lambda: reservations.reserve(json.dumps({'model':r['model'],'input':'extra'}).encode()))
+    assert reservations.value['reservedTokens'] < r['tokenLimit']
+    for invalid in [True,0,-1,1.5,1_000_000_001]:
+        changed = json.loads(json.dumps(body))
+        changed['enforcement']['restrictions']['nativeRolloutTokenLimit'] = invalid
+        denied(lambda:team.preparation_request(changed))
+    changed = json.loads(json.dumps(body));changed['enforcement']['nativeRolloutTokenLimit'] = 999_999_999
+    denied(lambda:team.preparation_request(changed))
+print('explicit1B broker/native guards,1000 calls, final response,1001 refusal, legacy defaults and strict integer limits passed; no upstream')

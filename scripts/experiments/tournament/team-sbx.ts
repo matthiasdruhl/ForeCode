@@ -66,6 +66,7 @@ import {
 import { teamEnforcementPlan } from "./team-policy";
 import { collectTeamInventory, teamInventoryProgram } from "./team-inventory";
 import { retainTeamControlFailure } from "./team-control-diagnostics";
+import { runTeamPolicyRead } from "./team-policy-read";
 import { BrokerStopSchema } from "./team-termination";
 import { withOptionalAuthorizationExport } from "./optional-authorization-export";
 import {
@@ -387,12 +388,62 @@ function buildControls(
       "CLI changed or operation cancelled.",
     );
     let result: ProcessResult;
+    let attemptedMilliseconds = milliseconds;
     try {
-      result = await deps.run(config.sbx, args, {
-        signal,
-        input,
-        maxBytes,
+      result = await runTeamPolicyRead({
+        args,
+        roles: [config.agentSandbox, config.graderSandbox],
+        body: input,
         milliseconds,
+        signal,
+        recheck: async (ordinal) => {
+          invariant(
+            !signal.aborted &&
+              sha256(await deps.cliBytes()) === expected.sandboxCliSha256,
+            "CLI changed or operation cancelled.",
+          );
+          if (ordinal > 0) {
+            invariant(
+              ownership,
+              "Policy retry requires the current owned lease.",
+            );
+            await ownership.assertOwned();
+            await current();
+          }
+        },
+        execute: async (limit) => {
+          attemptedMilliseconds = limit;
+          return deps.run(config.sbx, args, {
+            signal,
+            input,
+            maxBytes,
+            milliseconds: limit,
+          });
+        },
+        observe: async (observed, limit) => {
+          if (observations.length === 16) observations.shift();
+          observations.push({
+            operation: args[0]!,
+            commandSha256: jsonDigest(args),
+            reason: observed.reason,
+            exitCode: observed.exitCode,
+            stdoutSha256: sha256(observed.stdout),
+            stderrSha256: sha256(observed.stderr),
+          });
+          if (
+            observed.reason !== "completed" ||
+            observed.exitCode !== 0 ||
+            signal.aborted
+          )
+            await retainFailure(
+              "command",
+              null,
+              null,
+              jsonDigest(args),
+              limit,
+              maxBytes,
+            );
+        },
       });
     } catch (error) {
       await retainFailure(
@@ -400,33 +451,11 @@ function buildControls(
         error,
         null,
         jsonDigest(args),
-        milliseconds,
+        attemptedMilliseconds,
         maxBytes,
       );
       throw error;
     }
-    if (observations.length === 16) observations.shift();
-    observations.push({
-      operation: args[0]!,
-      commandSha256: jsonDigest(args),
-      reason: result.reason,
-      exitCode: result.exitCode,
-      stdoutSha256: sha256(result.stdout),
-      stderrSha256: sha256(result.stderr),
-    });
-    if (
-      result.reason !== "completed" ||
-      result.exitCode !== 0 ||
-      signal.aborted
-    )
-      await retainFailure(
-        "command",
-        null,
-        null,
-        jsonDigest(args),
-        milliseconds,
-        maxBytes,
-      );
     invariant(
       result.reason === "completed" && result.exitCode === 0 && !signal.aborted,
       "Fixed sandbox command failed.",

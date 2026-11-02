@@ -17,6 +17,10 @@ import { jsonDigest, sha256 } from "@/lib/report/digests";
 import { canonicalJson } from "@/lib/report/canonical";
 import { BOOKING_REVIEW_COMMIT } from "@/lib/foresight/booking-context";
 import { bookingPolicy } from "../../scripts/evaluator/booking-v1/freeze";
+import {
+  maximumTeamBudget,
+  maximumTeamBudgetAssumption,
+} from "../../scripts/experiments/tournament/team-budget";
 import { teamEvaluatorIdentity } from "../../scripts/evaluator/booking-v1/grade-profile";
 import {
   configuredTeamRuntimes,
@@ -35,6 +39,10 @@ import {
   predecessorCheckedProspectiveTeamStudyId,
   finalHandoffProspectiveTeamStudyId,
   validatedCompletionProspectiveTeamStudyId,
+  baselineCompatibilityProspectiveTeamStudyId,
+  outputHeadroomProspectiveTeamStudyId,
+  cumulativeHeadroomProspectiveTeamStudyId,
+  providerRecoveryProspectiveTeamStudyId,
   isProspectiveTeamStudy,
 } from "../../scripts/experiments/tournament/team-config";
 
@@ -83,6 +91,10 @@ describe("unsigned study approval preparation (synthetic inputs only)", () => {
     predecessorCheckedProspectiveTeamStudyId,
     finalHandoffProspectiveTeamStudyId,
     validatedCompletionProspectiveTeamStudyId,
+    baselineCompatibilityProspectiveTeamStudyId,
+    outputHeadroomProspectiveTeamStudyId,
+    cumulativeHeadroomProspectiveTeamStudyId,
+    providerRecoveryProspectiveTeamStudyId,
   ] as const)(
     "allocates %s with fresh trial identities after a retained failure",
     (targetStudyId) => {
@@ -124,7 +136,7 @@ describe("unsigned study approval preparation (synthetic inputs only)", () => {
       );
     },
   );
-  it("creates fresh IDs with exact task/conditions and no architecture, approval, usage or run times", () => {
+  it("creates fresh IDs with maximum matched budgets and no architecture, approval, usage or run times", () => {
     const before = canonicalJson(fixture.input.definition);
     const packet = build(),
       source = fixture.input.definition,
@@ -145,13 +157,33 @@ describe("unsigned study approval preparation (synthetic inputs only)", () => {
         arm.runId,
       );
     expect(d.protocol.task).toEqual(source.protocol.task);
-    expect(d.protocol.scenario.assumptions).toEqual(
-      source.protocol.scenario.assumptions,
-    );
+    expect(d.protocol.scenario.assumptions).toEqual([
+      ...source.protocol.scenario.assumptions.filter(
+        (text) => !text.startsWith("Per arm coding bounds:"),
+      ),
+      maximumTeamBudgetAssumption,
+    ]);
+    expect(d.restrictions.maxRequests).toBe(1000);
+    expect(d.restrictions.nativeRolloutTokenLimit).toBe(1_000_000_000);
+    expect(d.restrictions.maxOutputTokens).toBe(65536);
+    expect(d.restrictions.maxTransientRetries).toBe(2);
     expect(d.protocol.conditions).toEqual(
       source.protocol.conditions.map((condition) => ({
         ...condition,
         originalCommit: BOOKING_REVIEW_COMMIT,
+        taskSha256: jsonDigest({
+          taskId: d.protocol.task.id,
+          request: d.protocol.scenario.request,
+          assumptions: d.protocol.scenario.assumptions,
+          acceptanceIds: d.protocol.scenario.acceptanceIds,
+        }),
+        budget: {
+          ...condition.budget,
+          maxSeconds: maximumTeamBudget.maxSeconds,
+          maxIterations: maximumTeamBudget.maxIterations,
+          tokenLimit: maximumTeamBudget.tokenLimit,
+          spendUsd: maximumTeamBudget.spendUsd,
+        },
       })),
     );
     expect(d.protocol.scenario.baselineCommit).toBe(BOOKING_REVIEW_COMMIT);

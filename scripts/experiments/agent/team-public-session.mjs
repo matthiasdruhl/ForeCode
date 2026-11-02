@@ -7,19 +7,32 @@ const interfaceOnly = process.argv.includes("--interface-only");
 const behaviorOnly = process.argv.includes("--behavior-only");
 const load = (name) => import(pathToFileURL(`${root}/${name}`).href);
 const origin = "http://127.0.0.1:3006";
-const request = () =>
-  new Request(origin + "/api/session", { method: "POST", headers: { origin } });
-function cookie(response) {
+const secureOrigin = "https://127.0.0.1:3006";
+const request = (urlOrigin = origin, trustedOrigin = urlOrigin) =>
+  new Request(urlOrigin + "/api/session", {
+    method: "POST",
+    headers: { origin: trustedOrigin },
+  });
+function cookie(response, secure = false) {
   assert.equal(response.status, 200);
   const value = response.headers.get("set-cookie");
   assert.match(value ?? "", /booking_demo_session=[^;]+/);
   for (const flag of ["HttpOnly", "SameSite=Strict", "Path=/"])
     assert.ok(value.includes(flag));
+  if (secure)
+    assert.match(
+      value,
+      /(?:^|;\s*)Secure(?:;|$)/,
+      "public HTTPS session cookie must use Secure",
+    );
   return value.split(";")[0];
 }
 if (!interfaceOnly && !behaviorOnly) {
   const route = await load("src/app/api/session/route.ts");
   const session = cookie(await route.POST(request()));
+  // The original handler trusts its configured demo origin, independently of
+  // the incoming URL scheme. Exercise its existing HTTPS cookie branch too.
+  cookie(await route.POST(request(secureOrigin, origin)), true);
   const runtime = await load("src/server/runtime.ts");
   assert.equal(
     (
@@ -94,8 +107,10 @@ assert.ok(
     typeof subject.http === "function",
   "public domain/http interface required",
 );
-if (!interfaceOnly && !behaviorOnly)
+if (!interfaceOnly && !behaviorOnly) {
   cookie(await subject.http(request(), "u-alice"));
+  cookie(await subject.http(request(secureOrigin), "u-alice"), true);
+}
 if (behaviorOnly) {
   // All examples below derive from the visible task and reviewed baseline. They
   // do not import the protected oracle or assert anything about hidden failures.
@@ -139,6 +154,48 @@ if (behaviorOnly) {
       viewer,
     );
   const teamPath = "/api/organizations/team-red/bookings";
+  // Next decodes route parameters before invoking the original personal route.
+  // The required adapter accepts a raw Request URL and must preserve that
+  // observable behavior for percent-encoded unreserved ID characters.
+  for (const encodedId of ["b%2Da1", "%62-a1"]) {
+    const test = await fresh();
+    const plainPath = "/api/bookings/b-a1";
+    const encodedPath = `/api/bookings/${encodedId}`;
+    const label = `public encoded personal booking ID ${encodedId}`;
+    const plainResponse = await http(test.subject, "GET", plainPath);
+    assert.equal(plainResponse.status, 200, `${label}: plain baseline control`);
+    const original = await plainResponse.json();
+    assert.equal(original.booking.id, "b-a1");
+    assert.equal(original.booking.status, "active");
+    const encodedResponse = await http(test.subject, "GET", encodedPath);
+    assert.equal(encodedResponse.status, 200, `${label}: GET`);
+    assert.deepEqual(await encodedResponse.json(), original, `${label}: GET`);
+    const otherOwner = await http(test.subject, "DELETE", encodedPath, "u-bob");
+    assert.equal(otherOwner.status, 404, `${label}: personal owner access`);
+    assert.deepEqual(
+      await (await http(test.subject, "GET", plainPath)).json(),
+      original,
+      `${label}: denied DELETE leaves the original unchanged`,
+    );
+    const cancelled = {
+      booking: { ...original.booking, status: "cancelled" },
+    };
+    for (const attempt of ["first", "repeat"]) {
+      const response = await http(test.subject, "DELETE", encodedPath);
+      assert.equal(response.status, 200, `${label}: ${attempt} DELETE`);
+      assert.deepEqual(
+        await response.json(),
+        cancelled,
+        `${label}: ${attempt} DELETE preserves the booking`,
+      );
+    }
+    for (const path of [plainPath, encodedPath]) {
+      const response = await http(test.subject, "GET", path);
+      assert.equal(response.status, 200, `${label}: cancelled history`);
+      assert.deepEqual(await response.json(), cancelled);
+    }
+  }
+  console.log("PUBLIC_BEHAVIOR encoded-personal-booking-id PASS");
   const invalidTitles = [
     "",
     " ",
@@ -351,6 +408,386 @@ if (behaviorOnly) {
     "public personal baseline privacy and shape",
   );
   console.log("PUBLIC_BEHAVIOR identity-isolation-revocation PASS");
+
+  // Additional examples come exclusively from the frozen PUBLIC specification.
+  // They do not describe, import or infer any private oracle assertion.
+  const seedMutations = [
+    (s) => s.organizations.push({ ...s.organizations[0] }),
+    (s) => s.memberships.push({ ...s.memberships[0] }),
+    (s) => (s.memberships[0].role = "superuser"),
+    (s) => (s.memberships[0].status = "disabled"),
+    (s) => (s.memberships[0].status = "revoked"),
+    (s) => (s.memberships[0].role = "admin"),
+    (s) => (s.memberships[1].role = "owner"),
+    (s) => (s.memberships[0].userId = "u-unknown"),
+    (s) => (s.resources[0].organizationId = "team-missing"),
+    (s) => s.resources.push({ ...s.resources[0] }),
+  ];
+  for (const [index, mutate] of seedMutations.entries()) {
+    const invalid = structuredClone(seed);
+    mutate(invalid);
+    await assert.rejects(
+      async () =>
+        createTeamBenchmark({
+          seed: invalid,
+          now: () => new Date(0),
+          newId: () => "unused",
+        }),
+      (error) => error?.code === "INVALID_INPUT",
+      `public invalid seed ${index} must be rejected before serving with INVALID_INPUT`,
+    );
+  }
+  console.log("PUBLIC_BEHAVIOR invalid-seeds PASS");
+
+  const catalogs = await fresh();
+  const redMembers = [
+    ...seed.memberships.filter((m) => m.organizationId === "team-red"),
+  ].sort((a, b) => a.userId.localeCompare(b.userId));
+  const expectedOrganizations = [
+    { id: "team-blue", name: "Blue", role: "owner" },
+    { id: "team-red", name: "Red", role: "admin" },
+  ];
+  assert.deepEqual(
+    await domain(catalogs.subject, "organizations", "u-bob"),
+    { organizations: expectedOrganizations },
+    "public organization roles and sorting",
+  );
+  for (const viewer of ["u-alice", "u-bob", "u-cara"]) {
+    assert.deepEqual(
+      await domain(catalogs.subject, "resources", viewer),
+      { resources: [{ id: "room-red", name: "Red room" }] },
+      "public team catalog shape",
+    );
+    assert.deepEqual(
+      await domain(catalogs.subject, "memberships", viewer),
+      { memberships: redMembers },
+      "public membership shape and sorting",
+    );
+  }
+  for (const [action, key] of [
+    ["organizations", "organizations"],
+    ["resources", "resources"],
+    ["memberships", "memberships"],
+  ]) {
+    const first = await domain(catalogs.subject, action, "u-bob");
+    const original = structuredClone(first);
+    Object.assign(first[key][0], {
+      name: "tampered",
+      role: "owner",
+      status: "revoked",
+    });
+    first[key].splice(0);
+    assert.deepEqual(
+      await domain(catalogs.subject, action, "u-bob"),
+      original,
+      `public ${action} must return copies`,
+    );
+  }
+  const externalSeed = structuredClone(seed);
+  const seeded = await createTeamBenchmark({
+    seed: externalSeed,
+    now: () => new Date(0),
+    newId: () => "unused",
+  });
+  externalSeed.organizations[0].name = "tampered";
+  externalSeed.resources[0].name = "tampered";
+  externalSeed.memberships[0].status = "revoked";
+  assert.deepEqual(
+    await domain(seeded, "resources"),
+    { resources: [{ id: "room-red", name: "Red room" }] },
+    "public input seed must be copied",
+  );
+  console.log("PUBLIC_BEHAVIOR catalogs-and-copies PASS");
+
+  const revoke = await fresh();
+  const made = (await create(revoke.subject, slot, "u-cara")).booking;
+  for (const viewer of ["u-bob", "u-cara"]) {
+    for (const id of ["u-bob", "missing"])
+      await fail(
+        () =>
+          domain(revoke.subject, "revoke-membership", viewer, "team-red", id),
+        "FORBIDDEN",
+        "public revoke role precedes target",
+      );
+  }
+  await fail(
+    () =>
+      domain(
+        revoke.subject,
+        "revoke-membership",
+        "u-alice",
+        "team-red",
+        "u-alice",
+      ),
+    "FORBIDDEN",
+    "public immutable owner",
+  );
+  const revoked = await domain(
+    revoke.subject,
+    "revoke-membership",
+    "u-alice",
+    "team-red",
+    "u-cara",
+  );
+  assert.deepEqual(revoked, {
+    membership: {
+      organizationId: "team-red",
+      userId: "u-cara",
+      role: "member",
+      status: "revoked",
+    },
+  });
+  assert.deepEqual(
+    await domain(
+      revoke.subject,
+      "revoke-membership",
+      "u-alice",
+      "team-red",
+      "u-cara",
+    ),
+    revoked,
+    "public repeated revocation",
+  );
+  await fail(
+    () => create(revoke.subject, slot),
+    "CONFLICT",
+    "public revocation preserves conflict occupancy",
+  );
+  assert.equal(revoke.allocated(), 1);
+  const cancelled = await domain(
+    revoke.subject,
+    "cancel-booking",
+    "u-bob",
+    "team-red",
+    made.id,
+  );
+  const cancelledSnapshot = structuredClone(cancelled);
+  assert.deepEqual(
+    cancelled.booking,
+    { ...made, status: "cancelled" },
+    "public cancel another creator preserves fields",
+  );
+  await domain(
+    revoke.subject,
+    "revoke-membership",
+    "u-alice",
+    "team-red",
+    "u-bob",
+  );
+  await fail(
+    () =>
+      domain(revoke.subject, "cancel-booking", "u-bob", "team-red", made.id),
+    "NOT_FOUND",
+    "public cancellation retry checks current membership",
+  );
+  assert.deepEqual(
+    await domain(
+      revoke.subject,
+      "cancel-booking",
+      "u-alice",
+      "team-red",
+      made.id,
+    ),
+    cancelled,
+  );
+  const returned = await domain(
+    revoke.subject,
+    "booking",
+    "u-alice",
+    "team-red",
+    made.id,
+  );
+  returned.booking.title = "tampered";
+  assert.deepEqual(
+    await domain(revoke.subject, "booking", "u-alice", "team-red", made.id),
+    cancelledSnapshot,
+    "public booking return must be copied",
+  );
+  await domain(
+    revoke.subject,
+    "revoke-membership",
+    "u-bob",
+    "team-blue",
+    "u-cara",
+  );
+  assert.deepEqual(
+    await domain(revoke.subject, "organizations", "u-cara"),
+    { organizations: [] },
+    "public user with no active teams",
+  );
+  console.log("PUBLIC_BEHAVIOR revocation-retries-and-occupancy PASS");
+
+  const httpCase = await fresh();
+  const responseError = async (response, status, code, label) => {
+    assert.equal(response.status, status, label);
+    assert.equal(response.headers.get("cache-control"), "no-store", label);
+    const value = await response.json();
+    assert.deepEqual(Object.keys(value), ["error"], label);
+    assert.deepEqual(
+      Object.keys(value.error).sort(),
+      ["code", "message"],
+      label,
+    );
+    assert.equal(value.error.code, code, label);
+    assert.equal(typeof value.error.message, "string", label);
+  };
+  for (const [path, expected] of [
+    ["/api/organizations", { organizations: expectedOrganizations }],
+    [
+      "/api/organizations/team-red/resources",
+      { resources: [{ id: "room-red", name: "Red room" }] },
+    ],
+    ["/api/organizations/team-red/memberships", { memberships: redMembers }],
+  ]) {
+    const response = await http(httpCase.subject, "GET", path, "u-bob");
+    assert.equal(response.status, 200, `public GET ${path}`);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await response.json(), expected);
+  }
+  for (const method of [
+    "PUT",
+    "PATCH",
+    "OPTIONS",
+    "HEAD",
+    "TRACE",
+    "CONNECT",
+    "TRACK",
+  ]) {
+    const request = new Request(origin + "/api/organizations/%ZZ/bookings", {
+      method: "GET",
+    });
+    Object.defineProperty(request, "method", { value: method });
+    assert.equal(
+      (await httpCase.subject.http(request, null)).status,
+      405,
+      "public unsupported method precedes all validation",
+    );
+  }
+  for (const [path, viewer, headers, status, code] of [
+    ["/api/organizations/%ZZ/bookings", null, {}, 400, "INVALID_INPUT"],
+    [teamPath, null, {}, 401, "UNAUTHENTICATED"],
+    ["/api/organizations/team-blue/bookings", "u-alice", {}, 404, "NOT_FOUND"],
+    [
+      "/api/organizations/%ZZ/bookings",
+      null,
+      { origin: "https://untrusted.invalid" },
+      400,
+      "INVALID_INPUT",
+    ],
+  ]) {
+    await responseError(
+      await http(httpCase.subject, "POST", path, viewer, {}, headers),
+      status,
+      code,
+      "public mutation precedence",
+    );
+  }
+  await responseError(
+    await http(httpCase.subject, "DELETE", teamPath + "/missing", "u-cara"),
+    403,
+    "FORBIDDEN",
+    "public role before missing target",
+  );
+  console.log("PUBLIC_BEHAVIOR http-routes-and-precedence PASS");
+
+  const utf8Control = new TextEncoder().encode(
+    JSON.stringify({ ...slot, title: "BAD_UTF8" }),
+  );
+  const utf8Offset = new TextDecoder().decode(utf8Control).indexOf("BAD_UTF8");
+  const malformedUtf8 = new Uint8Array([
+    ...utf8Control.slice(0, utf8Offset),
+    0xc3,
+    0x28,
+    ...utf8Control.slice(utf8Offset + 8),
+  ]);
+  for (const [body, contentType] of [
+    ["{", "application/json"],
+    ["", "application/json"],
+    [JSON.stringify(slot), "text/plain"],
+    [malformedUtf8, "application/json"],
+    [JSON.stringify(slot).padEnd(8193, " "), "application/json"],
+  ]) {
+    const test = await fresh();
+    const response = await test.subject.http(
+      new Request(origin + teamPath, {
+        method: "POST",
+        headers: { origin, "content-type": contentType },
+        body,
+      }),
+      "u-alice",
+    );
+    await responseError(
+      response,
+      400,
+      "INVALID_INPUT",
+      "public malformed wire body",
+    );
+    assert.equal(test.allocated(), 0);
+    assert.deepEqual(await domain(test.subject, "bookings"), { bookings: [] });
+  }
+  for (const input of [
+    { ...slot, role: "owner" },
+    { ...slot, createdBy: "u-bob" },
+    { ...slot, resourceId: "room-blue" },
+    { ...slot, resourceId: "room-1" },
+    { ...slot, startAt: "2026-11-10T13:00:00+00:00" },
+    { ...slot, endAt: slot.startAt },
+  ]) {
+    const test = await fresh();
+    await responseError(
+      await http(test.subject, "POST", teamPath, "u-alice", input),
+      400,
+      "INVALID_INPUT",
+      "public strict create validation",
+    );
+    assert.equal(test.allocated(), 0);
+  }
+  const exact = await fresh();
+  const exactResponse = await exact.subject.http(
+    new Request(origin + teamPath, {
+      method: "POST",
+      headers: { origin, "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify(slot).padEnd(8192, " "),
+    }),
+    "u-alice",
+  );
+  assert.equal(exactResponse.status, 201, "public exactly 8192 bytes accepted");
+  const item = (await exactResponse.json()).booking;
+  await responseError(
+    await http(
+      exact.subject,
+      "GET",
+      `/api/organizations/team-blue/bookings/${item.id}`,
+      "u-bob",
+    ),
+    404,
+    "NOT_FOUND",
+    "public wrong-team record",
+  );
+  await responseError(
+    await http(exact.subject, "GET", `/api/bookings/${item.id}`),
+    404,
+    "NOT_FOUND",
+    "public team record hidden from personal route",
+  );
+  const ignored = await http(
+    exact.subject,
+    "DELETE",
+    `${teamPath}/${item.id}`,
+    "u-alice",
+    { ignored: "body" },
+    { "content-type": "text/plain" },
+  );
+  assert.equal(
+    ignored.status,
+    200,
+    "public DELETE ignores body and content type",
+  );
+  assert.deepEqual((await ignored.json()).booking, {
+    ...item,
+    status: "cancelled",
+  });
+  console.log("PUBLIC_BEHAVIOR wire-input-and-isolation PASS");
 }
 // A candidate may terminate its importing process with exit(0). The parent
 // must observe completion of these public assertions as well as a zero exit.

@@ -154,8 +154,8 @@ export const CertificateV1Schema = z.strictObject({
 });
 export const BudgetSchema = z.strictObject({
   maxSeconds: z.number().int().min(1).max(86_400),
-  maxIterations: z.number().int().min(1).max(100),
-  tokenLimit: z.number().int().min(1).max(100_000_000).nullable(),
+  maxIterations: z.number().int().min(1).max(1000),
+  tokenLimit: z.number().int().min(1).max(1_000_000_000).nullable(),
   spendUsd: z.number().min(0).max(10_000).nullable(),
 });
 export const PairArmSchema = z.strictObject({

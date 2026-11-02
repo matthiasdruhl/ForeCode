@@ -42,7 +42,9 @@ async function writable(root) {
   }
 }
 function run(id, args, limit = 90_000, completionMarker) {
-  const remaining = deadline - Date.now();
+  // Keep the original deadline, but never pass fractional or zero (unbounded)
+  // milliseconds to spawnSync when Python supplied a fractional epoch value.
+  const remaining = Math.floor(deadline - Date.now());
   const result =
     remaining > 0
       ? spawnSync("/usr/local/bin/node", args, {

@@ -390,6 +390,18 @@ class TeamReservations(base.budget.Reservations):
             body['instructions'] = instructions + '\n' + guidance
         # Final response consumes a normal reservation inside every ceiling.
         if closing and remaining == 1:
+            # Make the transition explicit after the latest tool result as well
+            # as in top-level instructions. Preserve all replay items, phases
+            # and encrypted reasoning; this is a new instruction, not a rewrite
+            # of the agent's history. Normal reservation accounts for its bytes.
+            history = body.get('input')
+            if isinstance(history, str):
+                history = [{'type': 'message', 'role': 'user',
+                            'content': [{'type': 'input_text', 'text': history}]}]
+            if not isinstance(history, list):
+                raise ValueError('explicit input required')
+            body['input'] = history + [{'type': 'message', 'role': 'developer',
+                                      'content': [{'type': 'input_text', 'text': guidance}]}]
             body['tools'] = []
             # Meta Responses supports auto, not tool_choice:none. Empty tools
             # advertise no new calls; returned calls are independently refused.

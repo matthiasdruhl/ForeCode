@@ -368,7 +368,8 @@ for streaming in [False, True]:
                     assert record['toolCount'] == len(body['tools'])
                     assert record['toolTypes'] == sorted({t['type'] for t in body['tools']})
                     assert record['toolNames'] == sorted({t['name'] for t in body['tools']})
-                    assert record['inputKind'] == 'text' and record['inputItemKinds']['counts'] == {}
+                    assert record['inputKind'] == ('items' if index == 19 else 'text')
+                    assert record['inputItemKinds']['counts'] == ({'message': 2} if index == 19 else {})
                     assert record['phase'] == ['completion', 'validation', 'final'][index-17]
                     received = pathlib.Path(temp) / f'request-{index+1:04d}-response-received.json'
                     observation = json.loads(received.read_bytes())
@@ -399,7 +400,7 @@ with tempfile.TemporaryDirectory() as temp:
     sent = reservations.reserve(raw)
     admitted = json.loads((pathlib.Path(temp)/'request-0001-admitted.json').read_bytes())
     record = admitted['details']
-    assert record['inputItemKinds']['counts'] == {'function_call': 1, 'function_call_output': 1, 'other': 1}
+    assert record['inputItemKinds']['counts'] == {'function_call': 1, 'function_call_output': 1, 'other': 1, 'message': 1}
     assert admitted['requestSha256'] == team.hashlib.sha256(sent).hexdigest()
     assert admitted['requestSha256'] != team.hashlib.sha256(raw).hexdigest()
     assert 'PRIVATE_' not in (pathlib.Path(temp)/'request-0001-admitted.json').read_text()

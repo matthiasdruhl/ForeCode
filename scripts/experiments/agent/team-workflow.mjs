@@ -64,7 +64,9 @@ function sourceDigest(root = "/workspace/src") {
 }
 export function check(quick = false) {
   const p = progress();
-  const remaining = Math.max(0, p.deadline * 1000 - Date.now());
+  // Python's time.time() deadline can contain fractional milliseconds. Node's
+  // subprocess timeout requires an integer; round down without extending it.
+  const remaining = Math.max(0, Math.floor(p.deadline * 1000 - Date.now()));
   console.log(
     `PUBLIC_ALLOWANCE requestsRemaining=${Math.max(0, p.maxRequests - p.admittedRequests)} millisecondsRemaining=${remaining}`,
   );
@@ -122,7 +124,9 @@ if (process.argv[1]?.endsWith("/team-workflow.mjs")) {
                     flag: "wx",
                     mode: 0o600,
                   });
-                  const remaining = progress().deadline * 1000 - Date.now();
+                  const remaining = Math.floor(
+                    progress().deadline * 1000 - Date.now(),
+                  );
                   if (remaining < 1) throw new Error("SOURCE_WRITE_DEADLINE");
                   const result = spawnSync(
                     "/usr/local/bin/node",
@@ -180,24 +184,27 @@ if (process.argv[1]?.endsWith("/team-workflow.mjs")) {
           /* absent */
         }
         if (previous?.digest !== digest) {
-          const result = spawnSync(
-            "/usr/local/bin/node",
-            ["/run/team-public-checks.mjs", "--interface-only"],
-            {
-              stdio: "inherit",
-              timeout: Math.max(
-                1,
-                Math.min(20000, p.deadline * 1000 - Date.now()),
-              ),
-              env: {
-                PATH: "/usr/local/bin:/usr/bin:/bin",
-                FORECODE_DEADLINE: String(p.deadline),
-                NEXT_TELEMETRY_DISABLED: "1",
-              },
-            },
-          );
+          const remaining = Math.floor(p.deadline * 1000 - Date.now());
+          const result =
+            remaining > 0
+              ? spawnSync(
+                  "/usr/local/bin/node",
+                  ["/run/team-public-checks.mjs", "--interface-only"],
+                  {
+                    stdio: "inherit",
+                    timeout: Math.min(20000, remaining),
+                    env: {
+                      PATH: "/usr/local/bin:/usr/bin:/bin",
+                      FORECODE_DEADLINE: String(p.deadline),
+                      NEXT_TELEMETRY_DISABLED: "1",
+                    },
+                  },
+                )
+              : null;
           const status =
-            result.error || result.signal ? 124 : (result.status ?? 124);
+            !result || result.error || result.signal
+              ? 124
+              : (result.status ?? 124);
           writeFileSync(
             "/tmp/forecode-interface-checkpoint.json",
             JSON.stringify({ digest, status }),

@@ -2,7 +2,7 @@
 // no provider calls, historical candidate bytes or protected correctness claim.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 assert.equal(process.platform, "linux", "confined Linux guest required");
@@ -261,6 +261,120 @@ for (const check of [
 assert.match(full.stdout, /PUBLIC_READINESS READY/);
 assert.equal(currentHash(), repairedHash);
 assert.equal(existsSync("/workspace/node_modules"), false);
+
+// The real supervisor uses Python time.time(), so its deadline has fractional
+// milliseconds. Exercise the actual CLIs below the 180s/90s timeout caps; the
+// original integer-only progress fixture hid Node's integer timeout validation.
+function fractionalProgress(milliseconds, admittedRequests) {
+  const fractionalDeadline = (Date.now() + milliseconds + 0.25) / 1000;
+  assert.equal(Number.isInteger(fractionalDeadline * 1000), false);
+  writeFileSync(
+    "/tmp/forecode-progress.json",
+    JSON.stringify({
+      admittedRequests,
+      maxRequests: 19,
+      completionReserveRequests: 3,
+      deadline: fractionalDeadline,
+    }),
+  );
+  return fractionalDeadline;
+}
+const fractionalSource = repaired.replace(
+  "=synthetic-repaired;",
+  "=synthetic-fractional;",
+);
+fractionalProgress(147_494, 16);
+const fractionalWrite = write(
+  "fractional-deadline-committed-auto-quick",
+  fractionalSource,
+  repairedHash,
+);
+receipt(fractionalWrite, fractionalSource);
+const shortFractionalSource = fractionalSource.replace(
+  "=synthetic-fractional;",
+  "=synthetic-short;",
+);
+fractionalProgress(18_000, 16);
+const shortFractionalWrite = write(
+  "fractional-short-deadline-proposed-interface",
+  shortFractionalSource,
+  currentHash(),
+);
+fractionalProgress(147_494, 12);
+const fractionalCheckpoint = invoke(
+  "fractional-deadline-full-checkpoint",
+  ["/run/team-workflow.mjs", "checkpoint"],
+  undefined,
+  180_000,
+);
+const fractionalPublicDeadline = fractionalProgress(60_000, 12);
+const fractionalPublic = invoke(
+  "fractional-deadline-direct-full-checker",
+  ["/run/team-public-checks.mjs"],
+  undefined,
+  70_000,
+  { env: { FORECODE_DEADLINE: String(fractionalPublicDeadline) } },
+);
+// Collect all positive results before asserting, so the failing-source run shows
+// both the workflow wrapper and the nested public-checker failure paths.
+const fractionalRows = [
+  fractionalWrite,
+  shortFractionalWrite,
+  fractionalCheckpoint,
+  fractionalPublic,
+];
+console.log("FRACTIONAL_TIMEOUT_CONTROLS " + JSON.stringify(fractionalRows));
+for (const row of fractionalRows) {
+  assert.equal(row.exitCode, 0, JSON.stringify(row));
+  assert.doesNotMatch(row.output, /PUBLIC_WORKFLOW_FAILED/);
+}
+assert.match(fractionalWrite.stdout, /PUBLIC_READINESS QUICK_PASS/);
+receipt(shortFractionalWrite, shortFractionalSource);
+assert.match(shortFractionalWrite.stdout, /PUBLIC_READINESS QUICK_PASS/);
+for (const row of [fractionalCheckpoint, fractionalPublic]) {
+  assert.match(row.stdout, /PUBLIC_CHECK typecheck PASS/);
+  assert.match(row.stdout, /PUBLIC_CHECK build PASS/);
+  assert.match(row.stdout, /PUBLIC_READINESS READY/);
+}
+// An expired fractional deadline must fail closed without admitting a checker.
+fractionalProgress(-1, 12);
+const expired = invoke("expired-fractional-deadline", [
+  "/run/team-workflow.mjs",
+  "quick",
+]);
+assert.equal(expired.exitCode, 124, JSON.stringify(expired));
+assert.match(expired.stdout, /PUBLIC_READINESS NOT_CHECKED deadline/);
+assert.doesNotMatch(expired.stdout, /PUBLIC_CHECK /);
+// Change only the synthetic fixture digest, forcing the checkpoint interface
+// path to check the already-expired deadline instead of using its cached pass.
+const expiredSource = "/workspace/src/expired-timeout-control.ts";
+writeFileSync(expiredSource, "// synthetic expired-deadline control\n", {
+  flag: "wx",
+});
+const expiredCheckpoint = invoke("expired-fractional-interface-checkpoint", [
+  "/run/team-workflow.mjs",
+  "checkpoint",
+]);
+assert.equal(
+  expiredCheckpoint.exitCode,
+  124,
+  JSON.stringify(expiredCheckpoint),
+);
+assert.match(expiredCheckpoint.stdout, /PUBLIC_INTERFACE_MILESTONE BLOCKED/);
+assert.match(expiredCheckpoint.stdout, /PUBLIC_READINESS NOT_CHECKED deadline/);
+assert.doesNotMatch(expiredCheckpoint.stdout, /PUBLIC_CHECK /);
+rmSync(expiredSource);
+const expiredPublic = invoke(
+  "expired-fractional-direct-checker",
+  ["/run/team-public-checks.mjs"],
+  undefined,
+  25_000,
+  { env: { FORECODE_DEADLINE: String((Date.now() - 1 + 0.25) / 1000) } },
+);
+assert.equal(expiredPublic.exitCode, 1, JSON.stringify(expiredPublic));
+assert.match(expiredPublic.stdout, /PUBLIC_CHECK source-boundary FAIL/);
+assert.doesNotMatch(expiredPublic.stdout, /PUBLIC_CHECK adapter-session/);
+assert.equal(currentHash(), hash(shortFractionalSource));
 console.log(
   JSON.stringify({
     origin: "synthetic-real-public-workflow-cli",
@@ -270,6 +384,7 @@ console.log(
     postCommitCheckFailurePreservedReceipt: true,
     repairedUsingCommittedDigest: true,
     scratchDependencyWorkflowPassed: true,
+    fractionalDeadlineWorkflowAndCheckerPassed: true,
     rows,
   }),
 );

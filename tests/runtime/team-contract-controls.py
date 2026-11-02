@@ -79,6 +79,99 @@ def upstream(reservations, callback):
     return captured[0]
 
 
+# Exercise the real final builder with native-shaped replay. The encrypted item
+# is first received through real observe(), never inserted into the replay map.
+# This tests canonical wire semantics only; the upstream is inert, not a model.
+for text_input in (False, True):
+    with tempfile.TemporaryDirectory() as temp:
+        root = pathlib.Path(temp)
+        r = team.TeamReservations(root, request(4))
+        first = r.reserve(body())
+        reasoning = {'type': 'reasoning', 'id': 'rs_synthetic', 'summary': [],
+                     'encrypted_content': 'synthetic-opaque-replay-unchanged'}
+        commentary = {'type': 'message', 'role': 'assistant', 'phase': 'commentary',
+                      'content': [{'type': 'output_text', 'text': 'Synthetic check next.'}]}
+        issued = json.loads(reply(call=True)[0])
+        issued['output'] = [reasoning, commentary, *issued['output']]
+        received = upstream(r, lambda sent: (json.dumps(issued).encode(), 'application/json'))(first)
+        r.observe(*received, first)
+        opaque_sha = hashlib.sha256(reasoning['encrypted_content'].encode()).hexdigest()
+        assert r.value['opaqueInputs'][opaque_sha] == 16
+        history = [
+            {'type': 'message', 'role': 'developer', 'content': [
+                {'type': 'input_text', 'text': 'Original tool-loop instructions stay intact.'}]},
+            {'type': 'message', 'role': 'user', 'content': [
+                {'type': 'input_text', 'text': 'Synthetic task; no implementation executes.'}]},
+            *issued['output'],
+            {'type': 'function_call_output', 'call_id': 'inert',
+             'output': 'Synthetic public checks passed; source saved.'},
+        ]
+        original = 'Original user text: λ\\quoted\nkept intact' if text_input else history
+        original_bytes = team.base.budget.canonical(original)
+        for ordinal in (2, 3, 4):
+            payload = json.loads(body())
+            payload.update(input=original, instructions='Original broker instructions.')
+            sent = r.reserve(json.dumps(payload).encode())
+            q = json.loads(sent)
+            if ordinal < 4:
+                assert team.base.budget.canonical(q['input']) == original_bytes
+                assert q['tools'] == payload['tools']
+            else:
+                assert isinstance(q['input'], list), 'final request must carry explicit terminal developer item'
+                expected_prefix = ([{'type': 'message', 'role': 'user', 'content': [
+                    {'type': 'input_text', 'text': original}]}] if text_input else history)
+                assert team.base.budget.canonical(q['input'][:-1]) == team.base.budget.canonical(expected_prefix)
+                final_guidance = q['instructions'].rsplit('\n', 1)[-1]
+                assert final_guidance.startswith('Final admitted request: tools are disabled.')
+                assert q['input'][-1] == {'type': 'message', 'role': 'developer',
+                    'content': [{'type': 'input_text', 'text': final_guidance}]}
+                assert q['tools'] == [] and q['tool_choice'] == 'auto'
+                assert r.value['opaqueInputs'][opaque_sha] == 16
+                if not text_input:
+                    assert q['input'][2]['encrypted_content'] == reasoning['encrypted_content']
+                    assert q['input'][3]['phase'] == 'commentary'
+                    assert q['input'][-3]['call_id'] == q['input'][-2]['call_id'] == 'inert'
+                assert r.value['requests'][-1]['inputTokenUpperBound'] >= len(sent)
+                assert r.request['maxRequests'] == r.request['maxIterations'] == 4
+                assert q['max_output_tokens'] == 16
+            actual = upstream(r, lambda wire: reply(sent=wire))(sent)
+            r.observe(*actual, sent)
+        counters = r.value['reservedTokens'], r.value['reservedMicroUsd'], len(r.value['requests'])
+        refused(lambda: r.reserve(body()))
+        assert counters == (r.value['reservedTokens'], r.value['reservedMicroUsd'], len(r.value['requests']))
+
+# A terminal handoff must never turn a tool-only/mixed provider result into a
+# deliverable assistant answer. Preserve rejection, accounting and no retry.
+for streaming in (False, True):
+    for mixed in (False, True):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            r = team.TeamReservations(root, request(1))
+            sent = r.reserve(body())
+            actual = upstream(r, lambda wire: reply(call=not mixed, mixed=mixed,
+                                                   streaming=streaming, sent=wire))(sent)
+            delivered = []
+            refused(lambda: (r.observe(*actual, sent), delivered.append(actual)))
+            assert delivered == []
+            assert event(root, 1, 'response-rejected')['details']['reasonCode'] == 'final-tool-call'
+            assert (root/'unverified-response.bin').read_bytes() == actual[0]
+            assert 'observedUsage' not in r.value['requests'][0]
+            counters = r.value['reservedTokens'], r.value['reservedMicroUsd']
+            refused(lambda: r.reserve(body()))
+            assert counters == (r.value['reservedTokens'], r.value['reservedMicroUsd'])
+
+# The larger actual final wire still obeys the original deadline/capacity gates.
+for exhausted in ('deadline', 'tokens', 'money'):
+    with tempfile.TemporaryDirectory() as temp:
+        root = pathlib.Path(temp)
+        limited = request(1)
+        limited[{'deadline': 'deadline', 'tokens': 'tokenLimit', 'money': 'spendMicroUsd'}[exhausted]] = time.time()-1 if exhausted == 'deadline' else 1
+        r = team.TeamReservations(root, limited)
+        refused(lambda: r.reserve(body()))
+        assert not r.value['requests'] and r.value['reservedTokens'] == 0 and r.value['reservedMicroUsd'] == 0
+        assert not list(root.glob('request-*-upstream-started.json'))
+
+
 for streaming in (False, True):
     for final_call in (False, True):
         with tempfile.TemporaryDirectory() as temp:

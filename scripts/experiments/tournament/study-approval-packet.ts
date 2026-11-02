@@ -29,6 +29,7 @@ import {
 } from "./team-config";
 import { StudyDefinitionSchema, validateStudyDefinition } from "./study";
 import { buildScientistPreselectionDraft } from "./scientist-preselection-draft";
+import { applyMaximumTeamBudget } from "./team-budget";
 
 export const approvalPacketSource = "forecode-team-20261031-case-14";
 export const prospectiveStudyGoal =
@@ -94,6 +95,7 @@ export function buildStudyApprovalPacket(input: {
   definition.protocol.scenario.id = `scenario-${randomUUID()}`;
   definition.protocol.scenario.intentIds = [intentId];
   definition.protocol.futureOracle.id = `oracle-${randomUUID()}`;
+  applyMaximumTeamBudget(definition);
   const checked = validateStudyDefinition(definition);
   return assemblePacket({
     definition: checked,
@@ -163,7 +165,7 @@ function assemblePacket(input: PacketInput) {
     restrictions: d.restrictions,
     toolAllowlist: d.toolAllowlist,
     matchedConditionsSha256: matchedConditionsDigest(d),
-    ceilings: "COPIED_PROPOSED_LIMITS_NOT_CURRENT_SPENDING_APPROVAL",
+    ceilings: "MAXIMUM_SUPPORTED_PROPOSED_LIMITS_NOT_RUNTIME_ADMISSION",
     currentTariff: null,
     actualUsage: null,
     currentSpendingApproval: null,

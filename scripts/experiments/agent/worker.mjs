@@ -18,7 +18,9 @@ try {
     input.tokenLimit < 1 ||
     input.tokenLimit >
       (["muse-spark-1.3", "muse-spark-1.3-contributor"].includes(input.model)
-        ? 1000000
+        ? input.teamWorkflow === "public-v2"
+          ? 1000000000
+          : 1000000
         : 100000)
   )
     process.exit(125);
@@ -57,8 +59,17 @@ const server = createServer((req, res) => {
       },
     },
     (reply) => {
-      if (reply.statusCode === 200)
-        workflow?.updateProgress(input, ++admittedRequests);
+      if (reply.statusCode === 200) {
+        const reported = Number(reply.headers["x-forecode-admitted-requests"]);
+        admittedRequests =
+          workflow &&
+          Number.isSafeInteger(reported) &&
+          reported > admittedRequests &&
+          reported <= input.maxRequests
+            ? reported
+            : admittedRequests + 1;
+        workflow?.updateProgress(input, admittedRequests);
+      }
       if (reply.statusCode === 403)
         workflow?.reportStop(reply.headers["x-forecode-stop"]);
       res.writeHead(reply.statusCode ?? 502, {

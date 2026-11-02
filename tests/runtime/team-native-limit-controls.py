@@ -61,7 +61,7 @@ try:
     supervisor.prepare_team(request, template['provider'])
     task = json.loads((root / run_id / 'task.json').read_bytes())
     assert task['tokenLimit'] == 1_000_000
-    supervisor.start(run_id, nonce)
+    supervisor.start(run_id, nonce, int((time.time() + request['enforcement']['maxSeconds']) * 1000))
     until = time.monotonic() + 340
     while time.monotonic() < until:
         status = supervisor.status(run_id, nonce)

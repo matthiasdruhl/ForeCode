@@ -66,7 +66,7 @@ def main():
     try:
         supervisor.prepare_team(request, template['provider'])
         prepared = True
-        supervisor.start(run_id, nonce)
+        supervisor.start(run_id, nonce, int((time.time() + request['enforcement']['maxSeconds']) * 1000))
         until = time.monotonic() + 45
         while time.monotonic() < until:
             observed = supervisor.status(run_id, nonce)

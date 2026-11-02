@@ -321,6 +321,54 @@ async function startFirst(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("dedicated supervised team contract, no inference", () => {
+  it.each(["missing", "nan", "infinite", "fractional", "expired", "extended"])(
+    "refuses a %s absolute coding deadline before starting controls",
+    async (kind) => {
+      const f = await fixture(),
+        next = await startFirst(f);
+      await f.transport.prepare(
+        next.runId,
+        next.source,
+        next.shared,
+        next.signal,
+      );
+      const deadline = {
+        missing: undefined,
+        nan: NaN,
+        infinite: Infinity,
+        fractional: Date.now() + 1000.5,
+        expired: Date.now() - 1,
+        extended: Date.now() + f.plan.maxSeconds * 1000 + 60_000,
+      }[kind];
+      await expect(
+        f.transport.agent(next.runId, next.signal, deadline),
+      ).rejects.toThrow("Finite current coding deadline required");
+      expect(f.controls.agent).not.toHaveBeenCalled();
+      await f.transport.cleanup(next.runId);
+    },
+  );
+  it("forwards a shorter absolute deadline without rebasing the signed preparation", async () => {
+    const f = await fixture(),
+      next = await startFirst(f);
+    await f.transport.prepare(
+      next.runId,
+      next.source,
+      next.shared,
+      next.signal,
+    );
+    const prepared = jsonDigest(f.requests[0]),
+      deadlineEpochMs = Date.now() + 1000;
+    await f.transport.agent(next.runId, next.signal, deadlineEpochMs);
+    expect(f.controls.agent).toHaveBeenCalledWith(
+      next.runId,
+      f.requests[0]!.nonce,
+      next.signal,
+      deadlineEpochMs,
+    );
+    expect(jsonDigest(f.requests[0])).toBe(prepared);
+    expect(f.requests[0]).not.toHaveProperty("deadlineEpochMs");
+    await f.transport.cleanup(next.runId);
+  });
   it("maps exact complete input, both baselines, sealed trees and eight checks through the paired controller", async () => {
     const f = await fixture(),
       out = await runPairedTournament(f.input);
@@ -378,19 +426,66 @@ describe("dedicated supervised team contract, no inference", () => {
       ),
     ).rejects.toThrow("COMPOSITION");
   });
-  it("admits explicitly committed larger reasoning/output and replay reservations", async () => {
+  it.each([32768, 65536])(
+    "admits explicitly committed %i reasoning/output tokens, 100 calls and matched 1800s",
+    async (outputTokens) => {
+      const f = await fixture();
+      const definition = structuredClone(f.study.definition);
+      for (const condition of definition.protocol.conditions) {
+        condition.budget.tokenLimit = 32_000_000;
+        condition.budget.spendUsd = 32;
+        condition.budget.maxSeconds = 1800;
+        condition.budget.maxIterations = 100;
+      }
+      definition.restrictions.maxRequests = 100;
+      definition.restrictions.maxOutputTokens = outputTokens;
+      const plan = teamEnforcementPlan(definition);
+      expect(plan.tokenLimit).toBe(32_000_000);
+      expect(plan.nativeRolloutTokenLimit).toBe(1_000_000);
+      expect(plan.spendMicroUsd).toBe(32_000_000);
+      expect(plan.restrictions.maxOutputTokens).toBe(outputTokens);
+      expect(plan.maxSeconds).toBe(1800);
+      expect(plan.maxIterations).toBe(100);
+      expect(plan.restrictions.maxRequests).toBe(100);
+    },
+  );
+  it("admits explicit matched 1B token guards and 1000 calls while legacy guards stay at 1M", async () => {
     const f = await fixture();
-    const definition = structuredClone(f.study.definition);
-    for (const condition of definition.protocol.conditions) {
-      condition.budget.tokenLimit = 32_000_000;
-      condition.budget.spendUsd = 32;
+    expect(
+      teamEnforcementPlan(f.study.definition).nativeRolloutTokenLimit,
+    ).toBe(
+      Math.min(
+        f.study.definition.protocol.conditions[0]!.budget.tokenLimit!,
+        1_000_000,
+      ),
+    );
+    const d = structuredClone(f.study.definition);
+    for (const c of d.protocol.conditions)
+      Object.assign(c.budget, {
+        maxSeconds: 1800,
+        maxIterations: 1000,
+        tokenLimit: 1_000_000_000,
+        spendUsd: 1000,
+      });
+    Object.assign(d.restrictions, {
+      maxRequests: 1000,
+      maxOutputTokens: 65536,
+      nativeRolloutTokenLimit: 1_000_000_000,
+    });
+    const plan = teamEnforcementPlan(d);
+    expect(plan.tokenLimit).toBe(1_000_000_000);
+    expect(plan.nativeRolloutTokenLimit).toBe(1_000_000_000);
+    expect(plan.spendMicroUsd).toBe(1_000_000_000);
+    expect(plan.maxIterations).toBe(1000);
+    expect(plan.restrictions.maxRequests).toBe(1000);
+    for (const invalid of [0, -1, 1.5, 1_000_000_001]) {
+      const bad = structuredClone(d);
+      bad.restrictions.nativeRolloutTokenLimit = invalid;
+      expect(() => teamEnforcementPlan(bad)).toThrow();
     }
-    definition.restrictions.maxOutputTokens = 32768;
-    const plan = teamEnforcementPlan(definition);
-    expect(plan.tokenLimit).toBe(32_000_000);
-    expect(plan.nativeRolloutTokenLimit).toBe(1_000_000);
-    expect(plan.spendMicroUsd).toBe(32_000_000);
-    expect(plan.restrictions.maxOutputTokens).toBe(32768);
+    const bad = structuredClone(d);
+    bad.restrictions.maxRequests = 1001;
+    expect(() => teamEnforcementPlan(bad)).toThrow();
   });
   it.each([
     "seed",
@@ -434,12 +529,12 @@ describe("dedicated supervised team contract, no inference", () => {
     if (defect === "network") c.networkPolicySha256 = "0".repeat(64);
     if (defect === "credentials") c.credentialPolicySha256 = "0".repeat(64);
     if (defect === "roadmap") c.visibleRoadmapSha256 = "0".repeat(64);
-    if (defect === "token") c.budget.tokenLimit = 32_000_001;
+    if (defect === "token") c.budget.tokenLimit = 1_000_000_001;
     if (defect === "spend") c.budget.spendUsd = 0;
-    if (defect === "spend-cap") c.budget.spendUsd = 40.000001;
+    if (defect === "spend-cap") c.budget.spendUsd = 1000.000001;
     if (defect === "precision") c.budget.spendUsd = 0.0000001;
-    if (defect === "provider-output") d.restrictions.maxOutputTokens = 32769;
-    if (defect === "timeout") c.budget.maxSeconds = 601;
+    if (defect === "provider-output") d.restrictions.maxOutputTokens = 65537;
+    if (defect === "timeout") c.budget.maxSeconds = 1801;
     if (defect === "old-task")
       Object.assign(d.protocol.task, { id: "booking-ownership-refactor-v1" });
     if (defect === "unknown") Object.assign(d.restrictions, { maxSteps: 3 });
@@ -697,7 +792,11 @@ describe("dedicated supervised team contract, no inference", () => {
         next.shared,
         next.signal,
       );
-      await f.transport.agent(next.runId, next.signal);
+      await f.transport.agent(
+        next.runId,
+        next.signal,
+        Date.now() + f.plan.maxSeconds * 1000,
+      );
       const finalized = await f.transport.finalizeAgent(
         next.runId,
         next.signal,
@@ -745,7 +844,7 @@ describe("dedicated supervised team contract, no inference", () => {
     expect(
       execFileSync("python3", ["-I", "-B", script], { encoding: "utf8" }),
     ).toContain("team controls passed");
-  });
+  }, 60_000);
   it("retains bounded completion contracts and fails closed on diagnostic storage errors without sockets or inference", () => {
     const script = fileURLToPath(
       new URL("../runtime/team-contract-controls.py", import.meta.url),
@@ -774,6 +873,17 @@ describe("dedicated supervised team contract, no inference", () => {
     expect(
       execFileSync("python3", ["-I", "-B", script, mode], { encoding: "utf8" }),
     ).toContain("team reservation controls passed: " + mode);
+  });
+  it("recovers definite transient503 responses only within all original ceilings", () => {
+    const script = fileURLToPath(
+      new URL("../runtime/team-transient-retry-controls.py", import.meta.url),
+    );
+    expect(
+      execFileSync("python3", ["-I", "-B", script], {
+        encoding: "utf8",
+        timeout: 10000,
+      }),
+    ).toContain("nine transient503 broker controls passed");
   });
   it("delivers committed scenario assumptions as part of the exact common prompt", async () => {
     const f = await fixture(),

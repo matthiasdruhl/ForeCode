@@ -472,6 +472,21 @@ describe("staged private Scientist operator", () => {
     await expect(stageScientistOperator(x.options)).rejects.toThrow();
     expect(x.network).not.toHaveBeenCalled();
   });
+  it("reserves the complete finite tournament schedule before any inference", async () => {
+    const x = await fixture();
+    x.options.schedule = {
+      reasoningAndBindingMs: 120_000,
+      preparationMs: 600_000,
+      baselinesAndAdmissionMs: 1_500_000,
+      finalizationAndMeasurementMs: 1_800_000,
+      disclosureAndInterpretationMs: 180_000,
+      safetyMarginMs: 300_000,
+    };
+    const operator = await stageScientistOperator(x.options);
+    expect(operator.status().scheduleEvidence).toBe("UNVERIFIED_ESTIMATE");
+    expect(x.network).not.toHaveBeenCalled();
+    expect(META_LIMITS.artifactTtlMs).toBe(7_200_000);
+  });
   it("rejects schedules which cannot fit both maximum-duration arms", async () => {
     const x = await fixture();
     x.options.schedule = {

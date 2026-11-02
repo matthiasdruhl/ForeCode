@@ -12,6 +12,7 @@ import { snapshotTree } from "../../evaluator/booking-v1/snapshot";
 import {
   validateGradeInput,
   validateGradeReport,
+  validateGradeReportForInput,
   baselineCheckIds,
   teamCheckIds,
   type GradeInput,
@@ -65,6 +66,7 @@ import {
 import { teamEnforcementPlan } from "./team-policy";
 import { collectTeamInventory, teamInventoryProgram } from "./team-inventory";
 import { retainTeamControlFailure } from "./team-control-diagnostics";
+import { runTeamPolicyRead } from "./team-policy-read";
 import { BrokerStopSchema } from "./team-termination";
 import { withOptionalAuthorizationExport } from "./optional-authorization-export";
 import {
@@ -386,12 +388,62 @@ function buildControls(
       "CLI changed or operation cancelled.",
     );
     let result: ProcessResult;
+    let attemptedMilliseconds = milliseconds;
     try {
-      result = await deps.run(config.sbx, args, {
-        signal,
-        input,
-        maxBytes,
+      result = await runTeamPolicyRead({
+        args,
+        roles: [config.agentSandbox, config.graderSandbox],
+        body: input,
         milliseconds,
+        signal,
+        recheck: async (ordinal) => {
+          invariant(
+            !signal.aborted &&
+              sha256(await deps.cliBytes()) === expected.sandboxCliSha256,
+            "CLI changed or operation cancelled.",
+          );
+          if (ordinal > 0) {
+            invariant(
+              ownership,
+              "Policy retry requires the current owned lease.",
+            );
+            await ownership.assertOwned();
+            await current();
+          }
+        },
+        execute: async (limit) => {
+          attemptedMilliseconds = limit;
+          return deps.run(config.sbx, args, {
+            signal,
+            input,
+            maxBytes,
+            milliseconds: limit,
+          });
+        },
+        observe: async (observed, limit) => {
+          if (observations.length === 16) observations.shift();
+          observations.push({
+            operation: args[0]!,
+            commandSha256: jsonDigest(args),
+            reason: observed.reason,
+            exitCode: observed.exitCode,
+            stdoutSha256: sha256(observed.stdout),
+            stderrSha256: sha256(observed.stderr),
+          });
+          if (
+            observed.reason !== "completed" ||
+            observed.exitCode !== 0 ||
+            signal.aborted
+          )
+            await retainFailure(
+              "command",
+              null,
+              null,
+              jsonDigest(args),
+              limit,
+              maxBytes,
+            );
+        },
       });
     } catch (error) {
       await retainFailure(
@@ -399,33 +451,11 @@ function buildControls(
         error,
         null,
         jsonDigest(args),
-        milliseconds,
+        attemptedMilliseconds,
         maxBytes,
       );
       throw error;
     }
-    if (observations.length === 16) observations.shift();
-    observations.push({
-      operation: args[0]!,
-      commandSha256: jsonDigest(args),
-      reason: result.reason,
-      exitCode: result.exitCode,
-      stdoutSha256: sha256(result.stdout),
-      stderrSha256: sha256(result.stderr),
-    });
-    if (
-      result.reason !== "completed" ||
-      result.exitCode !== 0 ||
-      signal.aborted
-    )
-      await retainFailure(
-        "command",
-        null,
-        null,
-        jsonDigest(args),
-        milliseconds,
-        maxBytes,
-      );
     invariant(
       result.reason === "completed" && result.exitCode === 0 && !signal.aborted,
       "Fixed sandbox command failed.",
@@ -518,12 +548,19 @@ function buildControls(
     operation: "prepare" | "start" | "status" | "finalize" | "cleanup",
     s: RunState,
     signal: AbortSignal,
+    deadlineEpochMs?: number,
   ) {
     await verifyFiles("agent", signal);
+    if (operation === "start") assertCodingDeadline(deadlineEpochMs);
     const body =
       operation === "prepare"
         ? { operation, request: s.request }
-        : { operation, runId: s.request.runId, nonce: s.request.nonce };
+        : {
+            operation,
+            runId: s.request.runId,
+            nonce: s.request.nonce,
+            ...(operation === "start" ? { deadlineEpochMs } : {}),
+          };
     const input = JSON.stringify(body);
     invariant(
       Buffer.byteLength(input) <= 12_000_000,
@@ -546,6 +583,17 @@ function buildControls(
         16_000_000,
         operation === "finalize" ? 180_000 : 30_000,
       ),
+    );
+  }
+  function assertCodingDeadline(
+    value: number | undefined,
+  ): asserts value is number {
+    invariant(
+      typeof value === "number" &&
+        Number.isSafeInteger(value) &&
+        value > Date.now() &&
+        value <= Date.now() + plan.maxSeconds * 1000,
+      "Finite current coding deadline required.",
     );
   }
   function state(runId: string, nonce: string) {
@@ -604,24 +652,7 @@ function buildControls(
       1_048_576,
       590_000,
     );
-    const {
-      runId,
-      evaluatedTreeSha256,
-      evaluatorSha256,
-      testSuiteSha256,
-      requiredPolicySha256,
-    } = input;
-    const report = validateGradeReport(
-      JSON.parse(result),
-      {
-        runId,
-        evaluatedTreeSha256,
-        evaluatorSha256,
-        testSuiteSha256,
-        requiredPolicySha256,
-      },
-      input.evaluationProfile,
-    );
+    const report = validateGradeReportForInput(JSON.parse(result), graderInput);
     invariant(
       sameIds(
         report.checks.map((c) => c.id),
@@ -652,11 +683,11 @@ function buildControls(
               JSON.stringify({
                 profile: input.evaluationProfile,
                 identity: {
-                  runId,
-                  evaluatedTreeSha256,
-                  evaluatorSha256,
-                  testSuiteSha256,
-                  requiredPolicySha256,
+                  runId: input.runId,
+                  evaluatedTreeSha256: input.evaluatedTreeSha256,
+                  evaluatorSha256: input.evaluatorSha256,
+                  testSuiteSha256: input.testSuiteSha256,
+                  requiredPolicySha256: input.requiredPolicySha256,
                 },
               }),
               1_048_576,
@@ -984,10 +1015,11 @@ function buildControls(
       s.bootId = value.bootId;
       return ack;
     },
-    async agent(runId, nonce, signal) {
+    async agent(runId, nonce, signal, deadlineEpochMs) {
       if (measurement) signal = measurement.bindSignal(signal);
       const s = state(runId, nonce);
       try {
+        assertCodingDeadline(deadlineEpochMs);
         invariant(
           !recovering && !s.cancelled && !s.startRequested,
           "One unfenced worker start required.",
@@ -995,7 +1027,7 @@ function buildControls(
         s.startRequested = true;
         if (measurement) await measurement.release(signal);
         await inspect(signal);
-        await helper("start", s, signal);
+        await helper("start", s, signal, deadlineEpochMs);
         for (;;) {
           invariant(!s.cancelled, "Owned worker cancelled for cleanup.");
           signal.throwIfAborted();

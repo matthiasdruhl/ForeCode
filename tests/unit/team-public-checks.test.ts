@@ -9,6 +9,10 @@ const state = vi.hoisted(() => ({
   commands: [] as string[][],
   boundary: "scan",
   sessionMarker: true,
+  behaviorMarker: true,
+  sessionExitCode: 0,
+  behaviorExitCode: 0,
+  typecheckExitCode: 0,
 }));
 vi.mock("node:fs/promises", async (original) => {
   const fs = await original<typeof import("node:fs/promises")>();
@@ -84,13 +88,25 @@ vi.mock("node:child_process", () => ({
       if (state.boundary === "missing-marker") stdout = "";
       if (state.boundary === "nonzero")
         stdout = "PUBLIC_BOUNDARY_CHECK_COMPLETED\n";
+    } else if (args.includes("/toolchain/node_modules/typescript/bin/tsc")) {
+      status = state.typecheckExitCode;
+      stdout = status
+        ? "src/server/example.ts(2,7): error TS2322: Type 'number' is not assignable to type 'string'.\n"
+        : "";
     } else if (
       args.includes("/run/team-public-session.mjs") &&
       state.sessionMarker
     ) {
-      stdout = args.includes("--interface-only")
-        ? "PUBLIC_INTERFACE_CHECK_COMPLETED\n"
-        : "PUBLIC_SESSION_CHECK_COMPLETED\n";
+      status = args.includes("--behavior-only")
+        ? state.behaviorExitCode
+        : state.sessionExitCode;
+      stdout = args.includes("--behavior-only")
+        ? state.behaviorMarker
+          ? "PUBLIC_BEHAVIOR_CHECK_COMPLETED\n"
+          : ""
+        : args.includes("--interface-only")
+          ? "PUBLIC_INTERFACE_CHECK_COMPLETED\n"
+          : "PUBLIC_SESSION_CHECK_COMPLETED\n";
     }
     return {
       status,
@@ -112,6 +128,10 @@ beforeEach(() => {
   state.commands = [];
   state.boundary = "scan";
   state.sessionMarker = true;
+  state.behaviorMarker = true;
+  state.sessionExitCode = 0;
+  state.behaviorExitCode = 0;
+  state.typecheckExitCode = 0;
   state.files.set(
     adapter,
     Buffer.from(
@@ -162,10 +182,11 @@ describe("confined public checker orchestration with inert process/filesystem se
     await run();
     expect(process.exitCode).toBe(0);
     expect(output()).toContain("PUBLIC_READINESS READY");
-    expect(state.commands).toHaveLength(6);
+    expect(state.commands).toHaveLength(7);
     expect(state.commands[0]![0]).toBe("/run/team-public-boundary.mjs");
     expect(state.commands[1]).toContain("/run/team-public-session.mjs");
     expect(state.commands[4]).toContain("build");
+    expect(state.commands[6]).toContain("--behavior-only");
   });
   it.each(["missing-marker", "nonzero"])(
     "refuses boundary %s even if the other completion signal succeeds",
@@ -198,6 +219,77 @@ describe("confined public checker orchestration with inert process/filesystem se
     await run();
     expect(process.exitCode).toBe(1);
     expect(output()).toContain("PUBLIC_READINESS BLOCKED");
+    expect(state.commands).toHaveLength(7);
+  });
+  it("cannot mark full readiness without completed public behavioral assertions", async () => {
+    state.behaviorMarker = false;
+    await run();
+    expect(process.exitCode).toBe(1);
+    expect(output()).toContain("PUBLIC_CHECK team-public-behavior FAIL");
+    expect(output()).toContain("PUBLIC_READINESS BLOCKED");
+  });
+  it("retains a failed session assertion while still checking compilation and behavior", async () => {
+    state.sessionExitCode = 1;
+    await run();
+    expect(process.exitCode).toBe(1);
+    expect(output()).toContain("PUBLIC_CHECK adapter-session FAIL");
+    expect(output()).toContain("PUBLIC_READINESS BLOCKED");
+    expect(state.commands).toHaveLength(7);
+    expect(output()).toContain("PUBLIC_CHECK typecheck PASS");
+    expect(output()).toContain("PUBLIC_CHECK team-public-behavior PASS");
+  });
+  it("exposes compiler diagnostics alongside a session failure and skips an invalid build", async () => {
+    state.sessionExitCode = 1;
+    state.typecheckExitCode = 2;
+    await run();
+    expect(process.exitCode).toBe(1);
+    expect(output()).toContain("PUBLIC_CHECK adapter-session FAIL");
+    expect(output()).toContain("PUBLIC_CHECK typecheck FAIL");
+    expect(state.commands.flat()).not.toContain("build");
+    expect(state.commands.flat()).toContain("--pretty");
+    expect(
+      vi
+        .mocked(process.stdout.write)
+        .mock.calls.map(([value]) => String(value))
+        .join("\n"),
+    ).toContain("src/server/example.ts(2,7): error TS2322");
+    expect(output()).toContain('"id":"typecheck","exitCode":2');
+    expect(output()).toContain("PUBLIC_READINESS BLOCKED");
+  });
+  it("blocks a failed behavioral assertion even with a completion marker", async () => {
+    state.behaviorExitCode = 1;
+    await run();
+    expect(process.exitCode).toBe(1);
+    expect(output()).toContain("PUBLIC_CHECK team-public-behavior FAIL");
+    expect(output()).toContain("PUBLIC_READINESS BLOCKED");
+    expect(state.commands).toHaveLength(7);
+  });
+  it.each(["--quick", "--interface-only"])(
+    "keeps %s feedback distinct from full behavioral readiness",
+    async (flag) => {
+      process.argv.push(flag);
+      await run();
+      expect(process.exitCode).toBe(0);
+      expect(
+        state.commands.some((args) => args.includes("--behavior-only")),
+      ).toBe(false);
+      expect(output()).not.toContain("PUBLIC_READINESS READY");
+    },
+  );
+  it("labels public behavior-only feedback without running a build or granting full readiness", async () => {
+    process.argv.push("--behavior-only");
+    await run();
+    expect(process.exitCode).toBe(0);
+    expect(output()).toContain("PUBLIC_READINESS BEHAVIOR_ONLY");
     expect(state.commands).toHaveLength(2);
+    expect(state.commands[1]).toContain("--behavior-only");
+    expect(output()).not.toContain("PUBLIC_READINESS READY");
+  });
+  it("rejects conflicting public check modes", async () => {
+    process.argv.push("--quick", "--behavior-only");
+    await run();
+    expect(process.exitCode).toBe(1);
+    expect(state.commands).toHaveLength(0);
+    expect(output()).toContain("PUBLIC_READINESS BLOCKED");
   });
 });

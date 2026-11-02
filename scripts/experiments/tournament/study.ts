@@ -69,8 +69,15 @@ export const StudyDefinitionSchema = z.strictObject({
     writablePaths: z.tuple([z.literal("src/")]),
     network: z.literal("none"),
     credentials: z.literal("trusted_broker_only"),
-    maxRequests: z.number().int().min(1).max(100),
-    maxOutputTokens: z.number().int().min(16).max(32768),
+    maxRequests: z.number().int().min(1).max(1000),
+    maxOutputTokens: z.number().int().min(16).max(65536),
+    maxTransientRetries: z.number().int().min(0).max(2).optional(),
+    nativeRolloutTokenLimit: z
+      .number()
+      .int()
+      .min(1)
+      .max(1_000_000_000)
+      .optional(),
   }),
   comparisonMetrics: z.tuple([
     z.literal("correctness"),

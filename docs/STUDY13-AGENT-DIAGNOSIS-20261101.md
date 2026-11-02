@@ -1,0 +1,57 @@
+# Study13 coding-agent diagnosis and prospective repair
+
+Study13 remains an authenticated INCONCLUSIVE result. This work repairs public workflow usability and proves a controlled write/rejection/recovery path; it does not establish that a real model can implement the team task. No paid call, new study, historical amendment, publication, merge or branch-stack rebase occurred.
+
+## Source and evidence
+
+The operator checkout was clean at `9ee4436dd8ce636b49770a88761dd1f2b128adda` on `codex/portable-schema-tournament`. Work was isolated in `/private/tmp/forecode-study13-agent-fixes`, branch `codex/study13-agent-fixes`, based on `9ee4436`. Study13 actually tested `a4ee500bb5db213cf0672d9deb1a762c04aaf203`, trusted closure `1d4154cff93a9e84ce90a396ffd41631a76627aae37cd25c8bafbbc156647fba`. Current baseline workflow/worker/checker/writer bytes matched that retained archive before editing.
+
+The preserved evidence root is `/Users/matthiasdruhl/Projects/Meta-Hackathon/ForeCode-AB-E2E-20261101`. All 546 entries in `study13-preservation-manifest.json` were checked against their SHA256 values; zero mismatches. The operator checkout remains unmodified. Separate new private diagnostics and command logs are retained under `/Users/matthiasdruhl/Projects/Meta-Hackathon/ForeCode-Study13-Agent-Diagnosis-20261101`, outside Git and outside the historical evidence root.
+
+The new read-only final-contract diagnostic has SHA256 `e431d05177f335662531615d7de264032b80c0c3e412024fb8a559910277c0cd`. It verifies state/ledger pins and private-file custody, exports structural observations and original hashes, and excludes raw model text/arguments. A real coordination lease covered the guest read. Both roles were stopped afterward with zero sessions/mounts, and the lease was released. Disabled policy and historical records were unchanged. This is a diagnostic observation, not a new evaluator receipt or independent custody approval.
+
+## Findings
+
+| Failure                 | Evidence and conclusion                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A submitted no source   | `study13-operation/artifacts/terminal-native-diagnostic.json`, `rows[0]`, run `ef8abe2e-4e5e-4330-a8a2-dcf378c48c40`: 18 commands, zero writer invocations. Commands 1–13 inspect; 14–18 probe dependencies. Normal failed exit after 244026ms. Final evaluated source equals the original fixture. This is observed model allocation behavior, not a rejected write or a controller timeout.                                   |
+| Dependency probes       | A's commands 14–16 fail to resolve `zod` from `/workspace`, including `NODE_PATH`; command 18 succeeds through the absolute toolchain entrypoint. ESM does not use `NODE_PATH` to supply this missing local dependency path. The public checker already copies source into scratch and links the installed dependencies correctly. Missing explicit orientation caused avoidable ambiguity; installation was not missing.       |
+| B's rejected writes     | The diagnostic's B commands 12, 17 and 18 show malformed TypeScript, a literal undefined `placeholder`, and an imports-only proposal missing `createTeamBenchmark`. The writer exposed checker errors and refused replacement. All 22 final files match prepared B; no adapter survived. The source writer was correct.                                                                                                         |
+| Generic writer feedback | Malformed/truncated JSON and stale-digest errors were collapsed into `PUBLIC_WORKFLOW_FAILED`. Unlike B's checker diagnostics, these failures did not identify the repair needed. Controlled CLI submissions reproduce that usability defect.                                                                                                                                                                                   |
+| Final responses         | Fresh read-only inspection of retained `request-0019-*` records establishes `final-tool-call` for BOTH arms. Admission phase was final with zero tools; provider echoes matched. A returned reasoning plus a function call; B returned reasoning, a message and a function call. Both terminal statuses were completed. Neither was truncated or timed out. Strict refusal was correct, including B's message-plus-call output. |
+
+The original final response hashes are A `0fcbd108e12cac1b5fb7ea43bde2f86b382cfce048ce398e9016241aa683061f` and B `876210324defa97ebdf24ab7574e3ed634b5ff87677946e83b5a99b20f88d42b`. Raw usage fields in rejected output remain unvalidated observations; authoritative unknown usage stays unknown. The copied native diagnostic caps command text at 600 characters, outputs at 1800 and the tail at 22000. The complete first malformed B submission cannot be reconstructed from that copy, so no writer escaping defect is inferred.
+
+Existing v4 instructions already required early adapter construction, one task orientation and a three-request completion reserve. A did not follow those instructions. More emphatic instructions are a prospective mitigation, not evidence that model compliance is fixed.
+
+## Changes and controlled validation
+
+Workflow v5 explains workspace ESM resolution and directs application checks through scratch. The writer returns fixed, bounded remediation codes for JSON/envelope/conflict/interface/bound/deadline failures without echoing arbitrary exceptions. Malformed non-object envelopes still fail closed. Source policy, atomic replacement, adapter checks, protected evaluation, custody and response validation remain intact.
+
+Recovery instructions distinguish rejected proposals (unchanged prior digest) from a committed `SOURCE_WRITE` followed by a failed quick check (use the returned digest). Final broker guidance explicitly asks for a completed assistant message describing saved source, observed checks and unfinished work, and forbids function/custom calls even alongside text. Request, iteration, output, time and spending limits are unchanged.
+
+The new `tests/runtime/run-team-workflow-recovery.py` runs `team-workflow-recovery-controls.mjs` against the actual production CLI. It copies 22 committed fixture files; runs a local immutable toolchain image with network disabled, readonly root, UID1000, no capabilities, 2 CPUs/4GiB/256 PIDs and bounded timeout; mounts only public fixture/source/control files; and removes its own container and temporary fixture. It uses synthetic bootstrap code, never historical candidate code or host candidate execution.
+
+The control passed: valid source submission; malformed JSON/envelope/digest rejection; rejected new adapter preserving absence; malformed TS/undefined placeholder/missing export/missing methods preserving prior bytes; committed adapter with failed cookie check preserving its receipt; repair using the committed digest; bare ESM and NODE_PATH failure; dependency-only probe from `/toolchain`; quick check and all six full checks (boundary, adapter session, typegen, typecheck, build, session cookie). Public READY here is only bootstrap readiness, not a team-permissions pass.
+
+The unchanged old workflow fails the new remediation assertion with exit 1, while preserving the invalid source rejection. The repaired workflow exits 0. Existing offline production broker controls still accept valid final text and refuse final tool-only/mixed JSON/SSE output. Added assertions inspect the actual reserved final payload and its admission-bound instruction digest.
+
+Three GPT-6.1 Sol/high subagents performed bounded trace/contract/writer investigations; shared edits were restricted to separate test files. Read-only technical review found no actionable validation or feedback issue. This is shared-authority technical review, not independent reviewer approval.
+
+## Concrete fresh-study plan, not admitted
+
+The successful controlled path makes a future performance experiment technically testable. It does not justify immediately purchasing another A/B pair merely to see whether instructions help. The next prospective scope must use the new source closure, workflow v5 for both arms, fresh study/registration/run/intent/scenario identities, fresh Scientist issuance and reviewed B preparation, exact installation/isolation baselines, prospective admission, and the existing owner-controlled signing procedure. No Study13 issuance or source attempt can be reopened or reused as new evidence. A new source-owned locator and exact source review are still required.
+
+For a concrete comparison, retain the same model/high-reasoning profile, 439-second coding limit, 32768 output cap, native 1M guard and 19 requests/iterations; reserve the last three for completion as before. Set prospective matched downstream token/spend ceilings to 18000000 tokens/microUSD per arm, below the remaining allowance. The owner authorized a request-count increase if evidence supports it. None is applied here: A had time but chose repeated inspection; B's final-tool noncompliance is not repaired by changing the cutoff. Any later request-count experiment must be explicitly reflected in both arms' new protocol and measured separately from these tooling changes.
+
+| Cumulative reservation ledger |   Consumed | Hard cap |  Remaining |
+| ----------------------------- | ---------: | -------: | ---------: |
+| Scientist (34 calls)          |  $0.978646 |       $1 |  $0.021354 |
+| Downstream                    | $26.307880 |      $64 | $37.692120 |
+| Combined                      | $27.286526 |      $65 | $37.713474 |
+
+Reservations are not invoices. No refunds, usage substitution or ledger reset occurred. A prospective $18 per-arm downstream plan reaches $62.307880 cumulative downstream, below $64.
+
+Reusing the previous conservative Scientist input/output bounds requires three times `ceil((32000 + 16384 + 256*32 + 4096)/5)` microUSD = **36405 microUSD**, exceeding the remaining 21354 by **15051 microUSD**. That concrete plan requires explicit owner authorization to raise the Scientist cap to **$1.015051**, plus exact current payload/bound review before admission. With the proposed $18 arms the combined worst reservation would be $63.322931, so neither the $64 downstream nor $65 combined cap needs increasing. No cap was changed. Alternatively, a newly reviewed tighter request bound would have to fit all three calls into $0.021354 without assuming unknown future content or dropping required inputs; no such bound has been established.
+
+The remaining blocker for that paid plan is the Scientist cap and fresh source-bound operational admission. Offline results cannot establish future model task success. Required checks and final source identity are recorded in the implementation log.

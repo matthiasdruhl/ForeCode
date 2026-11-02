@@ -1,5 +1,7 @@
 # Genuine A/B results: owner handoff and integration acceptance
 
+> **Version-scoped historical handoff — assessed source `efc6fc6b7bf254be3ac4550e558ec107c7d4984f`, original branch head `5c3e36ba14ad2af9bb104d16722eb6a8d3903cdd`.** The package checklist and six-state decision rules below retain their original scope. The eight-check metric baseline and derived `metric-baseline-` run identity describe the v1 metric protocol only; [later prospective protocols](PROSPECTIVE-METRICS-V2.md) support a separately committed five-check baseline with explicit future-authorization non-applicability. Statements that supplementary metrics/Scientist lineage require a missing adapter describe this older source: [the later optional archival publication channel](PROSPECTIVE-PUBLICATION-HANDOFF.md) supplies that capability with its own exact disclosure gates. Use the actual study’s frozen protocol and archived reader; never migrate or reinterpret its evidence under a newer protocol.
+
 Use with the [dated readiness matrix](AB-RESULT-INTEGRATION-READINESS-20261101.md) at its assessed SHA. This checklist receives evidence from the **existing experiment owner**. It authorizes no execution, retry, grader operation, signer, source change or private access. If a required pre-run record was missing at execution, record the limitation; a later document cannot make it prospective.
 
 ## Owner-supplied result package
@@ -19,7 +21,7 @@ Supply sensitive originals only through the already approved private custody/ope
 | Public disclosure                        | Authentic private measured report; approved `TournamentPublicMetadataSchema`; exact artifact from `prepareTournamentPublication`; `disclosureSubject(artifact)`; original signed disclosure envelope, scope/interval and revocation pins. [`disclosure.ts`](../scripts/experiments/tournament/disclosure.ts).                                                                                         | Approver reviews exact metadata, report digest, preparation-only path/hash subset, checks, failures, measurements and limitations. `authorizeTournamentPublication` requires existing held disclosure with prepared-original predecessor. Preparing a projection is not permission to publish it.                                              |
 | Read-only deployment configuration       | Exact `ApprovedTournamentConfig`: fixed private publication/authority/evaluation roots and complete worker-root inventory; existing public-key and current revocation pins; publication/envelope byte hashes; per-study projection digest; exactly A/B baseline/final evaluation map. [`createTournamentPublicationReader`](../src/server/artifacts/tournament-provisioning.ts).                      | Only separately reviewed private source composition. No request/environment/path/key selector. Unique known evaluations/runs, no extra unused entries. `futureEvaluationId: null` only for a never-issued final receipt, never to hide a failed lookup. Private roots/originals/keys stay out of public Git and assets.                        |
 
-## Digest and custody crosswalk
+## Digest and custody crosswalk at the assessed source
 
 Use existing algorithms, not a parallel manifest or signer. `H` is `jsonDigest`/`SHA256(canonicalJson(x))`; envelope and file byte pins are `sha256(bytes)`.
 
@@ -35,7 +37,7 @@ The unchanged five-check baseline IDs are `typecheck`, `build`, `baseline-domain
 
 For exact private schemas/layouts use [Scientist operator handoff](SCIENTIST-REGISTRATION-OPERATOR-HANDOFF.md), [metric handoff](PROTECTED-METRIC-OPERATOR-HANDOFF.md), [publication handoff](TOURNAMENT-PUBLICATION-HANDOFF.md) and [resolved identities](INTEGRATION-52-55-REPORT.md). Hashing establishes identity; only the existing authenticated custody and protected receipt readers establish the relevant trust.
 
-## Post-run integration sequence
+## Post-run integration sequence at the assessed source
 
 1. **Identify and preserve the existing study.** Obtain its owner-approved package and reader/source identity without touching its checkout or source closure. If a study is active, wait for the owner to release results. A missing result is not permission to launch another experiment. No main merge while its identity matters.
 2. **Authenticate privately under separate access authority.** The reporting operator uses the existing archived study/runtime/history/evaluation readers and actual current revocations. Record GO/BLOCKED per package row. Reconcile actual complete attempt inventory with the independent custodian; software cannot discover concealed attempts or establish human independence. Preserve failures and missingness. Never regrade, repair, rewrite or substitute historical originals to satisfy a new reader.

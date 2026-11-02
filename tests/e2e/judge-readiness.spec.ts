@@ -101,10 +101,6 @@ test("QA-07: preparation source paths wrap unbroken filenames", async ({
     path: info.outputPath("QA-07-synthetic-long-source-path.png"),
     fullPage: true,
   });
-  test.fail(
-    true,
-    "QA-07: a schema-valid unbroken source filename overflows the comparison.",
-  );
   expect(observations.every(({ width, scroll }) => scroll <= width)).toBe(true);
 });
 
@@ -138,9 +134,6 @@ test("QA-02: mobile memo wraps schema-valid long study and task IDs", async ({
     path: info.outputPath("QA-02-synthetic-long-identifiers.png"),
     fullPage: true,
   });
-  // Audited open defect, not a passing release gate. An unexpected pass forces
-  // removal of this annotation when the frontend owner fixes it. See QA report.
-  test.fail(true, "QA-02: 390px memo currently overflows to 684px.");
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth),
   ).toBeLessThanOrEqual(390);
@@ -223,7 +216,6 @@ test("QA-04: inactive chapter numbers meet normal-text contrast", async ({
   const light = luminance(foreground),
     dark = luminance(background);
   const ratio = (Math.max(light, dark) + 0.05) / (Math.min(light, dark) + 0.05);
-  test.fail(true, "QA-04: rendered inactive numbers have 4.2:1 contrast.");
   expect(ratio).toBeGreaterThanOrEqual(4.5);
 });
 

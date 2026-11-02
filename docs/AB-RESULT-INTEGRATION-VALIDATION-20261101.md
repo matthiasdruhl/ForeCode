@@ -1,5 +1,7 @@
 # A/B result integration preparation: validation record
 
+> **Historical validation record — assessed source `efc6fc6b7bf254be3ac4550e558ec107c7d4984f`, original branch head `5c3e36ba14ad2af9bb104d16722eb6a8d3903cdd`.** Commands and exit codes below were reported by that workstream, not rerun during integration. The cached-peer extraction records a past recovery procedure; it is not the recommended dependency setup for a new checkout. Fresh integrated-source validation must be logged separately.
+
 November 1, 2026, America/New_York. Assessed implementation/base: **`efc6fc6b7bf254be3ac4550e558ec107c7d4984f`**; dedicated branch `codex/ab-evidence-integration-handoff-20261101`, worktree `ForeCode-AB-Evidence-Integration`. All commands below ran there unless specified. Node `v24.16.0`, npm `11.13.0`, Vitest `5.0.5`. Documentation-only changes; no application, tests, frozen contracts, grader, dependency locks, runtime policy, decision algorithm, authority configuration or historical evidence changed.
 
 ## Fresh safe validation

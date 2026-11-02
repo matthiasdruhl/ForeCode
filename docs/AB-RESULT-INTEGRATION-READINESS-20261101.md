@@ -1,5 +1,7 @@
 # Genuine A/B result integration readiness — November 1, 2026
 
+> **Historical readiness assessment — source `efc6fc6b7bf254be3ac4550e558ec107c7d4984f`, original branch head `5c3e36ba14ad2af9bb104d16722eb6a8d3903cdd`.** All current/fresh wording, blockers, source hashes and validation counts below refer to that audit. They do not establish present operational readiness or an active study’s identity. Later implementation adds [versioned prospective metrics](PROSPECTIVE-METRICS-V2.md) and [optional archival lineage/metric publication](PROSPECTIVE-PUBLICATION-HANDOFF.md). In particular, the absent-adapter statements and A1 blocker below describe the older source, not the integrated implementation. Preserve the actual study’s frozen protocol and archived readers; software capability does not supply evidence or authority.
+
 **Assessment: GO for non-operational integration preparation; BLOCKED for an authentic-result demonstration, supported engineering recommendation, registered metric claim, or publication on the evidence available to this audit.** This is an evidence-consumer handoff, not experiment authorization. An experiment owner may already be preparing or executing a separately authorized study: establish its identity and status with that owner before any operational work. Do not initiate a second study.
 
 Assessed source: freshly fetched `origin/main` **`efc6fc6b7bf254be3ac4550e558ec107c7d4984f`**. Isolated worktree `ForeCode-AB-Evidence-Integration`, branch `codex/ab-evidence-integration-handoff-20261101`. Other checkouts, private originals and runtime installations were not changed or inspected. This delivery changes documentation only. [Validation](AB-RESULT-INTEGRATION-VALIDATION-20261101.md) records fresh safe checks; [handoff](AB-RESULT-HANDOFF.md) specifies the result package and acceptance plan.
@@ -21,7 +23,7 @@ Fresh source-only `freezeBooking()` returned:
 
 These match PR58's final source-only freeze. They establish public-byte identity, **not** current installed bytes, hidden suite identity, an active study's source closure, admission, or execution. Git commit, fixture tree, trusted closure and protected evaluator/suite/policy identities have different meanings. Documentation is outside this freeze's enumerated closure; the owner must still preserve the active study's actual pinned commit and closure. Do not merge this PR while a study depends on main's identity.
 
-## Current readiness matrix
+## Readiness matrix at the assessed source
 
 GO below is scoped to the stated software capability. BLOCKED means the required genuine evidence is absent from the authorized public audit scope; it does not establish that another owner's private study has never run.
 

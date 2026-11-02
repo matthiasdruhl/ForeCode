@@ -2689,3 +2689,20 @@ Commands and results:
 - Rechecked546preserved Study13 files and39historical accounting files: zero mismatches. Initial297-file Study14 retention copy verified byte-for-byte in sibling `ForeCode-Study14-Writer-Recovery-20261101`; follow-up logs/diagnostics/correction/source are retained separately there. No credentials/private key copied. `git diff --check` passed.
 
 Final trusted closure `5a4e9a81c9856b68632cb077be90faf16b0ab836d5b33be19660a016994709a9`; fixture/public-suite/required-policy remain unchanged. All unpaid validation is complete. Real model compliance with workflow v5 is still unmeasured because Study14 never dispatched coding. Next ticket: explicit numeric cap approval, then a fresh reviewed study with this predecessor gate before paid inference and again before installation; never reopen Study13/14. The active operator checkout remains clean at9ee4436 and the unrelated branch stack is unchanged.
+
+
+### 2026-11-01 local / 2026-11-02 UTC — Study15 approved prospective preparation
+
+The owner approved the exact cumulative Scientist cap of $1.010906, an increase of $0.010906, for one fresh study. Historical37 calls/991475microUSD and downstream26307880microUSD remain consumed reservations, not invoices. Three maximum6477microUSD reservations fit the new1010906microUSD cap; downstream worst case62307880 stays below64000000 and combined63318786 below65000000. Coding limits remain matched439seconds,19requests,19iterations,32768output tokens and18000000microUSD per arm. No automatic retry or further cap increase is authorized. The private exact owner-authorization record SHA256 is c38074ea0a50fb0d286fd0aa282bafc98404897c0c4576caa9a21a34c358b8c4.
+
+Added only a fresh Study15 source-owned registration locator and its packet test. Source closure is9d0bc986747202e8a70cabc8866771ab2881390e58f909661b3d95de68a9e101; fixture, public suite and required policy remain unchanged. Parallel private preparation and accounting/runtime review use separate file ownership; shared AI authority is explicitly disclosed.
+
+Validation from /private/tmp/forecode-study13-agent-fixes:
+
+- `npm run check`: exit0,1908tests/87files, lint, strict typechecks and both builds. Log /private/tmp/forecode-study15-check.log.
+- `PLAN_REFERENCE_ROOT=/Users/matthiasdruhl/Projects/Meta-Hackathon/AgentHarness-Planning npm run test:plan`: exit0,128tests. Log /private/tmp/forecode-study15-plan.log.
+- `npm run test:e2e`: exit0,82browsercases in18.5s. Log /private/tmp/forecode-study15-e2e.log.
+- `node --conditions=react-server --import /private/tmp/forecode-study13-agent-fixes/node_modules/tsx/dist/loader.mjs /private/tmp/forecode-study15-predecessor-preflight.mts 9d0bc986747202e8a70cabc8866771ab2881390e58f909661b3d95de68a9e101`: exit0. Actual protected package tuple matches retired Study13 registration; separately pinned disabled policy remains from failed Study14. Stale manifest counterfactual refused; both roles stopped with zero sessions/mounts, lease released, historical bytes unchanged, provider calls0. Output /private/tmp/forecode-study15-predecessor-preflight-6f5edb55-fad0-413e-a24d-63b6bd570fcf. This read-only proof does not admit a study.
+- Private ledger control:20checks passed in /private/tmp/forecode-scientist15-ledger-control-HjqOOL/summary.json;47historical accounting/source files unchanged. No real15 seed or reservation created by this check.
+
+At this source commit no Study15 provider call, candidate preparation, signing or runtime admission has occurred. Next: finish reviewing and sealing exact private launch files, allocate fresh identities, execute current predecessor gate before paid calls and repeat under lease before installation, then run the single approved prospective study. Study13 and14 remain closed and preserved.

@@ -1,0 +1,23 @@
+# Approved study history and feedback availability
+
+Implemented from validated base `9ca08ef512a27f0e4f4acbf43d3d5700e36351b9` on the isolated `codex/backlog-study-history-20261102` branch. This is the bounded BL-04-A history panel plus BL-02/BL-03 unavailable-state presentation. It does not complete compatible-cohort analysis, result interpretation, or Evidence Memory feedback.
+
+## Presentation and boundaries
+
+`projectStudySeries` consumes only the existing approved loaded catalog. It preserves input order and raw study/arm/attempt data, emits every available entry as UNCLASSIFIED, rejects duplicate/malformed/oversized catalogs as a whole, and retains only a safe aggregate unavailable count on failure. The bound is the existing 20 approved registrations, including unavailable publications. Parsing is defensive presentation validation, never new authentication or disclosure authority.
+
+The Tournament chapter shows zero/one/multiple studies, negative and incomplete outcomes, separate process status and correctness, exact definition/protocol/evaluation/model/source identities, raw preparation/downstream/total metrics, separately labeled allocations, and complete execution/preparation attempts. Unknown stays distinct from observed zero; small reported costs are never rounded to zero. Counts refer to approved publications, studies, or attempts, not collector completeness, independent families, or statistical support. Equal visible identities do not establish compatibility. No pooled rate, distribution, winner, recommendation, or Meta benefit is inferred.
+
+The existing selector and new row buttons share one loaded-ID-validated handler. It retains existing URL/history/context cancellation and resets arm/check/source/event/return context when changing study. SourceHistory, production readers/composition, frozen contracts, provider routes and proposal context are unchanged.
+
+The stateless report status remains unavailable for interpretation because supported current prospective hypothesis lineage and a separate exact provider-summary disclosure are not configured. It separately states that approved memory cases are not provisioned and next-proposal memory context is not yet installed. Publication is not memory admission or provider-sharing permission. There are no call, consent, fetch, polling, intake, training, or memory-write controls. Later BL-03-A/B/C/D work can extend this small status component after its prerequisites validate.
+
+For client safety, the unchanged supplementary PublicTournament schema, public metadata schema, type and required-check constants moved to `tournament-public-projection.ts`; the original `tournament-publication.ts` exports remain available and its digest behavior remains there. The client adapter therefore does not acquire the Node crypto dependency used by disclosure hashing. Existing publication/provisioning/replay suites and actual Next browser bundling exercise the seam. No frozen contract shape changed.
+
+## Validation and remaining gates
+
+Focused validation, command results, exact submitted source SHA and synthetic browser screenshot locations are recorded externally in orchestration `reports/BL-02-03-04-UI-implementation.md`. New browser tests use actual SSR plus hydrateRoot of reviewed production components with inert synthetic props, not static markup as evidence of transitions. No production fixture route or catalog was added. Scenarios cover exact study selection, invalid IDs, back/forward, arm/source/check navigation, source withdrawal, intent confirmation, empty/one-study states, and keyboard/responsive layout at 390/768/1440px. All test provider activity is disabled/blocked.
+
+Required complete `npm run check` and `npm run test:e2e -- --workers=2` remain the independent tester's responsibility on the exact submitted commit, followed by independent review and Git-manager integration validation. Focused checks are not a replacement for that gate. No integration checkout was written by this implementer.
+
+Production publications, source disclosures, interpretation lineage and memory admission remain unprovisioned. Genuine compatible repeats require current authenticated portable condition and runner revision metadata plus approved genuine publications. Interpretation needs current supported prospective lineage and exact separate provider disclosure. Evidence Memory's reader/UI/context code is separate eligible work, while genuine feedback also needs approved admitted cases, current recipient/context/consent, and an independently authorized call. No model/provider/evaluation call, experiment, training, deployment or publication occurred.

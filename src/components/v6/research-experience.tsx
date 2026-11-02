@@ -9,6 +9,8 @@ import { SourceHistory } from "./source-phase-inspector";
 import { EvidenceDetail } from "./evidence-ledger";
 import { MeasurementRail } from "./tournament-measurements";
 import { DecisionMemo } from "./decision-memo";
+import { StudySeries } from "./study-series";
+import { EvidenceFeedbackStatus } from "./evidence-feedback-status";
 import { TraceContext } from "./trace-context";
 import { bookingGraph } from "@/lib/foresight/booking-context";
 import {
@@ -302,6 +304,23 @@ export function ResearchExperience({
     requestAnimationFrame(() => {
       title.current?.focus();
       window.scrollTo({ top: 0, behavior: "instant" });
+    });
+  }
+  function selectStudy(id: string) {
+    const nextStudy = tournaments.studies.find((item) => item.studyId === id);
+    if (!nextStudy) return;
+    setStudyId(nextStudy.studyId);
+    const next = initialTraceFocus(traceIdentity(nextStudy, revision));
+    setSelection(next);
+    setReplayStage("preparation");
+    setEvidenceEventId(null);
+    setReturnTo(null);
+    setQuestion("checks");
+    writeUrl(chapter, next, {
+      study: nextStudy.studyId,
+      stage: "preparation",
+      eventId: null,
+      question: "checks",
     });
   }
   function select(patch: Partial<Omit<TraceFocus, "contextIdentity">>) {
@@ -816,31 +835,17 @@ export function ResearchExperience({
                 </p>
               </div>
             </div>
+            <StudySeries
+              catalog={tournaments}
+              selectedStudyId={studyId}
+              onSelectStudy={selectStudy}
+            />
             {tournaments.studies.length > 1 && (
               <label className="study-select">
                 Published study
                 <select
                   value={studyId}
-                  onChange={(event) => {
-                    const nextStudy = tournaments.studies.find(
-                      (item) => item.studyId === event.target.value,
-                    )!;
-                    setStudyId(nextStudy.studyId);
-                    const next = initialTraceFocus(
-                      traceIdentity(nextStudy, revision),
-                    );
-                    setSelection(next);
-                    setReplayStage("preparation");
-                    setEvidenceEventId(null);
-                    setReturnTo(null);
-                    setQuestion("checks");
-                    writeUrl(chapter, next, {
-                      study: nextStudy.studyId,
-                      stage: "preparation",
-                      eventId: null,
-                      question: "checks",
-                    });
-                  }}
+                  onChange={(event) => selectStudy(event.target.value)}
                 >
                   {tournaments.studies.map((item) => (
                     <option key={item.studyId} value={item.studyId}>
@@ -1018,6 +1023,7 @@ export function ResearchExperience({
             className="report-chapter"
             aria-label="Decision Report"
           >
+            <EvidenceFeedbackStatus studyId={study?.studyId} />
             <DecisionMemo
               catalog={reports}
               studyId={studyId}

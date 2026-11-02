@@ -2162,3 +2162,119 @@ code {
   outline: 2px solid currentColor;
   outline-offset: 3px;
 }
+/* Approved study history: the existing research notebook, without pooled claims. */
+.study-series,
+.evidence-feedback-status {
+  margin: 2rem 0;
+  padding: 1.5rem 0;
+  border-block: 1px solid var(--rule);
+}
+.study-series p,
+.evidence-feedback-status p {
+  line-height: 1.6;
+}
+.study-series-list {
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0 0;
+}
+.study-series-list > li {
+  border-top: 1px solid var(--rule);
+  padding: 1.5rem 0;
+}
+.study-series-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.study-series-row > div {
+  min-width: 0;
+}
+.study-series-row h3 {
+  margin: 0.5rem 0;
+}
+.study-series button {
+  padding: 0.65rem 0.9rem;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.study-series button[aria-pressed="true"] {
+  background: #202c25;
+  color: #fff;
+}
+.study-series button:focus-visible,
+.study-series summary:focus-visible,
+.study-series-scroll:focus-visible {
+  outline: 2px solid var(--action);
+  outline-offset: 4px;
+}
+.study-series summary {
+  cursor: pointer;
+  padding: 0.8rem 0;
+}
+.study-series code,
+.study-series li,
+.evidence-feedback-status code {
+  overflow-wrap: anywhere;
+}
+.study-series-identities {
+  display: grid;
+  gap: 0.75rem;
+}
+.study-series-identities > div {
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+  gap: 1rem;
+}
+.study-series-identities dd {
+  margin: 0;
+  min-width: 0;
+}
+.study-series-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1rem 0;
+}
+.study-series table {
+  width: 100%;
+  min-width: 34rem;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 0.85rem;
+}
+.study-series th,
+.study-series td {
+  border-bottom: 1px solid var(--rule);
+  padding: 0.65rem;
+}
+.study-series caption {
+  text-align: left;
+  padding: 0.5rem;
+}
+.evidence-feedback-status {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+}
+.evidence-feedback-status section {
+  min-width: 0;
+}
+.evidence-feedback-status h2 {
+  font-size: 1.2rem;
+}
+@media (max-width: 600px) {
+  .study-series-row {
+    flex-direction: column;
+  }
+  .study-series-identities > div,
+  .evidence-feedback-status {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .study-series-identities > div {
+    gap: 0.25rem;
+  }
+}

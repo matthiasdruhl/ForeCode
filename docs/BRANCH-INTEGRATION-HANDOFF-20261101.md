@@ -2,11 +2,29 @@
 
 This is an integration preparation record, not tournament completion, experiment validation, publication approval or a merge to main. The active chat **Fix ForeCode A/B tournament** (`01a19a7b-8995-74f3-86e9-9bce786cd29b`) retains ownership of its source, runtime, paid calls and evidence. No message was sent to that chat.
 
+## Follow-up app review
+
+The user requested the next local review and eventual exact-final tournament integration. The live production walkthrough used isolated port 3494 with an empty inherited environment, provider calls/spending disabled and the external-fetch blocker. It verified Time Machine arm/stage → Decision Report → evidence inspection/return → save → Local Projects → reopen. Notes returned, replay selection reset, and the report retained INCONCLUSIVE/Unknown missingness. The temporary preview was stopped deliberately (SIGINT, exit 130); no existing service was changed. A screenshot is retained at `/private/tmp/forecode-integration-workspace-walkthrough.png`.
+
+This review reproduced an additional integration defect: while a saved local project awaited its lazy parser, evidence inspection or return navigation did not cancel that pending reopen. When loading completed it incorrectly switched the user to Local Projects and replaced the current context. Two production regression cases hold the actual discovered parser chunk requests across a cold reload, navigate, then release delivery. All four desktop/mobile cases failed before the fix at the destination assertion (exit 1, `/private/tmp/forecode-integration-race-before.log`); failure traces are retained at `/private/tmp/forecode-integration-race-before-artifacts`.
+
+Test original `0739967f64531885c9460dab464ade4a972330af` was cherry-picked as `b90baf6`. Fix **`8a47d83c0b7a8ddda9408cdb82433d74f687d092`** advances cancellation generation in the shared URL-navigation function, covering evidence inspection/return, study changes, stages and other explicit selections. Successful reopen reaches that function only after its final cancellation guard, so it does not cancel itself. Independent agent review found no further actionable issue. The review worktree `/private/tmp/forecode-integration-race-20261101`, branch `codex/integration-review-race-20261101`, is retained clean at the original test commit.
+
+Follow-up application/test source: **`8a47d83c0b7a8ddda9408cdb82433d74f687d092`**. With the minimal environment prefix documented below, observed commands/results were:
+
+- `VITEST_MAX_WORKERS=2 npm run check`: exit 0, **1,990 tests / 88 files**, lint, both strict typechecks and both production builds. Log: `/private/tmp/forecode-integration-walkthrough-check.log`.
+- `FORECODE_E2E_PORT=3490 FORECODE_E2E_DISABLED_PORT=3492 npm run test:e2e -- --workers=2`: exit 0, **132 passed**, including all four new race regressions; no skipped, expected failures or retries. Log: `/private/tmp/forecode-integration-walkthrough-e2e.log`.
+- Changed-path Prettier and `git diff --check`: exit 0. Refreshed saved-workspace screenshots at 1440/768/390 pixels were visually inspected; forms and actions remained inside the viewport, with source/graph content confined to their existing scroll regions.
+
+The fixture E2E, plan parity and standalone export checks were not repeated for this navigation-only follow-up; their earlier results below retain their original source scope. A final listener inspection found no listeners on 3490/3491/3492/3494 (`lsof` exit 1 with no output, meaning no matches).
+
+At the final read-only status check, the tournament chat was active and reported A still running. It supplied no explicit completed final commit or handoff. Its branch remained at observed `c239bae`; none of its unfinished changes were incorporated. Local `main` and `origin/main` still matched `94a0a20889ab4b79aab970a9974093111d4fe523`. The steps at the end of this document remain pending.
+
 ## Checkout and source identities
 
 - Integration: `codex/isolated-feature-integration-20261101`, `/private/tmp/forecode-integration-20261101`.
 - Freshly fetched base: `origin/main = 94a0a20889ab4b79aab970a9974093111d4fe523`; local `main` had the same SHA. Original branches were not rebased or rewritten.
-- Combined application/test source under validation: `b2005e681d29faac901820d34ee4ff769583ce95`. Later documentation commits do not make historical tests validate additional application changes.
+- Initial combined application/test source: `b2005e681d29faac901820d34ee4ff769583ce95`. The follow-up review above records later changes; historical tests do not validate additional application changes.
 - Protected tournament checkout: `/private/tmp/forecode-study13-agent-fixes`, branch `codex/study13-agent-fixes`, observed committed tip `c239bae86d0178a7a3e56edb1b213e3d5357b119` with active uncommitted changes. This is **not a final tournament source**.
 - Its older committed handoff identifies `e13a63d51e2f77de04b2c7781e67e5eff307abd5` as an assessed implementation. That record describes a B diagnostic with 7/8 protected checks, an unrun new A diagnostic and no complete comparison; these are historical observations, not current results verified by this integration.
 
@@ -37,7 +55,7 @@ Integration order was signature (`ec22fbe`), workspaces (`e0507fb`), durable his
 
 ## Validation and isolation
 
-Final application/test source: **`b2005e681d29faac901820d34ee4ff769583ce95`**. All commands below have observed exit codes; no skipped/expected failures are included as passes. Node `v24.16.0`, npm `11.13.0`.
+Initial application/test source: **`b2005e681d29faac901820d34ee4ff769583ce95`**. All commands below have observed exit codes; no skipped/expected failures are included as passes. Node `v24.16.0`, npm `11.13.0`.
 
 For final validation, commands used this environment prefix (ordinary shell expansion supplies only PATH/HOME, not provider secrets):
 
